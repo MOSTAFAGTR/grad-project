@@ -12,5 +12,5 @@ until nc -z "$host" 3306; do
   sleep 1
 done
 
->&2 echo "MySQL is up - executing command"
+>&2 echo "MySQL is up_executing comand"
 exec "$@" # <--- CHANGE THIS LINE. Remove 'cmd' and put "$@"
