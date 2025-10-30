@@ -1,30 +1,91 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+import logging
+import re
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
-# Define a schema to receive the username and password
 class LoginAttempt(BaseModel):
     username: str
     password: str
 
+# مجموعة بسيطة من أنماط payloads شائعة (ممكن توسعها لأغراض تعليمية)
+SQLI_PATTERNS = [
+    r"(?i)'\s*or\s*'1'\s*=\s*'1",       # ' OR '1'='1
+    r"(?i)\"\s*or\s*\"1\"\s*=\s*\"1",   # " OR "1"="1
+    r"(?i)or\s+1\s*=\s*1",              # OR 1=1
+    r"(?i)--",                          # SQL comment
+    r"(?i);\s*drop\s+table",            # ; DROP TABLE
+    r"(?i)union\s+select",              # UNION SELECT
+]
+
+def contains_sqli(payload: str) -> bool:
+    if not payload:
+        return False
+    for pattern in SQLI_PATTERNS:
+        if re.search(pattern, payload):
+            return True
+    return False
+
 @router.post("/sqli-attack")
 def simulate_sqli_login(attempt: LoginAttempt):
     """
-    This endpoint simulates a login form vulnerable to SQL injection.
-    It does NOT connect to a real database for this check.
-    It only checks if a classic injection payload is present.
+    Educational endpoint: simulates detection of classic SQL-injection payloads.
+    DOES NOT execute any SQL or connect to a database.
+    Returns an explanatory response so learners can see why payloads are dangerous.
     """
-    # The classic SQL injection payload to bypass authentication
-    injection_payload = "' OR '1'='1'"
+    # Check both fields for suspicious patterns
+    username_flag = contains_sqli(attempt.username)
+    password_flag = contains_sqli(attempt.password)
 
-    # In a real vulnerable app, this would be a raw SQL query like:
-    # "SELECT * FROM users WHERE username = '" + attempt.username + "' AND password = '" + attempt.password + "'"
-    
-    # We are safely SIMULATING the result of that query
-    if injection_payload in attempt.username or injection_payload in attempt.password:
-        # If the payload is found, the "attack" is successful
-        return {"message": "Login successful!"}
+    if username_flag or password_flag:
+        # Log the detection (avoid logging sensitive data in production)
+        logger.warning("Detected possible SQL injection payload in login attempt.")
+        return {
+            "vulnerable": True,
+            "message": "Simulated login would succeed on a vulnerable system because an injection payload was detected.",
+            "detected_in": {
+                "username": username_flag,
+                "password": password_flag
+            },
+            "note": (
+                "This is only a simulation. To prevent SQL injection: use parameterized queries / prepared statements, "
+                "validate and escape input, and avoid building SQL with string concatenation."
+            )
+        }
     else:
-        # If it's a normal login attempt, it fails
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        # Normal failed login simulation
+        raise HTTPException(status_code=401, detail="Invalid credentials (simulated).")
+
+# --- Secure demo endpoint (educational) ---
+@router.post("/secure-login-demo")
+def secure_login_demo(attempt: LoginAttempt):
+    """
+    Educational demo showing how to check credentials safely (simulated).
+    DOES NOT connect to a real DB — it shows the pattern you should use.
+    """
+    # Example: how a parameterized query would conceptually look
+    # (Pseudo-code; do NOT substitute with string concatenation)
+    #
+    # cursor.execute("SELECT id, hashed_password FROM users WHERE username = %s", (attempt.username,))
+    #
+    # Then verify the password using a secure hashing function (bcrypt, argon2, etc.)
+    #
+    # We'll simulate a safe check result here:
+    simulated_user = {
+        "username": "alice",
+        "hashed_password": "$2b$12$examplehash..."  # example only
+    }
+
+    # Simulate lookup (safe): only considers exact match, no string concatenation
+    if attempt.username == simulated_user["username"]:
+        # Here you'd call your password verification function (bcrypt.checkpw / etc.)
+        # We'll simulate a failed verification to avoid revealing anything
+        password_ok = False
+        if password_ok:
+            return {"message": "Secure login success (simulated)."}
+        else:
+            raise HTTPException(status_code=401, detail="Invalid credentials (secure flow).")
+    else:
+        raise HTTPException(status_code=401, detail="Invalid credentials (secure flow).")
