@@ -1,30 +1,40 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from ..db.database import get_db
 
 router = APIRouter()
 
-# Define a schema to receive the username and password
 class LoginAttempt(BaseModel):
     username: str
     password: str
 
-@router.post("/sqli-attack")
-def simulate_sqli_login(attempt: LoginAttempt):
+@router.post("/vulnerable-login")
+def execute_vulnerable_login(attempt: LoginAttempt, db: Session = Depends(get_db)):
     """
-    This endpoint simulates a login form vulnerable to SQL injection.
-    It does NOT connect to a real database for this check.
-    It only checks if a classic injection payload is present.
+    This endpoint is vulnerable to SQL injection.
+    It allows for a valid username and an injection payload in the password field.
     """
-    # The classic SQL injection payload to bypass authentication
-    injection_payload = "' OR '1'='1'"
-
-    # In a real vulnerable app, this would be a raw SQL query like:
-    # "SELECT * FROM users WHERE username = '" + attempt.username + "' AND password = '" + attempt.password + "'"
     
-    # We are safely SIMULATING the result of that query
-    if injection_payload in attempt.username or injection_payload in attempt.password:
-        # If the payload is found, the "attack" is successful
-        return {"message": "Login successful!"}
-    else:
-        # If it's a normal login attempt, it fails
+    # DANGER: Raw query construction.
+    # This is the classic vulnerable pattern you asked for.
+    query = f"SELECT * FROM challenge_users WHERE username = '{attempt.username}' AND password = '{attempt.password}'"
+    
+    print(f"Executing vulnerable query: {query}")
+
+    try:
+        result = db.execute(text(query))
+        user = result.first()
+        
+        if user:
+            # If the database returns ANY row, the login is a success.
+            return {"message": "Login successful!"}
+        else:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    except Exception as e:
+        # If the database throws a syntax error (from a bad injection),
+        # return a generic failure message.
+        print(f"SQL Error: {e}")
         raise HTTPException(status_code=401, detail="Invalid credentials")

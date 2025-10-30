@@ -8,10 +8,10 @@ const SqlInjectionAttackPage: React.FC = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleAttack = async () => {
+  const handleLogin = async () => {
     setError('');
     try {
-      const response = await axios.post('http://localhost:8000/api/challenges/sqli-attack', {
+      const response = await axios.post('http://localhost:8000/api/challenges/vulnerable-login', {
         username,
         password
       });
@@ -20,11 +20,7 @@ const SqlInjectionAttackPage: React.FC = () => {
         navigate('/challenges/attack-success');
       }
     } catch (err: any) {
-      if (axios.isAxiosError(err) && err.response) {
-        setError(err.response.data.detail);
-      } else {
-        setError('An unknown error occurred.');
-      }
+      setError(err.response?.data?.detail || 'An unknown error occurred.');
     }
   };
 
@@ -32,7 +28,7 @@ const SqlInjectionAttackPage: React.FC = () => {
     <div className="text-white">
       <h1 className="text-3xl font-bold mb-4">SQL Injection Attack</h1>
       <p className="text-gray-400 mb-6">
-        This login form is vulnerable. The backend query is constructed insecurely. Try to bypass the authentication mechanism using a common SQL injection payload.
+        You can log in with the real credentials or by using a SQL injection attack.
       </p>
       
       <div className="w-full max-w-sm p-6 bg-gray-900 rounded-lg border border-gray-700">
@@ -42,7 +38,7 @@ const SqlInjectionAttackPage: React.FC = () => {
             Username
           </label>
           <input
-            className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+            className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg block w-full p-2.5"
             id="username"
             type="text"
             value={username}
@@ -54,17 +50,18 @@ const SqlInjectionAttackPage: React.FC = () => {
             Password
           </label>
           <input
-            className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+            className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg block w-full p-2.5"
             id="password"
-            type="password"
+            // --- THIS IS THE CHANGE ---
+            type="text" // Changed from "password" to "text"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
         </div>
         <div className="flex items-center justify-between">
           <button
-            onClick={handleAttack}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+            onClick={handleLogin}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
           >
             Ok
           </button>
