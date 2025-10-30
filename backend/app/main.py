@@ -1,12 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .api import auth, quizzes, challenges # <--- 1. Import the new challenges router
+from .api import auth, quizzes, challenges
 from .db import database
-from . import models
+from . import models 
 
 models.Base.metadata.create_all(bind=database.engine)
+# --------------------------------
 
 app = FastAPI()
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -18,7 +20,7 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(quizzes.router, prefix="/api/quizzes", tags=["quizzes"])
-app.include_router(challenges.router, prefix="/api/challenges", tags=["challenges"]) # <--- 2. Add the new router
+app.include_router(challenges.router, prefix="/api/challenges", tags=["challenges"])
 
 @app.get("/")
 def read_root():
