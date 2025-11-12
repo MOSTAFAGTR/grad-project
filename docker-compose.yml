@@ -1,19 +1,19 @@
+# Define a top-level network that all services will share
+networks:
+  scale_net:
+
 services:
   backend:
     build: ./backend
     ports:
       - "8000:8000"
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
       - ./backend:/app
-      - ./wait-for-it.sh:/wait-for-it.sh
-    environment:
-      - DATABASE_URL=mysql+pymysql://user:password@db/scale_db
-    depends_on:
-      - db
-    # --- THIS IS THE CRITICAL FIX ---
-    # We are changing the command format to an 'entrypoint' and 'command' list.
-    # This avoids the shell interpretation problem.
-    entrypoint: ["/wait-for-it.sh", "db"]
+      - ./challenge-sql-injection:/app/challenge-sql-injection
+    # Connect this service to our shared network
+    networks:
+      - scale_net
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   frontend:
@@ -23,23 +23,43 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    # Connect this service to our shared network
+    networks:
+      - scale_net
     command: npm run dev -- --host
 
-  db:
+  # Main application database
+  main_db:
     image: mysql:8.0
-    cap_add:
-      - SYS_NICE
-    restart: always
+    container_name: main_db
     environment:
       - MYSQL_DATABASE=scale_db
       - MYSQL_USER=user
       - MYSQL_PASSWORD=password
       - MYSQL_ROOT_PASSWORD=rootpassword
-    ports:
-      - "3306:3306"
     volumes:
       - db_data:/var/lib/mysql
       - ./db_init/init.sql:/docker-entrypoint-initdb.d/init.sql
+    # Connect this service to our shared network
+    networks:
+      - scale_net
+
+  # Dedicated challenge database
+  challenge_db_sqli:
+    image: mysql:8.0
+    container_name: challenge_db_sqli
+    environment:
+      - MYSQL_DATABASE=testdb
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_ROOT_PASSWORD=rootpassword
+    volumes:
+      - ./challenge-sql-injection/users.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3307:3306"
+    # Connect this service to our shared network
+    networks:
+      - scale_net
 
 volumes:
   db_data:

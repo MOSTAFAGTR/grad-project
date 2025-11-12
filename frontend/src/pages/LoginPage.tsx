@@ -6,7 +6,7 @@ const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const navigate = useNavigate(); // We already have this hook
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,27 +24,30 @@ const LoginPage: React.FC = () => {
       });
 
       if (response.status === 200) {
-        // --- THIS IS THE CHANGE ---
-        // Instead of an alert, navigate to the challenges page
-        navigate('/challenges');
+        // --- THIS IS THE NEW LOGIC ---
+        const user = response.data;
+        sessionStorage.setItem('user', JSON.stringify(user));
+
+        // Check the user's role and redirect accordingly
+        if (user.role === 'instructor') {
+          navigate('/admin/dashboard'); // Redirect instructors to the admin page
+        } else {
+          navigate('/challenges'); // Redirect regular users to the challenges page
+        }
       }
     } catch (err: any) {
-      if (axios.isAxiosError(err) && err.response) {
-        setError(err.response.data.detail);
-      } else {
-        setError('Login failed. Please try again later.');
-        console.error(err);
-      }
+      setError(err.response?.data?.detail || 'Login failed.');
     }
   };
-
+  
+  // The return JSX is unchanged
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
         <h2 className="text-2xl font-bold text-center mb-6">Login to SCALE</h2>
         {error && <p className="text-red-500 text-center mb-4">{error}</p>}
         <form onSubmit={handleSubmit}>
-          {/* Form fields are unchanged */}
+          {/* Form fields */}
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
               Email

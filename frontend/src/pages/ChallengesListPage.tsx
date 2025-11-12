@@ -1,44 +1,89 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import {
+  FaSyringe, FaBug, FaUserSecret, FaTerminal, FaUserShield, FaTools, FaLock, FaFolderOpen, FaFileCode, FaExternalLinkAlt
+} from 'react-icons/fa';
 
-// We now specify the URL for the first challenge
-const scenarios = [
-  { id: 1, title: 'SQL Injection', url: '/challenges/1/attack' },
-  { id: 2, title: 'Cross-Site Scripting', url: '/challenges/2' },
-  { id: 3, title: 'Command Injection', url: '/challenges/3' },
-  { id: 4, title: 'Broken Authentication', url: '/challenges/4' },
-  { id: 5, title: 'Cross-Site Request Forgery', url: '/challenges/5' },
-  { id: 6, title: 'Security Misconfiguration', url: '/challenges/6' },
-  { id: 7, title: 'Insecure Cryptographic Storage', url: '/challenges/7' },
-  { id: 8, title: 'Directory Traversal', url: '/challenges/8' },
-  { id: 9, title: 'XML External Entity Injection', url: '/challenges/9' },
-  { id: 10, title: 'Unvalidated Redirect', url: '/challenges/10' },
+// This map is used for the border, text, and shadow colors
+const colorMap: Record<string, string> = {
+  cyan: '#06b6d4', pink: '#d946ef', orange: '#fb923c', purple: '#8b5cf6',
+  red: '#ef4444', green: '#10b981', yellow: '#facc15', blue: '#3b82f6',
+  indigo: '#6366f1', teal: '#14b8a6'
+};
+
+const challenges = [
+  { 
+    id: 1, 
+    title: 'SQL Scenario', 
+    icon: <FaSyringe />, 
+    color: 'cyan', 
+    buttons: [
+      { text: 'Simulate', url: '/challenges/1/attack' },
+      { text: 'Fix', url: '/challenges/1/fix' },
+      { text: 'Tutorial', url: '/under-construction' }
+    ] 
+  },
+  { id: 2, title: 'XSS Scenario', icon: <FaBug />, color: 'pink', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { id: 3, title: 'CSRF Scenario', icon: <FaUserSecret />, color: 'orange', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { id: 4, title: 'Command Injection', icon: <FaTerminal />, color: 'purple', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { id: 5, title: 'Broken Authentication', icon: <FaUserShield />, color: 'red', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { id: 6, title: 'Security Misconfiguration', icon: <FaTools />, color: 'green', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { id: 7, title: 'Insecure Storage', icon: <FaLock />, color: 'yellow', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { id: 8, title: 'Directory Traversal', icon: <FaFolderOpen />, color: 'blue', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { id: 9, title: 'XML External Entity (XXE)', icon: <FaFileCode />, color: 'indigo', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { id: 10, title: 'Unvalidated Redirect', icon: <FaExternalLinkAlt />, color: 'teal', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] }
 ];
 
 const ChallengesListPage: React.FC = () => {
   return (
-    <div className="text-white">
-      <h1 className="text-4xl font-bold">Select a Scenario</h1>
-      <p className="text-gray-400 mt-2 mb-8">Choose an attack/fix scenario to begin</p>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {scenarios.map((scenario) => (
-          // The 'to' prop now uses the URL from our data
-          <Link
-            key={scenario.id}
-            to={scenario.url}
-            className="block p-6 bg-gray-900 rounded-lg shadow-md hover:bg-gray-700 transition-colors duration-200"
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-8">
+        {challenges.map((ch) => (
+          <div
+            key={ch.id}
+            className="card-container bg-gray-900 rounded-2xl p-6 flex flex-col border-2 transition-all duration-300"
+            style={{ 
+                borderColor: colorMap[ch.color],
+                '--shadow-color': colorMap[ch.color] 
+            } as React.CSSProperties}
           >
-            <h5 className="mb-2 text-2xl font-bold tracking-tight">
-              {scenario.title}
-            </h5>
-            <p className="font-normal text-gray-400">
-              Attack/Fix
-            </p>
-          </Link>
+            <div className="flex-grow">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-white text-2xl font-bold">{ch.title}</h3>
+                <div className="text-5xl icon-container" style={{ color: colorMap[ch.color] }}>
+                  {ch.icon}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3 mt-8">
+              {ch.buttons.map((btn) => (
+                <Link
+                  key={btn.text}
+                  to={btn.url}
+                  className="bg-gray-700 text-gray-300 text-sm font-semibold py-2 px-5 rounded-full hover:bg-gray-600 hover:text-white transition-colors"
+                >
+                  {btn.text}
+                </Link>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
-    </div>
+      <style>
+        {`
+          .card-container:hover {
+            transform: translateY(--5px) scale(1.02);
+            box-shadow: 0 10px 20px -5px var(--shadow-color);
+          }
+          .icon-container {
+            transition: transform 0.3s ease-in-out;
+          }
+          .card-container:hover .icon-container {
+            transform: scale(1.2) rotate(5deg);
+          }
+        `}
+      </style>
+    </>
   );
 };
 
