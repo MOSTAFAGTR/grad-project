@@ -6,8 +6,9 @@ const RegisterPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [role, setRole] = useState('user'); // Default role is 'user' (Student)
   const [error, setError] = useState('');
-  const navigate = useNavigate(); // Hook for navigation
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,27 +24,20 @@ const RegisterPage: React.FC = () => {
     }
 
     try {
-      // Send a POST request to the backend API
+      // --- THIS IS THE CHANGE ---
+      // We now send the selected 'role' to the backend
       const response = await axios.post('http://localhost:8000/api/auth/register', {
         email: email,
-        password: password
+        password: password,
+        role: role // Send the selected role
       });
 
-      // If registration is successful
       if (response.status === 200) {
         alert('Registration successful! Please login.');
-        navigate('/login'); // Redirect to the login page
+        navigate('/login');
       }
     } catch (err: any) {
-      // If the backend returns an error
-      if (axios.isAxiosError(err) && err.response) {
-        // Use the error message from the backend (e.g., "Email already registered")
-        setError(err.response.data.detail);
-      } else {
-        // Generic error message
-        setError('Registration failed. Please try again later.');
-        console.error(err);
-      }
+      setError(err.response?.data?.detail || 'Registration failed.');
     }
   };
 
@@ -53,50 +47,50 @@ const RegisterPage: React.FC = () => {
         <h2 className="text-2xl font-bold text-center mb-6">Create Account</h2>
         {error && <p className="text-red-500 text-center mb-4">{error}</p>}
         <form onSubmit={handleSubmit}>
+          {/* Email and Password fields are unchanged */}
           <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
-              Email
-            </label>
+            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">Email</label>
             <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700"
+              id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
             />
           </div>
           <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
-              Password
-            </label>
+            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">Password</label>
             <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              id="password"
-              type="password"
-              placeholder="******************"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700"
+              id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
             />
           </div>
+          <div className="mb-4">
+            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="confirm-password">Confirm Password</label>
+            <input
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700"
+              id="confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+          </div>
+
+          {/* --- THIS IS THE NEW DROPDOWN --- */}
           <div className="mb-6">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="confirm-password">
-              Confirm Password
+            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="role">
+              Register as
             </label>
-            <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              id="confirm-password"
-              type="password"
-              placeholder="******************"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-            />
+            <select
+              id="role"
+              className="shadow border rounded w-full py-2 px-3 text-gray-700"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+            >
+              <option value="user">Student</option>
+              <option value="instructor">Instructor</option>
+            </select>
           </div>
+
           <div className="flex items-center justify-between">
-            <button className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" type="submit">
+            <button className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded" type="submit">
               Register
             </button>
-            <Link to="/login" className="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800">
+            <Link to="/login" className="inline-block font-bold text-sm text-blue-500 hover:text-blue-800">
               Already have an account?
             </Link>
           </div>

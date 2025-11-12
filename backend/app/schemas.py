@@ -1,23 +1,25 @@
 from pydantic import BaseModel
+from typing import Optional # Import Optional
 
-# --- User Schemas (already exist) ---
 class UserBase(BaseModel):
     email: str
 
 class UserCreate(UserBase):
     password: str
+    # Make role an optional field in case it's not provided
+    role: Optional[str] = 'user' 
 
 class User(UserBase):
     id: int
+    role: str
 
     class Config:
         orm_mode = True
 
-# --- Add the new Question Schema ---
 class Question(BaseModel):
     id: int
     text: str
-    type: str # e.g., 'MCQ' or 'T-F'
+    type: str
     answer: str
     explanation: str
 

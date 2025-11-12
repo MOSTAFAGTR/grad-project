@@ -23,7 +23,7 @@ INSERT INTO challenge_users (username, password) VALUES
 ('user9', 'password9'),
 ('user10', 'password10'),
 ('user11', 'password11'),
-('user12', 'password12'),
+('user12', 'password12'),   
 ('user13', 'password13'),
 ('user14', 'password14'),
 ('user15', 'admin_challenge'); -- Added a different one for variety
