@@ -20,7 +20,7 @@ const challenges = [
     buttons: [
       { text: 'Simulate', url: '/challenges/1/attack' },
       { text: 'Fix', url: '/challenges/1/fix' },
-      { text: 'Tutorial', url: '/under-construction' }
+      { text: 'Tutorial', url: '/challenges/1/tutorial' }
     ] 
   },
   { id: 2, title: 'XSS Scenario', icon: <FaBug />, color: 'pink', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
