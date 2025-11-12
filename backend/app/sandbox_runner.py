@@ -1,3 +1,4 @@
+import os
 import docker
 import tempfile
 import pathlib
@@ -44,15 +45,61 @@ def run_in_sandbox(student_code: str):
             client.images.build(path=str(temp_dir), tag=image_tag, rm=True)
             print(f"[{run_id}] Build complete.")
 
-            print(f"[{run_id}] Running container on network 'scale_application_scale_net'...")
-            
-            # Run the container, connecting it to our shared network
-            # This is what allows it to find the 'challenge_db_sqli' container by name
-            logs = client.containers.run(
-                image_tag,
-                remove=True,
-                network="scale_application_scale_net" # Project folder name + network name
-            )
+            # Determine network to use
+            env_net = os.environ.get("SANDBOX_NETWORK")
+            available_network = None
+
+            if env_net:
+                # If user supplied a network via env var, prefer it (but verify it exists)
+                try:
+                    nets = client.networks.list(names=[env_net])
+                    if nets:
+                        available_network = env_net
+                    else:
+                        print(f"[{run_id}] SANDBOX_NETWORK '{env_net}' not found; will probe other networks.")
+                except Exception as e:
+                    print(f"[{run_id}] Error while checking SANDBOX_NETWORK '{env_net}': {e}")
+
+            if not available_network:
+                # Common candidate names (project-based or explicit)
+                candidate_networks = [
+                    "grad-project_scale_net",
+                    "scale_application_scale_net",
+                    "scale_net",
+                ]
+                try:
+                    networks = client.networks.list()
+                    existing_names = {n.name for n in networks}
+                    # pick first exact candidate match
+                    for cand in candidate_networks:
+                        if cand in existing_names:
+                            available_network = cand
+                            break
+                    # if none matched, pick any network that contains 'scale_net' as fallback
+                    if not available_network:
+                        for name in existing_names:
+                            if "scale_net" in name or name.endswith("scale_net"):
+                                available_network = name
+                                break
+                except Exception as e:
+                    print(f"[{run_id}] Failed to list docker networks: {e}")
+                    available_network = None
+
+            # Run the container, connecting it to the selected network if available
+            if available_network:
+                print(f"[{run_id}] Running container on network '{available_network}'...")
+                logs = client.containers.run(
+                    image_tag,
+                    remove=True,
+                    network=available_network
+                )
+            else:
+                print(f"[{run_id}] No suitable network found; running container without specifying a network.")
+                logs = client.containers.run(
+                    image_tag,
+                    remove=True
+                )
+
             print(f"[{run_id}] Container finished.")
             
             decoded_logs = logs.decode('utf-8')
@@ -78,7 +125,7 @@ def run_in_sandbox(student_code: str):
                 try:
                     client.images.remove(image_tag, force=True)
                     print(f"[{run_id}] Successfully removed image {image_tag}")
-                except:
+                except Exception:
                     print(f"[{run_id}] Failed to remove image {image_tag}")
                     pass
 
