@@ -5,10 +5,11 @@ import pathlib
 import shutil
 import uuid
 
-# This path points to the challenge package inside the backend container's filesystem
+# Default challenge base path used for sandbox runs if none is provided.
+# When a different challenge is required we will compute a path dynamically.
 CHALLENGE_BASE_PATH = pathlib.Path("./challenge-sql-injection").resolve()
 
-def run_in_sandbox(student_code: str):
+def run_in_sandbox(student_code: str, challenge_name: str = "sql-injection"):
     run_id = str(uuid.uuid4())
     image_tag = f"scale-challenge-run-{run_id}"
 
@@ -18,7 +19,14 @@ def run_in_sandbox(student_code: str):
         print(f"[{run_id}] Created temporary directory: {temp_dir}")
 
         # Copy the entire challenge template into the temporary directory
-        shutil.copytree(CHALLENGE_BASE_PATH, temp_dir, dirs_exist_ok=True)
+        # by computing the full challenge path from the provided name.
+        challenge_folder = pathlib.Path(f"./challenge-{challenge_name}").resolve()
+
+        # Fall back to the default if the named challenge does not exist.
+        if not challenge_folder.exists():
+            challenge_folder = CHALLENGE_BASE_PATH
+
+        shutil.copytree(challenge_folder, temp_dir, dirs_exist_ok=True)
 
         # Overwrite the template's app.py with the student's code
         student_code_path = temp_dir / "app.py"

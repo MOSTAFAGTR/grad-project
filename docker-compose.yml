@@ -11,6 +11,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./backend:/app
       - ./challenge-sql-injection:/app/challenge-sql-injection
+      - ./challenge-xss:/app/challenge-xss
     # Connect this service to our shared network
     networks:
       - scale_net
