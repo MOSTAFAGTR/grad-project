@@ -31,9 +31,6 @@ def show_messages():
 
     html += '</body></html>'
     return html, 200
-
-if __name__ == '__main__':
-    app.run(debug=True)
 */
 
 const VULNERABLE_CODE = `from flask import Flask, request, jsonify
@@ -62,9 +59,6 @@ def show_messages():
         
     html += '</body></html>'
     return html, 200
-
-if __name__ == '__main__':
-    app.run(debug=True)
 `;
 
 const XssFixPage: React.FC = () => {

@@ -1,4 +1,5 @@
 frontend/node_modules
-backend/app/__pycache__
-backend/app/api/__pycache__
-backend/app/db/__pycache__
+backend/app/__pycache__/
+backend/app/api/__pycache__/
+backend/app/db/__pycache__/
+
