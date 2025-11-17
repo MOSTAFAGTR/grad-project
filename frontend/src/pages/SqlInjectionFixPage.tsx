@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import Editor from '@monaco-editor/react';
-import axios from 'axios';
+import React, { useState } from "react";
+import Editor from "@monaco-editor/react";
+import axios from "axios";
 
 const VULNERABLE_CODE = `import os
 import mysql.connector
@@ -48,29 +48,33 @@ def login():
 
 const SqlInjectionFixPage: React.FC = () => {
   const [code, setCode] = useState(VULNERABLE_CODE);
-  const [feedback, setFeedback] = useState('');
+  const [feedback, setFeedback] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async () => {
     setIsLoading(true);
-    setFeedback('');
+    setFeedback("");
     try {
-      const response = await axios.post('http://localhost:8000/api/challenges/submit-fix', { code });
+      const response = await axios.post(
+        "http://localhost:8000/api/challenges/submit-fix",
+        { code, challenge: "sql-injection" }
+      );
       const { success, logs } = response.data;
-      
+
       setIsSuccess(success);
       setFeedback(logs);
-      
+
       if (success) {
-        alert("Congratulations! Your fix is correct and passed all security tests.");
+        alert(
+          "Congratulations! Your fix is correct and passed all security tests."
+        );
       } else {
         alert("Your fix is not correct. Check the logs for details.");
       }
-
     } catch (error) {
       console.error(error);
-      setFeedback('An error occurred while submitting your code.');
+      setFeedback("An error occurred while submitting your code.");
     } finally {
       setIsLoading(false);
     }
@@ -80,16 +84,19 @@ const SqlInjectionFixPage: React.FC = () => {
     <div className="text-white">
       <h1 className="text-3xl font-bold mb-4">SQL Injection: Fix Challenge</h1>
       <p className="text-gray-400 mb-6">
-        The code below is vulnerable to SQL Injection. Modify the query to use parameterized statements (query parameters) to prevent the vulnerability. Your solution must still allow a valid user ('admin' with password 'password123') to log in.
+        The code below is vulnerable to SQL Injection. Modify the query to use
+        parameterized statements (query parameters) to prevent the
+        vulnerability. Your solution must still allow a valid user ('admin' with
+        password 'password123') to log in.
       </p>
-      
+
       <div className="h-96 mb-4 border-2 border-gray-700 rounded-lg overflow-hidden">
         <Editor
           height="100%"
           language="python"
           theme="vs-dark"
           value={code}
-          onChange={(value) => setCode(value || '')}
+          onChange={(value) => setCode(value || "")}
         />
       </div>
 
@@ -98,13 +105,19 @@ const SqlInjectionFixPage: React.FC = () => {
         className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded"
         disabled={isLoading}
       >
-        {isLoading ? 'Running Tests...' : 'Submit Fix'}
+        {isLoading ? "Running Tests..." : "Submit Fix"}
       </button>
 
       {feedback && (
         <div className="mt-6">
           <h3 className="text-xl font-bold">Test Results:</h3>
-          <pre className={`mt-2 p-4 rounded-lg text-sm whitespace-pre-wrap ${isSuccess ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'}`}>
+          <pre
+            className={`mt-2 p-4 rounded-lg text-sm whitespace-pre-wrap ${
+              isSuccess
+                ? "bg-green-900 text-green-200"
+                : "bg-red-900 text-red-200"
+            }`}
+          >
             {feedback}
           </pre>
         </div>
