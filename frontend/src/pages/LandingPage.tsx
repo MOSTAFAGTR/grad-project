@@ -84,7 +84,7 @@ const LandingPage: React.FC = () => {
             10,000+ <span className="text-gray-400 font-normal">developers trained</span>
           </p>
           <div className="flex justify-between items-center mt-8 text-gray-500">
-            <p>© 2024 SCALE</p>
+            <p>© 2025 SCALE</p>
             <Link to="/contact" className="hover:text-white">Contact</Link>
           </div>
         </div>
