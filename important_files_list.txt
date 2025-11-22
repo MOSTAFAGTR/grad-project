@@ -1,0 +1,103 @@
+
+-------------------------------------------------------------------------------
+   ROBOCOPY     ::     Robust File Copy for Windows                              
+-------------------------------------------------------------------------------
+
+  Started : Saturday, November 22, 2025 3:09:31 PM
+   Source : C:\Users\LOQ\Desktop\SCALE_Application\
+     Dest : C:\Users\LOQ\Desktop\SCALE_Application\temp\
+
+    Files : *.*
+	    
+ Exc Dirs : node_modules
+	    __pycache__
+	    .git
+	    .idea
+	    .vscode
+	    dist
+	    build
+	    
+  Options : *.* /L /S /DCOPY:DA /COPY:DAT /R:1000000 /W:30 
+
+------------------------------------------------------------------------------
+
+	  New Dir          6	C:\Users\LOQ\Desktop\SCALE_Application\
+	    New File  		       0	.gitignore
+	    New File  		    1696	docker-compose.yml
+	    New File  		       0	important_files_list.txt
+	    New File  		  353096	important_files_tree.txt
+	    New File  		  543280	project_tree.txt
+	    New File  		     255	wait-for-it.sh
+	  New Dir          2	C:\Users\LOQ\Desktop\SCALE_Application\backend\
+	    New File  		     370	Dockerfile
+	    New File  		      94	requirements.txt
+	  New Dir          5	C:\Users\LOQ\Desktop\SCALE_Application\backend\app\
+	    New File  		     826	crud.py
+	    New File  		     780	main.py
+	    New File  		     788	models.py
+	    New File  		    3569	sandbox_runner.py
+	    New File  		     526	schemas.py
+	  New Dir          3	C:\Users\LOQ\Desktop\SCALE_Application\backend\app\api\
+	    New File  		    1360	auth.py
+	    New File  		    1553	challenges.py
+	    New File  		    1266	quizzes.py
+	  New Dir          0	C:\Users\LOQ\Desktop\SCALE_Application\backend\app\core\
+	  New Dir          1	C:\Users\LOQ\Desktop\SCALE_Application\backend\app\db\
+	    New File  		     577	database.py
+	  New Dir          0	C:\Users\LOQ\Desktop\SCALE_Application\backend\app\services\
+	  New Dir          0	C:\Users\LOQ\Desktop\SCALE_Application\backend\challenge-sql-injection\
+	  New Dir          0	C:\Users\LOQ\Desktop\SCALE_Application\backend\challenge-xss\
+	  New Dir          5	C:\Users\LOQ\Desktop\SCALE_Application\challenge-sql-injection\
+	    New File  		    1935	app.py
+	    New File  		      64	requirements.txt
+	    New File  		     312	run_tests.sh
+	    New File  		    1792	test_app.py
+	    New File  		     364	users.sql
+	  New Dir          1	C:\Users\LOQ\Desktop\SCALE_Application\challenge-xss\
+	    New File  		     782	xss.sql
+	  New Dir          1	C:\Users\LOQ\Desktop\SCALE_Application\db_init\
+	    New File  		     881	init.sql
+	  New Dir          8	C:\Users\LOQ\Desktop\SCALE_Application\frontend\
+	    New File  		     140	Dockerfile
+	    New File  		     402	index.html
+	    New File  		  171599	package-lock.json
+	    New File  		     991	package.json
+	    New File  		      84	postcss.config.js
+	    New File  		     191	tailwind.config.js
+	    New File  		     598	tsconfig.json
+	    New File  		     168	vite.config.ts
+	  New Dir          1	C:\Users\LOQ\Desktop\SCALE_Application\frontend\public\
+	    New File  		  17.7 m	WhatsApp Video 2025-11-12 at 19.31.45_ab683d15.mp4
+	  New Dir          3	C:\Users\LOQ\Desktop\SCALE_Application\frontend\src\
+	    New File  		    2231	App.tsx
+	    New File  		      60	index.css
+	    New File  		     244	main.tsx
+	  New Dir          4	C:\Users\LOQ\Desktop\SCALE_Application\frontend\src\components\
+	    New File  		    2269	BuildingWallAnimation.tsx
+	    New File  		     811	MainLayout.tsx
+	    New File  		     495	ProtectedRoute.tsx
+	    New File  		    2616	Sidebar.tsx
+	  New Dir         13	C:\Users\LOQ\Desktop\SCALE_Application\frontend\src\pages\
+	    New File  		     417	AdminDashboardPage.tsx
+	    New File  		     753	AttackSuccessPage.tsx
+	    New File  		    4890	ChallengesListPage.tsx
+	    New File  		     349	DashboardHomePage.tsx
+	    New File  		     795	HomePage.tsx
+	    New File  		    4138	LandingPage.tsx
+	    New File  		    3432	LoginPage.tsx
+	    New File  		    4129	RegisterPage.tsx
+	    New File  		     895	ScenarioPage.tsx
+	    New File  		    2792	SqlInjectionAttackPage.tsx
+	    New File  		    3706	SqlInjectionFixPage.tsx
+	    New File  		    1346	SqlInjectionTutorialPage.tsx
+	    New File  		    1346	UnderConstructionPage.tsx
+
+------------------------------------------------------------------------------
+
+               Total    Copied   Skipped  Mismatch    FAILED    Extras
+    Dirs :        22        17         5         0         0         0
+   Files :        53        53         0         0         0         0
+   Bytes :   18.84 m   18.84 m         0         0         0         0
+   Times :   0:00:00   0:00:00                       0:00:00   0:00:00
+   Ended : Saturday, November 22, 2025 3:09:31 PM
+

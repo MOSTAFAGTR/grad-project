@@ -15,6 +15,9 @@ import UnderConstructionPage from './pages/UnderConstructionPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import MainLayout from './components/MainLayout';
 import ProtectedRoute from './components/ProtectedRoute';
+import XssAttackPage from './pages/XssAttackPage';
+import XssFixPage from './pages/XssFixPage';
+import XssTutorialPage from './pages/XssTutorialPage';
 
 const App: React.FC = () => {
   return (
@@ -33,6 +36,9 @@ const App: React.FC = () => {
             <Route path="/challenges/1/attack" element={<SqlInjectionAttackPage />} />
             <Route path="/challenges/1/fix" element={<SqlInjectionFixPage />} />
             <Route path="/challenges/1/tutorial" element={<SqlInjectionTutorialPage />} /> 
+            <Route path="/challenges/2/attack" element={<XssAttackPage/>} />
+            <Route path="/challenges/2/fix" element={<XssFixPage />} />
+            <Route path="/challenges/2/tutorial" element={<XssTutorialPage/>} /> 
             <Route path="/challenges/attack-success" element={<AttackSuccessPage />} />
             <Route path="/under-construction" element={<UnderConstructionPage />} />
             <Route path="/admin/dashboard" element={<AdminDashboardPage />} />

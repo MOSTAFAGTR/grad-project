@@ -1,19 +1,24 @@
-# Define a top-level network that all services will share
+version: '3.8'
+
 networks:
   scale_net:
 
 services:
   backend:
     build: ./backend
+    # IMPORTANT: If DB isn't ready, restart until it is
+    restart: on-failure 
     ports:
       - "8000:8000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./backend:/app
       - ./challenge-sql-injection:/app/challenge-sql-injection
-    # Connect this service to our shared network
+      - ./challenge-xss:/app/challenge-xss
     networks:
       - scale_net
+    depends_on:
+      - main_db
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   frontend:
@@ -22,13 +27,14 @@ services:
       - "5173:5173"
     volumes:
       - ./frontend:/app
+      # CRITICAL: This keeps the container's node_modules separate from your computer
       - /app/node_modules
-    # Connect this service to our shared network
     networks:
       - scale_net
     command: npm run dev -- --host
+    environment:
+      - VITE_API_URL=http://localhost:8000
 
-  # Main application database
   main_db:
     image: mysql:8.0
     container_name: main_db
@@ -40,11 +46,11 @@ services:
     volumes:
       - db_data:/var/lib/mysql
       - ./db_init/init.sql:/docker-entrypoint-initdb.d/init.sql
-    # Connect this service to our shared network
     networks:
       - scale_net
+    ports:
+      - "3306:3306"
 
-  # Dedicated challenge database
   challenge_db_sqli:
     image: mysql:8.0
     container_name: challenge_db_sqli
@@ -57,7 +63,6 @@ services:
       - ./challenge-sql-injection/users.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "3307:3306"
-    # Connect this service to our shared network
     networks:
       - scale_net
 
