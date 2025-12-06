@@ -138,6 +138,25 @@ const challenges = [
       { text: "Tutorial", url: "/under-construction" },
     ],
   },
+  {
+     id: 2,
+     title: 'XSS Scenario',
+     icon: <FaBug />,
+     color: 'pink',
+     buttons: [
+     { text: 'Simulate', url: '/challenges/2/attack' },
+      { text: 'Fix', url: '/challenges/2/fix' },
+      { text: 'Tutorial', url: '/challenges/2/tutorial' }
+    ] 
+    },
+  { id: 3, title: 'CSRF Scenario', icon: <FaUserSecret />, color: 'orange', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { id: 4, title: 'Command Injection', icon: <FaTerminal />, color: 'purple', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { id: 5, title: 'Broken Authentication', icon: <FaUserShield />, color: 'red', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { id: 6, title: 'Security Misconfiguration', icon: <FaTools />, color: 'green', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { id: 7, title: 'Insecure Storage', icon: <FaLock />, color: 'yellow', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { id: 8, title: 'Directory Traversal', icon: <FaFolderOpen />, color: 'blue', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { id: 9, title: 'XML External Entity (XXE)', icon: <FaFileCode />, color: 'indigo', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { id: 10, title: 'Unvalidated Redirect', icon: <FaExternalLinkAlt />, color: 'teal', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] }
 ];
 
 const ChallengesListPage: React.FC = () => {

@@ -1,21 +1,18 @@
-FROM node:18
+FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy only package manifests first to leverage docker cache
-COPY package*.json ./
+# Copy package files
+COPY package.json package-lock.json ./
 
-# Install dependencies inside the image (prefer npm ci if lockfile present)
-RUN npm ci --silent || npm install --silent
+# Install dependencies
+RUN npm install
 
-# Ensure node_modules exists and set ownership to the non-root 'node' user
-RUN mkdir -p /app/node_modules && chown -R node:node /app
+# Copy the rest of the code
+COPY . .
 
-# Copy application files as the node user to preserve ownership
-COPY --chown=node:node . .
-
-# Switch to the non-root user
-USER node
+# Add node_modules/.bin to the PATH explicitly
+ENV PATH /app/node_modules/.bin:$PATH
 
 EXPOSE 5173
 

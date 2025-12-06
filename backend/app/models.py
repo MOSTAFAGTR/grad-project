@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, Text
 from .db.database import Base
 
 # Main, secure user table
@@ -21,3 +21,10 @@ class Challenge(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), index=True)
     description = Column(String(255), index=True)
+
+# --- NEW: Table for XSS Attack Simulation ---
+class XSSComment(Base):
+    __tablename__ = "xss_comments"
+    id = Column(Integer, primary_key=True, index=True)
+    author = Column(String(255))
+    content = Column(Text) # Text type to allow long scripts

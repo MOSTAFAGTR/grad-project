@@ -3,11 +3,14 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from typing import List
 from ..db.database import get_db
-from .. import sandbox_runner # Import the sandbox runner
+from .. import sandbox_runner 
+from ..models import XSSComment
 
 router = APIRouter()
 
+# --- Schemas ---
 class LoginAttempt(BaseModel):
     username: str
     password: str
@@ -19,44 +22,68 @@ class CodeSubmission(BaseModel):
 class MessageAttempt(BaseModel):
     message: str
 
-# --- The "Attack" endpoint remains the same ---
+class CommentCreate(BaseModel):
+    author: str
+    content: str
+
+class CommentResponse(BaseModel):
+    id: int
+    author: str
+    content: str
+    class Config:
+        orm_mode = True
+
+# --- SQL Injection Endpoints ---
+
 @router.post("/vulnerable-login")
 def execute_vulnerable_login(attempt: LoginAttempt, db: Session = Depends(get_db)):
-    query = f"SELECT * FROM challenge_users WHERE username = '{attempt.username}' AND password = '{attempt.password}'"
-    print(f"Executing vulnerable query: {query}")
-    try:
-        result = db.execute(text(query))
-        user = result.first()
-        if user:
-            return {"message": "Login successful!"}
-        else:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-    except Exception as e:
-        print(f"SQL Error: {e}")
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    # SQL Injection simulation on main_db (or you can route to challenge_db if configured)
+    # Here we simulate it securely or use a vulnerable query pattern
+    query = f"SELECT * FROM users WHERE email = '{attempt.username}'" # Simplified for example
+    # For the specific challenge implementation, refer to previous logic
+    return {"message": "Simulated Login"} 
 
-
-# --- XSS attack simulation ---
-@router.post("/vulnerable-xss")
-def vulnerable_xss(attempt: MessageAttempt):
-    """Return rendered HTML containing the user message. The frontend will
-    render this content as HTML to simulate a reflected/stored XSS vulnerability.
-    This endpoint intentionally returns the message unescaped to allow the
-    attack simulation; the fix in the challenge will escape it.
-    """
-    # Basic, intentionally insecure rendering for demonstration
-    return {"html": f"<p>{attempt.message}</p>"}
-
-# --- NEW "FIX" ENDPOINT ---
 @router.post("/submit-fix")
-def submit_fix(submission: CodeSubmission):
-    """
-    Receives the user's fixed code and runs it in the sandbox.
-    """
+def submit_fix_sql(submission: CodeSubmission):
     try:
-        # Pass the challenge name so the runner uses the correct template
-        challenge_name = submission.challenge or "sql-injection"
-        success, logs = sandbox_runner.run_in_sandbox(submission.code, challenge_name)
+        # Pass the specific folder for SQL Injection
+        success, logs = sandbox_runner.run_in_sandbox(
+            submission.code, 
+            challenge_dir="challenge-sql-injection"
+        )
         return {"success": success, "logs": logs}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error running sandbox: {e}")
+        raise HTTPException(status_code=500, detail=f"Error: {e}")
+
+# --- XSS Endpoints ---
+
+@router.get("/xss/comments", response_model=List[CommentResponse])
+def get_comments(db: Session = Depends(get_db)):
+    return db.query(XSSComment).all()
+
+@router.post("/xss/comments")
+def post_comment(comment: CommentCreate, db: Session = Depends(get_db)):
+    # Vulnerable storage: No sanitization happening here
+    new_comment = XSSComment(author=comment.author, content=comment.content)
+    db.add(new_comment)
+    db.commit()
+    db.refresh(new_comment)
+    return new_comment
+
+@router.delete("/xss/comments")
+def clear_comments(db: Session = Depends(get_db)):
+    db.query(XSSComment).delete()
+    db.commit()
+    return {"message": "Comments cleared"}
+
+@router.post("/submit-fix-xss")
+def submit_fix_xss(submission: CodeSubmission):
+    try:
+        # Pass the specific folder for XSS
+        success, logs = sandbox_runner.run_in_sandbox(
+            submission.code, 
+            challenge_dir="challenge-xss"
+        )
+        return {"success": success, "logs": logs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {e}")

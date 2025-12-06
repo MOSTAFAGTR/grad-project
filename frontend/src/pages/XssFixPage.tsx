@@ -1,98 +1,73 @@
-import React, { useState } from "react";
-import Editor from "@monaco-editor/react";
-import axios from "axios";
+import React, { useState } from 'react';
+import Editor from '@monaco-editor/react';
+import axios from 'axios';
 
-//The Fix:
-/*
-from flask import Flask, request, jsonify
-from markupsafe import escape
+const VULNERABLE_CODE = `from flask import Flask, request, render_template_string
 
 app = Flask(__name__)
 
-messages = []
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    # Mock storage
+    comments = [] 
+    if request.method == 'POST':
+        # We are getting the content directly from the form
+        content = request.form.get('content', '')
+        comments.append(content)
 
-@app.route('/post', methods=['POST'])
-def post_message():
-    payload = request.get_json(silent=True) or {}
-    message = payload.get('message')
-    if not message or not isinstance(message, str):
-        return jsonify({"error": "Message (string) required"}), 400
+    # Building HTML manually (VULNERABLE)
+    comments_html = ""
+    for c in comments:
+        comments_html += f"<div class='comment'>{c}</div>"
 
-    messages.append(message)
-    return jsonify({"message": "Posted"}), 200
-
-@app.route('/messages', methods=['GET'])
-def show_messages():
-    html = '''<html><body>
-<h1>Messages</h1>
-'''
-    for m in messages:
-        html += f"<p>{escape(m)}</p>"
-
-    html += '</body></html>'
-    return html, 200
-
-if __name__ == '__main__':
-    app.run(debug=True)
-*/
-
-const VULNERABLE_CODE = `from flask import Flask, request, jsonify
-
-app = Flask(__name__)
-
-messages = []
-
-@app.route('/post', methods=['POST'])
-def post_message():
-    payload = request.json or {}
-    message = payload.get('message')
-    if not message:
-        return jsonify({"error": "Message required"}), 400
+    template = f"""
+    <!doctype html>
+    <html>
+    <body>
+        <h1>Comments</h1>
+        <form method="post">
+            <input type="text" name="content">
+            <button type="submit">Post</button>
+        </form>
+        <div>
+            {comments_html}
+        </div>
+    </body>
+    </html>
+    """
     
-    messages.append(message)
-    return jsonify({"message": "Posted"}), 200
-
-@app.route('/messages', methods=['GET'])
-def show_messages():
-    html = '''<html><body>
-<h1>Messages</h1>
-'''
-    for m in messages:
-        html += f"<p>{m}</p>" 
-        
-    html += '</body></html>'
-    return html, 200
-
-if __name__ == '__main__':
-    app.run(debug=True)
+    # HINT: Use html.escape(c) or render_template with autoescaping
+    # If using raw string building, you must import 'html' and use html.escape()
+    
+    return render_template_string(template)
 `;
 
 const XssFixPage: React.FC = () => {
   const [code, setCode] = useState(VULNERABLE_CODE);
-  const [feedback, setFeedback] = useState("");
+  const [feedback, setFeedback] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async () => {
     setIsLoading(true);
-    setFeedback("");
+    setFeedback('');
     try {
-      const { data } = await axios.post(
-        "http://localhost:8000/api/challenges/submit-fix",
-        { code, challenge: "xss" }
-      );
-      setIsSuccess(data.success);
-      setFeedback(data.logs);
-      if (data.success) {
-        alert(
-          "Congratulations! Your fix is correct and passed all security tests."
-        );
+      // Note: Calling the new specific XSS endpoint
+      const response = await axios.post('http://localhost:8000/api/challenges/submit-fix-xss', { code });
+      const { success, logs } = response.data;
+      
+      setIsSuccess(success);
+      setFeedback(logs);
+      
+      if (success) {
+        alert("Congratulations! You successfully sanitized the input.");
       } else {
-        alert("Your fix is not correct. Check the logs for details.");
+        alert("Vulnerability still exists or code error. Check logs.");
       }
-    } catch (err: any) {
-      setFeedback(err.message || "Error");
-      alert("An error occurred while submitting your code.");
+
+    } catch (error) {
+      console.error(error);
+      setFeedback('An error occurred while submitting your code.');
     } finally {
       setIsLoading(false);
     }
@@ -102,17 +77,17 @@ const XssFixPage: React.FC = () => {
     <div className="text-white">
       <h1 className="text-3xl font-bold mb-4">XSS: Fix Challenge</h1>
       <p className="text-gray-400 mb-6">
-        The page below is vulnerable to XSS. Update rendering to escape user
-        input using MarkupSafe's escape or similar.
+        The code below constructs HTML using strings, allowing attackers to inject scripts. 
+        Fix it by importing `html` and using `html.escape(content)` before adding it to the HTML string.
       </p>
-
+      
       <div className="h-96 mb-4 border-2 border-gray-700 rounded-lg overflow-hidden">
         <Editor
           height="100%"
           language="python"
           theme="vs-dark"
           value={code}
-          onChange={(v) => setCode(v || "")}
+          onChange={(value) => setCode(value || '')}
         />
       </div>
 
@@ -121,18 +96,15 @@ const XssFixPage: React.FC = () => {
         className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded"
         disabled={isLoading}
       >
-        {isLoading ? "Running Tests..." : "Submit Fix"}
+        {isLoading ? 'Running Tests...' : 'Submit Fix'}
       </button>
 
       {feedback && (
-        <div
-          className={`mt-6 p-4 rounded-lg text-sm ${
-            isSuccess
-              ? "bg-green-900 text-green-200"
-              : "bg-red-900 text-red-200"
-          }`}
-        >
-          <pre className="whitespace-pre-wrap">{feedback}</pre>
+        <div className="mt-6">
+          <h3 className="text-xl font-bold">Test Results:</h3>
+          <pre className={`mt-2 p-4 rounded-lg text-sm whitespace-pre-wrap ${isSuccess ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'}`}>
+            {feedback}
+          </pre>
         </div>
       )}
     </div>
