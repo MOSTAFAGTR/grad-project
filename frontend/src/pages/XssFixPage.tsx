@@ -42,11 +42,13 @@ def index():
     return render_template_string(template)
 `;
 
+
 const XssFixPage: React.FC = () => {
   const [code, setCode] = useState(VULNERABLE_CODE);
   const [feedback, setFeedback] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
 
   const handleSubmit = async () => {
     setIsLoading(true);
@@ -55,10 +57,10 @@ const XssFixPage: React.FC = () => {
       // Note: Calling the new specific XSS endpoint
       const response = await axios.post('http://localhost:8000/api/challenges/submit-fix-xss', { code });
       const { success, logs } = response.data;
-      
+
       setIsSuccess(success);
       setFeedback(logs);
-      
+
       if (success) {
         alert("Congratulations! You successfully sanitized the input.");
       } else {
@@ -77,10 +79,10 @@ const XssFixPage: React.FC = () => {
     <div className="text-white">
       <h1 className="text-3xl font-bold mb-4">XSS: Fix Challenge</h1>
       <p className="text-gray-400 mb-6">
-        The code below constructs HTML using strings, allowing attackers to inject scripts. 
+        The code below constructs HTML using strings, allowing attackers to inject scripts.
         Fix it by importing `html` and using `html.escape(content)` before adding it to the HTML string.
       </p>
-      
+
       <div className="h-96 mb-4 border-2 border-gray-700 rounded-lg overflow-hidden">
         <Editor
           height="100%"
@@ -101,10 +103,37 @@ const XssFixPage: React.FC = () => {
 
       {feedback && (
         <div className="mt-6">
-          <h3 className="text-xl font-bold">Test Results:</h3>
-          <pre className={`mt-2 p-4 rounded-lg text-sm whitespace-pre-wrap ${isSuccess ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'}`}>
-            {feedback}
-          </pre>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold">Test Results:</h3>
+            <button
+              onClick={() => setShowLogs(!showLogs)}
+              className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded text-sm"
+            >
+              {showLogs ? "Hide Logs" : "Show Logs"}
+            </button>
+          </div>
+
+          <div
+            className={`p-4 rounded-lg mb-4 ${isSuccess
+              ? "bg-green-900 text-green-200"
+              : "bg-red-900 text-red-200"
+              }`}
+          >
+            <div className="text-lg font-bold mb-2">
+              {isSuccess ? "✓ Code is Fixed!" : "✗ Code is Still Vulnerable"}
+            </div>
+            <div className="text-sm">
+              {isSuccess
+                ? "Your fix successfully prevents XSS attacks."
+                : "The vulnerability still exists. Review the logs for details."}
+            </div>
+          </div>
+
+          {showLogs && (
+            <pre className="bg-gray-900 p-4 rounded-lg text-sm whitespace-pre-wrap border border-gray-700">
+              {feedback}
+            </pre>
+          )}
         </div>
       )}
     </div>
