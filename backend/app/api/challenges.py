@@ -37,11 +37,13 @@ class CommentResponse(BaseModel):
 
 @router.post("/vulnerable-login")
 def execute_vulnerable_login(attempt: LoginAttempt, db: Session = Depends(get_db)):
-    # SQL Injection simulation on main_db (or you can route to challenge_db if configured)
-    # Here we simulate it securely or use a vulnerable query pattern
-    query = f"SELECT * FROM users WHERE email = '{attempt.username}'" # Simplified for example
-    # For the specific challenge implementation, refer to previous logic
-    return {"message": "Simulated Login"} 
+    # Vulnerable to SQL Injection - DO NOT DO THIS IN PRODUCTION!
+    query = f"SELECT * FROM challenge_users WHERE username = '{attempt.username}' OR password = '{attempt.password}'"
+    result = db.execute(text(query)).fetchone()
+    if result:
+        return {"message": "Login successful!"}
+    else:
+        raise HTTPException(status_code=401, detail="Invalid credentials") 
 
 @router.post("/submit-fix")
 def submit_fix_sql(submission: CodeSubmission):

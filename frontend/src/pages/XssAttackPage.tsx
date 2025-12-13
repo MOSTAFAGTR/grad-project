@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 interface Comment {
   id: number;
@@ -13,6 +13,7 @@ const XssAttackPage: React.FC = () => {
   const [newComment, setNewComment] = useState('');
   const [author, setAuthor] = useState('Guest');
   const [message, setMessage] = useState('');
+  const navigate = useNavigate();
 
   const fetchComments = async () => {
     try {
@@ -35,14 +36,18 @@ const XssAttackPage: React.FC = () => {
         content: newComment
       });
       setNewComment('');
-      fetchComments();
+      await fetchComments();
       setMessage('Comment posted!');
+      // Check if the comment contains XSS payload and navigate after render
+      if (newComment.toLowerCase().includes('<script') ||
+        newComment.toLowerCase().includes('onerror') ||
+        newComment.toLowerCase().includes('javascript:')) {
+        setTimeout(() => navigate('/challenges/attack-success?type=xss'), 100);
+      }
     } catch (err) {
       setMessage('Error posting comment.');
     }
-  };
-
-  const handleClear = async () => {
+  }; const handleClear = async () => {
     await axios.delete('http://localhost:8000/api/challenges/xss/comments');
     fetchComments();
   };
@@ -67,13 +72,13 @@ const XssAttackPage: React.FC = () => {
         <h3 className="text-xl font-bold mb-4">Leave a Comment</h3>
         <form onSubmit={handlePost}>
           <div className="mb-4">
-             <label className="block text-sm font-bold mb-2">Name</label>
-             <input 
-                type="text" 
-                value={author} 
-                onChange={(e) => setAuthor(e.target.value)}
-                className="bg-gray-700 border border-gray-600 text-white rounded w-full p-2"
-             />
+            <label className="block text-sm font-bold mb-2">Name</label>
+            <input
+              type="text"
+              value={author}
+              onChange={(e) => setAuthor(e.target.value)}
+              className="bg-gray-700 border border-gray-600 text-white rounded w-full p-2"
+            />
           </div>
           <div className="mb-4">
             <label className="block text-sm font-bold mb-2">Comment (Try: <code>&lt;img src=x onerror=alert(1)&gt;</code>)</label>
@@ -102,20 +107,20 @@ const XssAttackPage: React.FC = () => {
         {comments.map((c) => (
           <div key={c.id} className="bg-gray-800 p-4 rounded border border-gray-700">
             <div className="font-bold text-blue-300 text-sm mb-1">{c.author} says:</div>
-            
+
             {/* VULNERABLE PART: RENDER HTML DIRECTLY */}
-            <div 
-                className="text-gray-200"
-                dangerouslySetInnerHTML={{ __html: c.content }} 
+            <div
+              className="text-gray-200"
+              dangerouslySetInnerHTML={{ __html: c.content }}
             />
           </div>
         ))}
       </div>
-      
+
       <div className="mt-8">
-         <Link to="/challenges" className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
-            Back to Challenges
-         </Link>
+        <Link to="/challenges" className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
+          Back to Challenges
+        </Link>
       </div>
     </div>
   );
