@@ -65,7 +65,7 @@ def run_in_sandbox(student_code: str, challenge_dir: str):
             logs = client.containers.run(
                 image_tag,
                 remove=True,
-                network="scale_application_scale_net" 
+                network="scale_app_net" 
             )
             
             decoded_logs = logs.decode('utf-8')

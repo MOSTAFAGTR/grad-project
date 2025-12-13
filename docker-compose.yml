@@ -2,6 +2,8 @@ version: '3.8'
 
 networks:
   scale_net:
+    name: scale_app_net
+    driver: bridge
 
 services:
   backend:
