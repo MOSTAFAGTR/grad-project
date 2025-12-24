@@ -43,10 +43,22 @@ def update_question(q_id: int, u: QuestionUpdate, db: Session = Depends(get_db))
     db.commit()
     return {"message": "Updated"}
 
+@router.delete("/questions")
+def delete_all_questions(db: Session = Depends(get_db)):
+    db.query(UserAnswer).delete()
+    db.query(QuestionOption).delete()
+    db.query(Question).delete()
+    db.commit()
+    return {"message": "All questions deleted"}
+
 @router.delete("/questions/{q_id}")
 def delete_question(q_id: int, db: Session = Depends(get_db)):
-    db.query(Question).filter(Question.id == q_id).delete(); db.commit()
+    db.query(UserAnswer).filter(UserAnswer.question_id == q_id).delete()
+    db.query(Question).filter(Question.id == q_id).delete()
+    db.commit()
     return {"message": "Deleted"}
+
+
 
 @router.post("/generate-ai-preview")
 def generate_ai(req: AIGenerationRequest, user: User = Depends(get_current_user)):

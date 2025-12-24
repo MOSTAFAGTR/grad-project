@@ -85,13 +85,3 @@ class QuizAssignment(Base):
     question_ids = Column(Text)
     
     created_at = Column(DateTime, default=datetime.utcnow)
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(255))
-    instructor_id = Column(Integer, ForeignKey("users.id"))
-    
-    # We will store lists as comma-separated strings for simplicity in this project
-    # e.g., "1,2,3"
-    assigned_student_ids = Column(Text) 
-    question_ids = Column(Text)
-    
-    created_at = Column(DateTime, default=datetime.utcnow)
