@@ -1,17 +1,22 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 
-const ProtectedRoute: React.FC = () => {
-  // Check if user data exists in session storage
-  const user = sessionStorage.getItem('user');
+interface ProtectedRouteProps {
+  children?: React.ReactNode;
+}
 
-  if (!user) {
-    // If no user is logged in, redirect them to the login page
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+  // 1. Get the token from storage
+  const token = localStorage.getItem('token');
+
+  // 2. If no token, kick user back to Login
+  if (!token) {
     return <Navigate to="/login" replace />;
   }
 
-  // If a user is logged in, render the child component (e.g., MainLayout)
-  return <Outlet />;
+  // 3. If token exists, allow access
+  // If children are provided (wrapping), render them. Otherwise use Outlet (nested routes).
+  return children ? <>{children}</> : <Outlet />;
 };
 
 export default ProtectedRoute;

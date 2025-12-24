@@ -18,6 +18,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import XssAttackPage from './pages/XssAttackPage';
 import XssFixPage from './pages/XssFixPage';
 import XssTutorialPage from './pages/XssTutorialPage';
+import InstructorQuizPage from './pages/InstructorQuizPage'; 
+import StudentQuizPage from './pages/StudentQuizPage'; 
 
 const App: React.FC = () => {
   return (
@@ -42,6 +44,8 @@ const App: React.FC = () => {
             <Route path="/challenges/attack-success" element={<AttackSuccessPage />} />
             <Route path="/under-construction" element={<UnderConstructionPage />} />
             <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+            <Route path="quiz" element={<StudentQuizPage />} />
+            <Route path="instructor/quiz" element={<InstructorQuizPage />} />
           </Route>
         </Route>
 

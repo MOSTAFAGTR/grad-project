@@ -1,33 +1,62 @@
 version: '3.8'
 
+# Define a shared network for all containers to talk to each other
 networks:
   scale_net:
 
 services:
+  # ====================================================
+  # 1. SANDBOX BASE IMAGE BUILDER (New Performance Fix)
+  # ====================================================
+  # This service builds the Python image with libraries pre-installed.
+  # It exits immediately after building. The Backend uses this image.
+  sandbox_base:
+    build: 
+      context: ./backend/sandbox_base
+    image: scale-sandbox-base
+    container_name: scale_sandbox_builder
+    # Dummy command because we only need the image built, not running
+    command: ["echo", "Sandbox Base Image Built Successfully"]
+    networks:
+      - scale_net
+
+  # ====================================================
+  # 2. MAIN BACKEND API
+  # ====================================================
   backend:
     build: ./backend
-    # IMPORTANT: If DB isn't ready, restart until it is
+    container_name: scale_application-backend-1
+    # Restart if DB isn't ready yet
     restart: on-failure 
     ports:
       - "8000:8000"
     volumes:
+      # Access to Docker Socket to spawn sandbox containers
       - /var/run/docker.sock:/var/run/docker.sock
+      # Mount source code for live reloading
       - ./backend:/app
+      # Mount Challenge folders so the runner can copy them
       - ./challenge-sql-injection:/app/challenge-sql-injection
       - ./challenge-xss:/app/challenge-xss
     networks:
       - scale_net
     depends_on:
       - main_db
+      - sandbox_base # Wait for base image to be ready
+    # Command to run FastAPI server
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
+  # ====================================================
+  # 3. FRONTEND (React + Vite)
+  # ====================================================
   frontend:
     build: ./frontend
+    container_name: scale_application-frontend-1
     ports:
       - "5173:5173"
     volumes:
       - ./frontend:/app
-      # CRITICAL: This keeps the container's node_modules separate from your computer
+      # CRITICAL: Prevent local empty node_modules from overriding container
       - /app/node_modules
     networks:
       - scale_net
@@ -35,6 +64,23 @@ services:
     environment:
       - VITE_API_URL=http://localhost:8000
 
+  # ====================================================
+  # 4. AI MICROSERVICE
+  # ====================================================
+  ai_service:
+    build: ./ai_service
+    container_name: scale_application-ai_service-1
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./ai_service:/app
+    networks:
+      - scale_net
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+
+  # ====================================================
+  # 5. MAIN DATABASE (Users, Auth, Quizzes)
+  # ====================================================
   main_db:
     image: mysql:8.0
     container_name: main_db
@@ -44,13 +90,16 @@ services:
       - MYSQL_PASSWORD=password
       - MYSQL_ROOT_PASSWORD=rootpassword
     volumes:
-      - db_data:/var/lib/mysql
+      - scale_db_data:/var/lib/mysql
       - ./db_init/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - scale_net
     ports:
       - "3306:3306"
 
+  # ====================================================
+  # 6. CHALLENGE DATABASE (Vulnerable SQLi Target)
+  # ====================================================
   challenge_db_sqli:
     image: mysql:8.0
     container_name: challenge_db_sqli
@@ -66,5 +115,6 @@ services:
     networks:
       - scale_net
 
+# Persist the main database data
 volumes:
-  db_data:
+  scale_db_data:

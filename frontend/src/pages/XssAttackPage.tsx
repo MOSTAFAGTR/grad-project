@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 interface Comment {
   id: number;
@@ -13,6 +13,8 @@ const XssAttackPage: React.FC = () => {
   const [newComment, setNewComment] = useState('');
   const [author, setAuthor] = useState('Guest');
   const [message, setMessage] = useState('');
+  
+  const navigate = useNavigate();
 
   const fetchComments = async () => {
     try {
@@ -34,6 +36,27 @@ const XssAttackPage: React.FC = () => {
         author: author,
         content: newComment
       });
+      
+      // --- XSS DETECTION SIMULATION ---
+      // If the user inputs common XSS vectors, treat it as a successful attack
+      // In a real attack, the script itself would execute, but for the platform UX:
+      const xssPatterns = [
+        "<script>", 
+        "onerror=", 
+        "onload=", 
+        "alert(", 
+        "javascript:",
+        "window.location"
+      ];
+
+      const isAttack = xssPatterns.some(pattern => newComment.toLowerCase().includes(pattern));
+
+      if (isAttack) {
+        // Redirect to Success Page with TYPE=XSS
+        navigate('/challenges/attack-success?type=xss');
+        return;
+      }
+
       setNewComment('');
       fetchComments();
       setMessage('Comment posted!');
@@ -51,7 +74,7 @@ const XssAttackPage: React.FC = () => {
     <div className="text-white p-6 max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-2">Reflected/Stored XSS Challenge</h1>
       <p className="text-gray-400 mb-6">
-        This blog post has no security. If you post a script tag, it will execute in the browser of anyone who visits this page.
+        This blog post has no security. If you post a script tag, it will execute.
       </p>
 
       {/* Fake Blog Post */}
@@ -76,9 +99,10 @@ const XssAttackPage: React.FC = () => {
              />
           </div>
           <div className="mb-4">
-            <label className="block text-sm font-bold mb-2">Comment (Try: <code>&lt;img src=x onerror=alert(1)&gt;</code>)</label>
+            <label className="block text-sm font-bold mb-2">Comment</label>
+            <div className="text-xs text-gray-500 mb-2">Try: <code>&lt;img src=x onerror=alert(1)&gt;</code></div>
             <textarea
-              className="bg-gray-700 border border-gray-600 text-white rounded w-full p-2 h-24"
+              className="bg-gray-700 border border-gray-600 text-white rounded w-full p-2 h-24 font-mono text-sm"
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
               placeholder="Enter your message..."
@@ -89,7 +113,7 @@ const XssAttackPage: React.FC = () => {
               Post Comment
             </button>
             <button type="button" onClick={handleClear} className="text-red-400 hover:text-red-300 text-sm">
-              Reset/Clear All Comments
+              Reset/Clear All
             </button>
           </div>
         </form>
@@ -105,7 +129,7 @@ const XssAttackPage: React.FC = () => {
             
             {/* VULNERABLE PART: RENDER HTML DIRECTLY */}
             <div 
-                className="text-gray-200"
+                className="text-gray-200 break-words"
                 dangerouslySetInnerHTML={{ __html: c.content }} 
             />
           </div>

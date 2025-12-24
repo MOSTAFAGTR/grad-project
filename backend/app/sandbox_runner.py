@@ -9,13 +9,13 @@ def run_in_sandbox(student_code: str, challenge_dir: str):
     """
     Args:
         student_code (str): The code submitted by the student.
-        challenge_dir (str): The folder name (e.g., 'challenge-sql-injection' or 'challenge-xss').
+        challenge_dir (str): The folder name (e.g., 'challenge-sql-injection').
     """
     run_id = str(uuid.uuid4())
     image_tag = f"scale-challenge-run-{run_id}"
     
-    # Resolve the path dynamically based on the directory passed
-    # We assume the runner is in /app/app/, so we go up to /app/ then into the challenge dir
+    # We are inside the backend container at /app/app/
+    # The challenge folders are mounted at /app/challenge-xxx
     base_path = pathlib.Path("/app").resolve()
     source_path = (base_path / challenge_dir).resolve()
 
@@ -28,39 +28,47 @@ def run_in_sandbox(student_code: str, challenge_dir: str):
         print(f"[{run_id}] Created temporary directory: {temp_dir}")
 
         try:
-            # Copy the entire challenge template into the temporary directory
+            # 1. Copy the challenge files to the temp dir
             shutil.copytree(source_path, temp_dir, dirs_exist_ok=True)
 
-            # Overwrite the template's app.py with the student's code
+            # 2. Overwrite app.py with the student's submitted code
             student_code_path = temp_dir / "app.py"
             student_code_path.write_text(student_code)
             
-            # Define the Dockerfile
+            # 3. Define the Dockerfile with WINDOWS FIX
             dockerfile_content = f"""
-            FROM python:3.11-slim
+            FROM python:3.9-slim
             WORKDIR /app
+            
+            # Install dependencies
             COPY requirements.txt .
             RUN pip install --no-cache-dir -r requirements.txt
+            
+            # Copy challenge files
             COPY . .
+            
+            # --- CRITICAL FIX FOR WINDOWS USERS ---
+            # Remove carriage returns (\\r) from the shell script before running it
+            RUN sed -i 's/\\r$//' run_tests.sh
+            
+            # Run the tests
             CMD ["sh", "run_tests.sh"]
             """
+            
             dockerfile_path = temp_dir / "Dockerfile"
             dockerfile_path.write_text(dockerfile_content)
 
             client = docker.from_env()
             print(f"[{run_id}] Building Docker image: {image_tag}...")
             
-            # Build the sandbox image
+            # 4. Build the sandbox image
             client.images.build(path=str(temp_dir), tag=image_tag, rm=True)
             print(f"[{run_id}] Build complete.")
 
             print(f"[{run_id}] Running container...")
             
-            # Run the container
-            # Note: We try to attach to the network, but if the network name differs 
-            # (e.g. different folder name on host), we might need to adjust 'scale_application_scale_net'.
-            # For XSS, the network isn't strictly required as it doesn't use an external DB, 
-            # but we keep it for consistency.
+            # 5. Run the container
+            # We connect to scale_net so it can talk to the database if needed
             logs = client.containers.run(
                 image_tag,
                 remove=True,
@@ -69,8 +77,9 @@ def run_in_sandbox(student_code: str, challenge_dir: str):
             
             decoded_logs = logs.decode('utf-8')
             
-            # Check the test output for failure keywords
-            if "FAILED" in decoded_logs or "ERROR" in decoded_logs:
+            # 6. Check results
+            # If the logs contain failure keywords, mark as failed
+            if "FAILED" in decoded_logs or "Error" in decoded_logs or "Traceback" in decoded_logs:
                 success = False
             else:
                 success = True
@@ -78,14 +87,16 @@ def run_in_sandbox(student_code: str, challenge_dir: str):
             result = {"success": success, "logs": decoded_logs}
 
         except docker.errors.BuildError as e:
+            # Capture build errors (like pip install failing)
             build_logs = "\n".join([line.get('stream', '').strip() for line in e.build_log])
             result = {"success": False, "logs": f"Build Error:\n{build_logs}"}
         except docker.errors.ContainerError as e:
+            # Capture runtime errors
             result = {"success": False, "logs": f"Container Error:\n{e.stderr.decode('utf-8')}"}
         except Exception as e:
             result = {"success": False, "logs": f"An unexpected error occurred: {str(e)}"}
         finally:
-            # Cleanup image
+            # Cleanup: Remove the image to save space
             if 'client' in locals() and client:
                 try:
                     client.images.remove(image_tag, force=True)

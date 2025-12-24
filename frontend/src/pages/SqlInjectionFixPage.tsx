@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import axios from 'axios';
+import ResultModal from '../components/ResultModal';
 
 const VULNERABLE_CODE = `import os
 import mysql.connector
@@ -9,12 +10,7 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 def get_db_connection():
-    return mysql.connector.connect(
-        host="challenge_db_sqli", # Connect to the dedicated challenge DB
-        user="user",
-        password="password",
-        database="testdb"
-    )
+    return mysql.connector.connect(host="challenge_db_sqli", user="user", password="password", database="testdb")
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -34,43 +30,41 @@ def login():
     try:
         cursor.execute(query)
         user = cursor.fetchone()
-
-        if user:
-            return jsonify({"message": "Login successful!"}), 200
-        else:
-            return jsonify({"message": "Invalid credentials"}), 401
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
+        if user: return jsonify({"message": "Login successful!"}), 200
+        else: return jsonify({"message": "Invalid credentials"}), 401
+    except Exception as e: return jsonify({"error": str(e)}), 500
+    finally: cursor.close(); conn.close()
 `;
 
 const SqlInjectionFixPage: React.FC = () => {
   const [code, setCode] = useState(VULNERABLE_CODE);
-  const [feedback, setFeedback] = useState('');
-  const [isSuccess, setIsSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [modalState, setModalState] = useState({ isOpen: false, isSuccess: false, logs: '' });
 
   const handleSubmit = async () => {
     setIsLoading(true);
-    setFeedback('');
     try {
-      const response = await axios.post('http://localhost:8000/api/challenges/submit-fix', { code });
-      const { success, logs } = response.data;
-      
-      setIsSuccess(success);
-      setFeedback(logs);
-      
-      if (success) {
-        alert("Congratulations! Your fix is correct and passed all security tests.");
-      } else {
-        alert("Your fix is not correct. Check the logs for details.");
-      }
+      const token = localStorage.getItem('token');
+      if (!token) { alert("Please login."); setIsLoading(false); return; }
 
-    } catch (error) {
-      console.error(error);
-      setFeedback('An error occurred while submitting your code.');
+      const response = await axios.post(
+        'http://localhost:8000/api/challenges/submit-fix', 
+        { code }, 
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setModalState({
+        isOpen: true,
+        isSuccess: response.data.success,
+        logs: response.data.logs
+      });
+
+    } catch (error: any) {
+      setModalState({
+        isOpen: true,
+        isSuccess: false,
+        logs: error.response?.data?.detail || "System Error: Could not connect to sandbox."
+      });
     } finally {
       setIsLoading(false);
     }
@@ -79,36 +73,23 @@ const SqlInjectionFixPage: React.FC = () => {
   return (
     <div className="text-white">
       <h1 className="text-3xl font-bold mb-4">SQL Injection: Fix Challenge</h1>
-      <p className="text-gray-400 mb-6">
-        The code below is vulnerable to SQL Injection. Modify the query to use parameterized statements (query parameters) to prevent the vulnerability. Your solution must still allow a valid user ('admin' with password 'password123') to log in.
-      </p>
+      <p className="text-gray-400 mb-6">Modify the code to use parameterized queries.</p>
       
-      <div className="h-96 mb-4 border-2 border-gray-700 rounded-lg overflow-hidden">
-        <Editor
-          height="100%"
-          language="python"
-          theme="vs-dark"
-          value={code}
-          onChange={(value) => setCode(value || '')}
-        />
+      <div className="h-96 mb-6 border-2 border-gray-700 rounded-lg overflow-hidden shadow-lg">
+        <Editor height="100%" language="python" theme="vs-dark" value={code} onChange={(v) => setCode(v || '')} />
       </div>
 
-      <button
-        onClick={handleSubmit}
-        className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded"
-        disabled={isLoading}
-      >
+      <button onClick={handleSubmit} disabled={isLoading} className="bg-green-600 px-8 py-3 rounded font-bold hover:bg-green-700 transition flex items-center gap-2 disabled:opacity-50">
+        {isLoading ? <span className="animate-spin">↻</span> : null}
         {isLoading ? 'Running Tests...' : 'Submit Fix'}
       </button>
 
-      {feedback && (
-        <div className="mt-6">
-          <h3 className="text-xl font-bold">Test Results:</h3>
-          <pre className={`mt-2 p-4 rounded-lg text-sm whitespace-pre-wrap ${isSuccess ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'}`}>
-            {feedback}
-          </pre>
-        </div>
-      )}
+      <ResultModal 
+        isOpen={modalState.isOpen} 
+        isSuccess={modalState.isSuccess} 
+        logs={modalState.logs} 
+        onClose={() => setModalState({ ...modalState, isOpen: false })} 
+      />
     </div>
   );
 };

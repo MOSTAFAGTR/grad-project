@@ -9,7 +9,7 @@ const AttackSuccessPage: React.FC = () => {
         You logged in successfully
       </h1>
       <p className="text-gray-300 mt-4">
-        The SQL injection attack was successful!
+        The XSS attack was successful!
       </p>
       <Link
         to="/challenges"

@@ -1,73 +1,61 @@
 import React, { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import axios from 'axios';
+import ResultModal from '../components/ResultModal';
 
 const VULNERABLE_CODE = `from flask import Flask, request, render_template_string
+import html
 
 app = Flask(__name__)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    # Mock storage
     comments = [] 
     if request.method == 'POST':
-        # We are getting the content directly from the form
         content = request.form.get('content', '')
         comments.append(content)
 
-    # Building HTML manually (VULNERABLE)
     comments_html = ""
     for c in comments:
+        # !!! VULNERABLE CODE !!!
         comments_html += f"<div class='comment'>{c}</div>"
 
     template = f"""
     <!doctype html>
-    <html>
-    <body>
-        <h1>Comments</h1>
-        <form method="post">
-            <input type="text" name="content">
-            <button type="submit">Post</button>
-        </form>
-        <div>
-            {comments_html}
-        </div>
-    </body>
-    </html>
+    <html><body><h1>Comments</h1><div>{comments_html}</div></body></html>
     """
-    
-    # HINT: Use html.escape(c) or render_template with autoescaping
-    # If using raw string building, you must import 'html' and use html.escape()
-    
     return render_template_string(template)
 `;
 
 const XssFixPage: React.FC = () => {
   const [code, setCode] = useState(VULNERABLE_CODE);
-  const [feedback, setFeedback] = useState('');
-  const [isSuccess, setIsSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [modalState, setModalState] = useState({ isOpen: false, isSuccess: false, logs: '' });
 
   const handleSubmit = async () => {
     setIsLoading(true);
-    setFeedback('');
     try {
-      // Note: Calling the new specific XSS endpoint
-      const response = await axios.post('http://localhost:8000/api/challenges/submit-fix-xss', { code });
-      const { success, logs } = response.data;
-      
-      setIsSuccess(success);
-      setFeedback(logs);
-      
-      if (success) {
-        alert("Congratulations! You successfully sanitized the input.");
-      } else {
-        alert("Vulnerability still exists or code error. Check logs.");
-      }
+      const token = localStorage.getItem('token');
+      if (!token) { alert("Please login."); setIsLoading(false); return; }
 
-    } catch (error) {
-      console.error(error);
-      setFeedback('An error occurred while submitting your code.');
+      const response = await axios.post(
+        'http://localhost:8000/api/challenges/submit-fix-xss', 
+        { code }, 
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setModalState({
+        isOpen: true,
+        isSuccess: response.data.success,
+        logs: response.data.logs
+      });
+
+    } catch (error: any) {
+      setModalState({
+        isOpen: true,
+        isSuccess: false,
+        logs: error.response?.data?.detail || "System Error."
+      });
     } finally {
       setIsLoading(false);
     }
@@ -76,37 +64,23 @@ const XssFixPage: React.FC = () => {
   return (
     <div className="text-white">
       <h1 className="text-3xl font-bold mb-4">XSS: Fix Challenge</h1>
-      <p className="text-gray-400 mb-6">
-        The code below constructs HTML using strings, allowing attackers to inject scripts. 
-        Fix it by importing `html` and using `html.escape(content)` before adding it to the HTML string.
-      </p>
+      <p className="text-gray-400 mb-6">Fix this code by using <code>html.escape()</code>.</p>
       
-      <div className="h-96 mb-4 border-2 border-gray-700 rounded-lg overflow-hidden">
-        <Editor
-          height="100%"
-          language="python"
-          theme="vs-dark"
-          value={code}
-          onChange={(value) => setCode(value || '')}
-        />
+      <div className="h-96 mb-6 border-2 border-gray-700 rounded-lg overflow-hidden shadow-lg">
+        <Editor height="100%" language="python" theme="vs-dark" value={code} onChange={(v) => setCode(v || '')} />
       </div>
 
-      <button
-        onClick={handleSubmit}
-        className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded"
-        disabled={isLoading}
-      >
+      <button onClick={handleSubmit} disabled={isLoading} className="bg-green-600 px-8 py-3 rounded font-bold hover:bg-green-700 transition flex items-center gap-2 disabled:opacity-50">
+        {isLoading ? <span className="animate-spin">↻</span> : null}
         {isLoading ? 'Running Tests...' : 'Submit Fix'}
       </button>
 
-      {feedback && (
-        <div className="mt-6">
-          <h3 className="text-xl font-bold">Test Results:</h3>
-          <pre className={`mt-2 p-4 rounded-lg text-sm whitespace-pre-wrap ${isSuccess ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'}`}>
-            {feedback}
-          </pre>
-        </div>
-      )}
+      <ResultModal 
+        isOpen={modalState.isOpen} 
+        isSuccess={modalState.isSuccess} 
+        logs={modalState.logs} 
+        onClose={() => setModalState({ ...modalState, isOpen: false })} 
+      />
     </div>
   );
 };

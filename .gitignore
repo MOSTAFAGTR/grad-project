@@ -1,0 +1,75 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+
+venv/
+env/
+ENV/
+.venv/
+
+# ===========================
+# Node.js / Frontend
+# ===========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs (Vite/React)
+dist/
+dist-ssr/
+coverage/
+
+# ===========================
+# Environment Variables (CRITICAL)
+# ===========================
+# Never commit your database passwords or secrets!
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ===========================
+# IDEs and Editors
+# ===========================
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ===========================
+# Docker
+# ===========================
+# If you map database data to a local folder, ignore it here
+# to avoid committing your actual database files
+mysql-data/
+postgres-data/
+db_data/
+
+
+temp/
+# You mentioned this file in your list, usually personal notes shouldn't be committed
+important_files_list.txt

@@ -37,9 +37,13 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
             <FaShieldAlt className="text-lg" />
             {!collapsed && <span className="font-medium">Challenges</span>}
           </NavLink>
-          <NavLink to="/questions" style={({ isActive }) => (isActive ? activeLinkStyle : undefined)} className={linkStyle}>
+          <NavLink to="quiz" style={({ isActive }) => (isActive ? activeLinkStyle : undefined)} className={linkStyle}>
             <FaQuestionCircle className="text-lg" />
             {!collapsed && <span className="font-medium">Questions</span>}
+          </NavLink>
+          <NavLink to="instructor/quiz" style={({ isActive }) => (isActive ? activeLinkStyle : undefined)} className={linkStyle}>
+            <FaQuestionCircle className="text-lg" />
+            {!collapsed && <span className="font-medium">Questionsadmin</span>}
           </NavLink>
         </nav>
       </div>

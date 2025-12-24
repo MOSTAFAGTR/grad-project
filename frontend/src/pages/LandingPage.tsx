@@ -1,11 +1,23 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
   FaLaptopCode, FaWrench, FaGraduationCap, 
   FaShieldAlt, FaVideo, FaClipboardList, FaTrophy 
 } from 'react-icons/fa';
 
 const LandingPage: React.FC = () => {
+  const navigate = useNavigate();
+
+  const handleStart = () => {
+    // Check if user is logged in
+    const token = localStorage.getItem('token');
+    if (token) {
+      navigate('/home'); // Go to Dashboard if logged in
+    } else {
+      navigate('/login'); // Go to Login if not
+    }
+  };
+
   return (
     <div className="bg-gray-900 text-white min-h-screen">
       <div className="container mx-auto px-6 py-16 text-center">
@@ -20,12 +32,14 @@ const LandingPage: React.FC = () => {
         <p className="text-lg md:text-xl mt-6 text-gray-400 max-w-2xl mx-auto">
           Master secure development by learning real-world vulnerabilities
         </p>
-        <Link
-          to="/login"
+        
+        {/* Logic Update: Changed to button with onClick handler, Style kept identical */}
+        <button
+          onClick={handleStart}
           className="inline-block mt-10 bg-cyan-500 text-white font-bold text-lg py-3 px-8 rounded-full shadow-lg shadow-cyan-500/50 hover:bg-cyan-600 transition-all duration-300 ease-in-out transform hover:scale-105"
         >
           Get Started
-        </Link>
+        </button>
 
         {/* How It Works Section */}
         <div className="mt-24">
