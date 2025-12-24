@@ -44,7 +44,7 @@ services:
       - main_db
       - sandbox_base # Wait for base image to be ready
     # Command to run FastAPI server
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: ["sh", "-c", "python seed_db.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
 
   # ====================================================
   # 3. FRONTEND (React + Vite)
