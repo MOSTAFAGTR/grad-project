@@ -1,7 +1,6 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Boolean, DateTime, Float
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, Boolean, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime
-# CORRECT IMPORT: Single dot (.) because database.py is in app/db/
 from .db.database import Base
 
 # --- USER MODEL ---
@@ -12,12 +11,16 @@ class User(Base):
     hashed_password = Column(String(255))
     role = Column(String(50), default='user')
     
-    # Relationships
+    # Gatekeeping field:
+    # Students/Admins = True
+    # New Instructors = False (Pending)
+    is_approved = Column(Boolean, default=True) 
+
     answers = relationship("UserAnswer", back_populates="user")
     progress = relationship("UserProgress", back_populates="user")
 
 # --- PROGRESS MODEL ---
-class UserProgress(Base):
+class UserProgress(Base):  # <--- FIXED: Inherits from Base now
     __tablename__ = "user_progress"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
@@ -79,8 +82,6 @@ class QuizAssignment(Base):
     title = Column(String(255))
     instructor_id = Column(Integer, ForeignKey("users.id"))
     
-    # We will store lists as comma-separated strings for simplicity in this project
-    # e.g., "1,2,3"
     assigned_student_ids = Column(Text) 
     question_ids = Column(Text)
     

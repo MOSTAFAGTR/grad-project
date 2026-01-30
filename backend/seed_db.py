@@ -3,12 +3,15 @@ from app import models
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
 from sqlalchemy import text
+from passlib.context import CryptContext
 import logging
 import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def wait_for_db(max_retries=30, delay=2):
     logger.info("Waiting for database connection...")
@@ -17,7 +20,6 @@ def wait_for_db(max_retries=30, delay=2):
             # Try to create a session and run a simple query
             db = SessionLocal()
             db.execute(text("SELECT 1"))
-
             db.close()
             logger.info("Database is ready!")
             return
@@ -30,2843 +32,359 @@ def wait_for_db(max_retries=30, delay=2):
     
     raise Exception("Could not connect to the database after multiple retries.")
 
+def seed_users(db: Session):
+    """ Creates default Super Admin and Instructor users if they don't exist """
+    
+    # 1. Create Admin
+    admin_email = "admin@scale.edu"
+    if not db.query(models.User).filter(models.User.email == admin_email).first():
+        admin_user = models.User(
+            email=admin_email,
+            hashed_password=pwd_context.hash("AdminPass123!"),
+            role="admin",
+            is_approved=True 
+        )
+        db.add(admin_user)
+        logger.info(f"Created Super Admin: {admin_email}")
+
+    # 2. Create Instructor
+    inst_email = "instructor@scale.edu"
+    if not db.query(models.User).filter(models.User.email == inst_email).first():
+        inst_user = models.User(
+            email=inst_email,
+            hashed_password=pwd_context.hash("TeachPass123!"),
+            role="instructor",
+            is_approved=True
+        )
+        db.add(inst_user)
+        logger.info(f"Created Default Instructor: {inst_email}")
+    
+    db.commit()
+
+def generate_questions():
+    """ Generates 200 questions across top 20 hack methods """
+    
+    # Categories: 
+    # 1. SQLi, 2. XSS, 3. Phishing, 4. MitM, 5. DoS/DDoS, 
+    # 6. Credential Stuffing, 7. CSRF, 8. SSRF, 9. Ransomware, 10. Buffer Overflow, 
+    # 11. XXE, 12. Directory Traversal, 13. Insecure Deserialization, 14. Session Hijacking, 
+    # 15. Command Injection, 16. Zero-Day, 17. DNS Spoofing, 18. Trojans, 19. Keylogging, 20. Priv Escalation
+    
+    questions = []
+
+    # --- 1. SQL Injection (SQLi) ---
+    questions.extend([
+        {"text": "What does SQL stand for?", "type": "multiple_choice", "topic": "SQL Injection", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Structured Query Language.", "options": [{"text": "Structured Query Language", "is_correct": True}, {"text": "Simple Query Logic", "is_correct": False}, {"text": "Standard Query Loop", "is_correct": False}, {"text": "System Question Language", "is_correct": False}]},
+        {"text": "Which character is typically used to break an SQL query string?", "type": "multiple_choice", "topic": "SQL Injection", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "The single quote is often used to delimit strings in SQL.", "options": [{"text": "' (Single Quote)", "is_correct": True}, {"text": "@ (At symbol)", "is_correct": False}, {"text": "^ (Caret)", "is_correct": False}, {"text": "~ (Tilde)", "is_correct": False}]},
+        {"text": "What is the primary defense against SQL Injection?", "type": "multiple_choice", "topic": "SQL Injection", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Prepared statements separate code from data.", "options": [{"text": "Prepared Statements / Parameterized Queries", "is_correct": True}, {"text": "Input Hashing", "is_correct": False}, {"text": "Firewalls", "is_correct": False}, {"text": "HTTPS", "is_correct": False}]},
+        {"text": "Which condition is commonly used in SQLi to dump data (e.g., OR 1=...)?", "type": "multiple_choice", "topic": "SQL Injection", "difficulty": "Easy", "skill_focus": "Exploitation", "explanation": "1=1 is a tautology (always true).", "options": [{"text": "1=1", "is_correct": True}, {"text": "1=0", "is_correct": False}, {"text": "0=1", "is_correct": False}, {"text": "Null=Null", "is_correct": False}]},
+        {"text": "What type of SQLi relies on true/false server responses rather than returning data directly?", "type": "multiple_choice", "topic": "SQL Injection", "difficulty": "Hard", "skill_focus": "Knowledge", "explanation": "Blind SQLi infers data based on application behavior.", "options": [{"text": "Blind SQL Injection", "is_correct": True}, {"text": "Union-Based SQLi", "is_correct": False}, {"text": "Error-Based SQLi", "is_correct": False}, {"text": "Direct SQLi", "is_correct": False}]},
+        {"text": "Which SQL statement is used to combine results from two queries, often used in attacks?", "type": "multiple_choice", "topic": "SQL Injection", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "UNION allows an attacker to append results to the original query.", "options": [{"text": "UNION", "is_correct": True}, {"text": "JOIN", "is_correct": False}, {"text": "MERGE", "is_correct": False}, {"text": "LINK", "is_correct": False}]},
+        {"text": "If an attack successfully drops a table, what principle was violated?", "type": "multiple_choice", "topic": "SQL Injection", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "The database user had excessive privileges (Principle of Least Privilege).", "options": [{"text": "Least Privilege", "is_correct": True}, {"text": "Defense in Depth", "is_correct": False}, {"text": "Security by Obscurity", "is_correct": False}, {"text": "Open Design", "is_correct": False}]},
+        {"text": "What tool is commonly used to automate SQL Injection detection?", "type": "multiple_choice", "topic": "SQL Injection", "difficulty": "Medium", "skill_focus": "Tools", "explanation": "SQLMap is the standard open-source tool for this.", "options": [{"text": "SQLMap", "is_correct": True}, {"text": "Nmap", "is_correct": False}, {"text": "Wireshark", "is_correct": False}, {"text": "John the Ripper", "is_correct": False}]},
+        {"text": "Which database is associated with the 'information_schema' table?", "type": "multiple_choice", "topic": "SQL Injection", "difficulty": "Hard", "skill_focus": "Knowledge", "explanation": "MySQL, PostgreSQL, and SQL Server use information_schema to store metadata.", "options": [{"text": "MySQL", "is_correct": True}, {"text": "MongoDB", "is_correct": False}, {"text": "Redis", "is_correct": False}, {"text": "Cassandra", "is_correct": False}]},
+        {"text": "Does using a stored procedure guarantee safety from SQLi?", "type": "multiple_choice", "topic": "SQL Injection", "difficulty": "Hard", "skill_focus": "Defense", "explanation": "Not if the stored procedure itself constructs dynamic SQL via string concatenation.", "options": [{"text": "No, if dynamic SQL is used inside it", "is_correct": True}, {"text": "Yes, always", "is_correct": False}, {"text": "Only in Oracle", "is_correct": False}, {"text": "Only in SQL Server", "is_correct": False}]},
+    ])
+
+    # --- 2. Cross-Site Scripting (XSS) ---
+    questions.extend([
+        {"text": "What does XSS stand for?", "type": "multiple_choice", "topic": "XSS", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Cross-Site Scripting.", "options": [{"text": "Cross-Site Scripting", "is_correct": True}, {"text": "Extra Secure Socket", "is_correct": False}, {"text": "Extreme Server Script", "is_correct": False}, {"text": "XML Site Sheet", "is_correct": False}]},
+        {"text": "Which XSS type involves the malicious script being saved on the server's database?", "type": "multiple_choice", "topic": "XSS", "difficulty": "Medium", "skill_focus": "Knowledge", "explanation": "Stored (Persistent) XSS saves the payload to the database.", "options": [{"text": "Stored XSS", "is_correct": True}, {"text": "Reflected XSS", "is_correct": False}, {"text": "DOM XSS", "is_correct": False}, {"text": "Server XSS", "is_correct": False}]},
+        {"text": "What is the primary scripting language used in XSS attacks?", "type": "multiple_choice", "topic": "XSS", "difficulty": "Easy", "skill_focus": "Exploitation", "explanation": "JavaScript is the language of the web browser.", "options": [{"text": "JavaScript", "is_correct": True}, {"text": "Python", "is_correct": False}, {"text": "C++", "is_correct": False}, {"text": "Java", "is_correct": False}]},
+        {"text": "What HTML tag is most commonly used to inject XSS?", "type": "multiple_choice", "topic": "XSS", "difficulty": "Easy", "skill_focus": "Exploitation", "explanation": "The script tag is the standard way to execute JS.", "options": [{"text": "<script>", "is_correct": True}, {"text": "<body>", "is_correct": False}, {"text": "<head>", "is_correct": False}, {"text": "<table>", "is_correct": False}]},
+        {"text": "What is the best defense against XSS when rendering user input?", "type": "multiple_choice", "topic": "XSS", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Context-aware output encoding prevents the browser from interpreting data as code.", "options": [{"text": "Output Encoding/Escaping", "is_correct": True}, {"text": "Input Validation only", "is_correct": False}, {"text": "Using HTTP only", "is_correct": False}, {"text": "Disabling Cookies", "is_correct": False}]},
+        {"text": "What HTTP header helps mitigate XSS risks?", "type": "multiple_choice", "topic": "XSS", "difficulty": "Hard", "skill_focus": "Defense", "explanation": "Content Security Policy (CSP) restricts sources of executable scripts.", "options": [{"text": "Content-Security-Policy (CSP)", "is_correct": True}, {"text": "X-Frame-Options", "is_correct": False}, {"text": "Strict-Transport-Security", "is_correct": False}, {"text": "Access-Control-Allow-Origin", "is_correct": False}]},
+        {"text": "Which flag prevents JavaScript from accessing a cookie?", "type": "multiple_choice", "topic": "XSS", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "HttpOnly cookies cannot be read by `document.cookie`.", "options": [{"text": "HttpOnly", "is_correct": True}, {"text": "Secure", "is_correct": False}, {"text": "SameSite", "is_correct": False}, {"text": "Domain", "is_correct": False}]},
+        {"text": "What is DOM-based XSS?", "type": "multiple_choice", "topic": "XSS", "difficulty": "Hard", "skill_focus": "Knowledge", "explanation": "The vulnerability exists in client-side code rather than server-side code.", "options": [{"text": "Attack executed entirely in the browser DOM", "is_correct": True}, {"text": "Attack on the Database Object Model", "is_correct": False}, {"text": "Attack via Email", "is_correct": False}, {"text": "Attack on server logs", "is_correct": False}]},
+        {"text": "Which function in JavaScript is dangerous and often leads to XSS/Code Injection?", "type": "multiple_choice", "topic": "XSS", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "eval() executes a string as code.", "options": [{"text": "eval()", "is_correct": True}, {"text": "alert()", "is_correct": False}, {"text": "console.log()", "is_correct": False}, {"text": "parseInt()", "is_correct": False}]},
+        {"text": "If a user clicks a link in an email and is exploited via XSS, what type is it likely?", "type": "multiple_choice", "topic": "XSS", "difficulty": "Medium", "skill_focus": "Knowledge", "explanation": "Reflected XSS bounces the payload off the server immediately via the URL.", "options": [{"text": "Reflected XSS", "is_correct": True}, {"text": "Stored XSS", "is_correct": False}, {"text": "Local XSS", "is_correct": False}, {"text": "Passive XSS", "is_correct": False}]},
+    ])
+
+    # --- 3. Phishing ---
+    questions.extend([
+        {"text": "What is Phishing?", "type": "multiple_choice", "topic": "Phishing", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Social engineering using fraudulent messages.", "options": [{"text": "Deceptive emails to steal data", "is_correct": True}, {"text": "Catching fish", "is_correct": False}, {"text": "Scanning ports", "is_correct": False}, {"text": "Decrypting passwords", "is_correct": False}]},
+        {"text": "What is 'Spear Phishing'?", "type": "multiple_choice", "topic": "Phishing", "difficulty": "Medium", "skill_focus": "Knowledge", "explanation": "Spear phishing targets specific individuals or organizations.", "options": [{"text": "Targeted attack on a specific person", "is_correct": True}, {"text": "Random spam emails", "is_correct": False}, {"text": "Voice phishing", "is_correct": False}, {"text": "SMS phishing", "is_correct": False}]},
+        {"text": "What is 'Whaling' in the context of phishing?", "type": "multiple_choice", "topic": "Phishing", "difficulty": "Medium", "skill_focus": "Knowledge", "explanation": "Whaling targets high-profile executives (CEOs, CFOs).", "options": [{"text": "Targeting high-level executives", "is_correct": True}, {"text": "Targeting large databases", "is_correct": False}, {"text": "Targeting system admins only", "is_correct": False}, {"text": "Phishing via underwater cables", "is_correct": False}]},
+        {"text": "What is 'Smishing'?", "type": "multiple_choice", "topic": "Phishing", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Phishing via SMS text messages.", "options": [{"text": "Phishing via SMS/Text", "is_correct": True}, {"text": "Small Phishing", "is_correct": False}, {"text": "Smart Phishing", "is_correct": False}, {"text": "Social Media Phishing", "is_correct": False}]},
+        {"text": "What is a Homograph attack in phishing?", "type": "multiple_choice", "topic": "Phishing", "difficulty": "Hard", "skill_focus": "Exploitation", "explanation": "Using look-alike characters (e.g., Cyrillic 'a' vs Latin 'a') to spoof URLs.", "options": [{"text": "Using look-alike characters in URLs", "is_correct": True}, {"text": "Sending home graphics", "is_correct": False}, {"text": "Attacking home routers", "is_correct": False}, {"text": "Using same-colored fonts", "is_correct": False}]},
+        {"text": "What common psychological trigger does phishing rely on?", "type": "multiple_choice", "topic": "Phishing", "difficulty": "Easy", "skill_focus": "Psychology", "explanation": "Urgency (e.g., 'Account locked!') forces quick, unthinking errors.", "options": [{"text": "Urgency/Fear", "is_correct": True}, {"text": "Logic", "is_correct": False}, {"text": "Patience", "is_correct": False}, {"text": "Generosity", "is_correct": False}]},
+        {"text": "What does 'Vishing' stand for?", "type": "multiple_choice", "topic": "Phishing", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Voice Phishing (phone calls).", "options": [{"text": "Voice Phishing", "is_correct": True}, {"text": "Video Phishing", "is_correct": False}, {"text": "Virtual Phishing", "is_correct": False}, {"text": "Visual Phishing", "is_correct": False}]},
+        {"text": "How can you verify a link destination before clicking?", "type": "multiple_choice", "topic": "Phishing", "difficulty": "Easy", "skill_focus": "Defense", "explanation": "Hovering over the link shows the actual URL.", "options": [{"text": "Hover over the link", "is_correct": True}, {"text": "Click it quickly", "is_correct": False}, {"text": "Reply to the email", "is_correct": False}, {"text": "Copy paste into Notepad", "is_correct": False}]},
+        {"text": "What mechanism authenticates email senders to prevent spoofing?", "type": "multiple_choice", "topic": "Phishing", "difficulty": "Hard", "skill_focus": "Defense", "explanation": "SPF, DKIM, and DMARC are email auth protocols.", "options": [{"text": "SPF/DKIM/DMARC", "is_correct": True}, {"text": "SSL/TLS", "is_correct": False}, {"text": "SSH", "is_correct": False}, {"text": "HTTP", "is_correct": False}]},
+        {"text": "A phishing email asking you to check an invoice usually contains what?", "type": "multiple_choice", "topic": "Phishing", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Malicious attachments (PDF/Office docs with macros) are common.", "options": [{"text": "Malicious Attachment", "is_correct": True}, {"text": "A secure token", "is_correct": False}, {"text": "A valid receipt", "is_correct": False}, {"text": "Encrypted text", "is_correct": False}]},
+    ])
+
+    # --- 4. Man-in-the-Middle (MitM) ---
+    questions.extend([
+        {"text": "What is a Man-in-the-Middle attack?", "type": "multiple_choice", "topic": "MitM", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Attacker intercepts communication between two parties.", "options": [{"text": "Intercepting data between two parties", "is_correct": True}, {"text": "Attacking the middle server", "is_correct": False}, {"text": "Sitting in the middle of a room", "is_correct": False}, {"text": "Stopping data flow", "is_correct": False}]},
+        {"text": "What protocol effectively prevents MitM by encrypting traffic?", "type": "multiple_choice", "topic": "MitM", "difficulty": "Easy", "skill_focus": "Defense", "explanation": "HTTPS (via TLS/SSL) encrypts the channel.", "options": [{"text": "HTTPS (TLS/SSL)", "is_correct": True}, {"text": "HTTP", "is_correct": False}, {"text": "FTP", "is_correct": False}, {"text": "Telnet", "is_correct": False}]},
+        {"text": "What is ARP Spoofing?", "type": "multiple_choice", "topic": "MitM", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Linking the attacker's MAC address to a legitimate IP on a LAN.", "options": [{"text": "Faking MAC addresses on a LAN", "is_correct": True}, {"text": "Spoofing DNS records", "is_correct": False}, {"text": "Faking IP addresses on WAN", "is_correct": False}, {"text": "Spoofing email headers", "is_correct": False}]},
+        {"text": "What is 'SSL Stripping'?", "type": "multiple_choice", "topic": "MitM", "difficulty": "Hard", "skill_focus": "Exploitation", "explanation": "Downgrading a connection from HTTPS to HTTP.", "options": [{"text": "Downgrading HTTPS to HTTP", "is_correct": True}, {"text": "Removing SSL certificates", "is_correct": False}, {"text": "Stealing SSL keys physically", "is_correct": False}, {"text": "Breaking SSL encryption math", "is_correct": False}]},
+        {"text": "What tool is famous for Wi-Fi MitM attacks (Pineapple)?", "type": "multiple_choice", "topic": "MitM", "difficulty": "Medium", "skill_focus": "Tools", "explanation": "The WiFi Pineapple is a hardware tool for rogue APs.", "options": [{"text": "WiFi Pineapple", "is_correct": True}, {"text": "WiFi Banana", "is_correct": False}, {"text": "WiFi Apple", "is_correct": False}, {"text": "WiFi Orange", "is_correct": False}]},
+        {"text": "What is a Rogue Access Point?", "type": "multiple_choice", "topic": "MitM", "difficulty": "Easy", "skill_focus": "Exploitation", "explanation": "An unauthorized Wi-Fi point set up to intercept traffic.", "options": [{"text": "Unauthorized Wi-Fi access point", "is_correct": True}, {"text": "A broken router", "is_correct": False}, {"text": "A hidden server", "is_correct": False}, {"text": "A restricted website", "is_correct": False}]},
+        {"text": "What is Session Hijacking often a result of?", "type": "multiple_choice", "topic": "MitM", "difficulty": "Medium", "skill_focus": "Knowledge", "explanation": "If a session cookie is sent over unencrypted HTTP, MitM can steal it.", "options": [{"text": "Unencrypted Session Cookies", "is_correct": True}, {"text": "Strong passwords", "is_correct": False}, {"text": "Two-factor authentication", "is_correct": False}, {"text": "Encrypted hard drives", "is_correct": False}]},
+        {"text": "What is DNS Spoofing?", "type": "multiple_choice", "topic": "MitM", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Redirecting a domain name to a malicious IP address.", "options": [{"text": "Redirecting domain names to wrong IPs", "is_correct": True}, {"text": "Deleting domain names", "is_correct": False}, {"text": "Buying domain names", "is_correct": False}, {"text": "Encrypting DNS queries", "is_correct": False}]},
+        {"text": "Which network layer does ARP Spoofing operate on?", "type": "multiple_choice", "topic": "MitM", "difficulty": "Hard", "skill_focus": "Knowledge", "explanation": "Layer 2 (Data Link Layer) uses MAC addresses.", "options": [{"text": "Layer 2 (Data Link)", "is_correct": True}, {"text": "Layer 3 (Network)", "is_correct": False}, {"text": "Layer 7 (Application)", "is_correct": False}, {"text": "Layer 1 (Physical)", "is_correct": False}]},
+        {"text": "What prevents ARP Spoofing on enterprise switches?", "type": "multiple_choice", "topic": "MitM", "difficulty": "Hard", "skill_focus": "Defense", "explanation": "Dynamic ARP Inspection (DAI) validates ARP packets.", "options": [{"text": "Dynamic ARP Inspection", "is_correct": True}, {"text": "Port Security", "is_correct": False}, {"text": "Firewall", "is_correct": False}, {"text": "VLANs", "is_correct": False}]},
+    ])
+
+    # --- 5. DoS / DDoS ---
+    questions.extend([
+        {"text": "What is the difference between DoS and DDoS?", "type": "multiple_choice", "topic": "DoS/DDoS", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "DDoS uses multiple distributed sources (botnet).", "options": [{"text": "DDoS uses multiple attack sources", "is_correct": True}, {"text": "DoS is faster", "is_correct": False}, {"text": "DDoS is only for banks", "is_correct": False}, {"text": "They are the same", "is_correct": False}]},
+        {"text": "What does a SYN Flood attack exploit?", "type": "multiple_choice", "topic": "DoS/DDoS", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "It exploits the TCP 3-way handshake by leaving connections half-open.", "options": [{"text": "TCP 3-way Handshake", "is_correct": True}, {"text": "UDP protocols", "is_correct": False}, {"text": "HTTP headers", "is_correct": False}, {"text": "DNS queries", "is_correct": False}]},
+        {"text": "What is a Botnet?", "type": "multiple_choice", "topic": "DoS/DDoS", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "A network of compromised computers controlled by an attacker.", "options": [{"text": "Network of compromised computers", "is_correct": True}, {"text": "A robot network for cleaning", "is_correct": False}, {"text": "A fast internet connection", "is_correct": False}, {"text": "A firewall software", "is_correct": False}]},
+        {"text": "What is a 'Slowloris' attack?", "type": "multiple_choice", "topic": "DoS/DDoS", "difficulty": "Hard", "skill_focus": "Exploitation", "explanation": "It keeps many connections open by sending HTTP headers very slowly.", "options": [{"text": "Low-bandwidth attack keeping connections open", "is_correct": True}, {"text": "High-bandwidth volume attack", "is_correct": False}, {"text": "Malware attack", "is_correct": False}, {"text": "Phishing attack", "is_correct": False}]},
+        {"text": "What is an Amplification Attack?", "type": "multiple_choice", "topic": "DoS/DDoS", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Sending a small request that generates a large response (e.g., NTP/DNS).", "options": [{"text": "Small request causes large response", "is_correct": True}, {"text": "Making the virus louder", "is_correct": False}, {"text": "Increasing wifi signal", "is_correct": False}, {"text": "Stealing more data", "is_correct": False}]},
+        {"text": "What is the 'Ping of Death'?", "type": "multiple_choice", "topic": "DoS/DDoS", "difficulty": "Medium", "skill_focus": "History", "explanation": "Sending malformed or oversized ping packets to crash a system.", "options": [{"text": "Malformed/Oversized ICMP packet", "is_correct": True}, {"text": "Too many pings", "is_correct": False}, {"text": "Pinging a dead server", "is_correct": False}, {"text": "A sound effect", "is_correct": False}]},
+        {"text": "What service helps mitigate DDoS attacks?", "type": "multiple_choice", "topic": "DoS/DDoS", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Cloudflare (and similar CDNs) absorb traffic.", "options": [{"text": "CDN / Traffic Scrubbing (e.g., Cloudflare)", "is_correct": True}, {"text": "Antivirus", "is_correct": False}, {"text": "Password Manager", "is_correct": False}, {"text": "Disk Encryption", "is_correct": False}]},
+        {"text": "What is a LOIC (Low Orbit Ion Cannon)?", "type": "multiple_choice", "topic": "DoS/DDoS", "difficulty": "Medium", "skill_focus": "Tools", "explanation": "A popular open-source network stress testing / DDoS tool.", "options": [{"text": "DDoS Tool", "is_correct": True}, {"text": "Space weapon", "is_correct": False}, {"text": "Satellite internet", "is_correct": False}, {"text": "Firewall brand", "is_correct": False}]},
+        {"text": "What is the goal of a Ransom DDoS (RDoS)?", "type": "multiple_choice", "topic": "DoS/DDoS", "difficulty": "Easy", "skill_focus": "Motivation", "explanation": "Extortion: threatening DDoS unless money is paid.", "options": [{"text": "Extortion / Money", "is_correct": True}, {"text": "Stealing passwords", "is_correct": False}, {"text": "Spying", "is_correct": False}, {"text": "Testing speed", "is_correct": False}]},
+        {"text": "Does a DDoS attack usually involve stealing data?", "type": "multiple_choice", "topic": "DoS/DDoS", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "No, it targets Availability, not Confidentiality.", "options": [{"text": "No, it targets Availability", "is_correct": True}, {"text": "Yes, always", "is_correct": False}, {"text": "Yes, primarily", "is_correct": False}, {"text": "It depends on the weather", "is_correct": False}]},
+    ])
+
+    # --- 6. Brute Force / Credential Stuffing ---
+    questions.extend([
+        {"text": "What is Credential Stuffing?", "type": "multiple_choice", "topic": "Credential Stuffing", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Using leaked username/password pairs on other sites.", "options": [{"text": "Using leaked credentials on other sites", "is_correct": True}, {"text": "Guessing random passwords", "is_correct": False}, {"text": "Stealing cookies", "is_correct": False}, {"text": "Creating fake accounts", "is_correct": False}]},
+        {"text": "What is a Dictionary Attack?", "type": "multiple_choice", "topic": "Brute Force", "difficulty": "Easy", "skill_focus": "Exploitation", "explanation": "Using a list of common words/passwords.", "options": [{"text": "Using a wordlist of common passwords", "is_correct": True}, {"text": "Trying every combination (A-Z, 0-9)", "is_correct": False}, {"text": "Looking up words in a book", "is_correct": False}, {"text": "Attacking the dictionary file", "is_correct": False}]},
+        {"text": "What is a Hybrid Attack?", "type": "multiple_choice", "topic": "Brute Force", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Combining dictionary words with number/symbol variations.", "options": [{"text": "Dictionary words + variations", "is_correct": True}, {"text": "Physical and Digital attack", "is_correct": False}, {"text": "Windows and Linux attack", "is_correct": False}, {"text": "Fast and Slow attack", "is_correct": False}]},
+        {"text": "What effectively stops simple Brute Force attacks?", "type": "multiple_choice", "topic": "Brute Force", "difficulty": "Easy", "skill_focus": "Defense", "explanation": "Account lockout after N failed attempts.", "options": [{"text": "Account Lockout Policies", "is_correct": True}, {"text": "Shorter passwords", "is_correct": False}, {"text": "Changing usernames", "is_correct": False}, {"text": "Hiding the login page", "is_correct": False}]},
+        {"text": "What is the most effective defense against Credential Stuffing?", "type": "multiple_choice", "topic": "Credential Stuffing", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "MFA prevents login even if the password is known.", "options": [{"text": "Multi-Factor Authentication (MFA)", "is_correct": True}, {"text": "Complex passwords", "is_correct": False}, {"text": "Antivirus", "is_correct": False}, {"text": "Firewall", "is_correct": False}]},
+        {"text": "What file is commonly used as a wordlist (rockyou)?", "type": "multiple_choice", "topic": "Brute Force", "difficulty": "Medium", "skill_focus": "Tools", "explanation": "rockyou.txt is a famous leaked password list.", "options": [{"text": "rockyou.txt", "is_correct": True}, {"text": "passwords.doc", "is_correct": False}, {"text": "hack.exe", "is_correct": False}, {"text": "list.pdf", "is_correct": False}]},
+        {"text": "What is 'Password Spraying'?", "type": "multiple_choice", "topic": "Brute Force", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Trying one common password against MANY accounts to avoid lockout.", "options": [{"text": "One password against many accounts", "is_correct": True}, {"text": "Many passwords against one account", "is_correct": False}, {"text": "Emailing passwords", "is_correct": False}, {"text": "Resetting passwords", "is_correct": False}]},
+        {"text": "What makes a Rainbow Table attack faster than Brute Force?", "type": "multiple_choice", "topic": "Brute Force", "difficulty": "Hard", "skill_focus": "Theory", "explanation": "It uses precomputed hash chains to reverse hashes.", "options": [{"text": "Precomputed hash chains", "is_correct": True}, {"text": "Better GPU", "is_correct": False}, {"text": "Faster internet", "is_correct": False}, {"text": "More computers", "is_correct": False}]},
+        {"text": "What mitigates Rainbow Table attacks?", "type": "multiple_choice", "topic": "Brute Force", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Salting adds random data to the hash, invalidating precomputed tables.", "options": [{"text": "Salting passwords", "is_correct": True}, {"text": "Hashing twice", "is_correct": False}, {"text": "Using MD5", "is_correct": False}, {"text": "Keeping database offline", "is_correct": False}]},
+        {"text": "Why is 'admin' / 'admin' a bad credential pair?", "type": "multiple_choice", "topic": "Brute Force", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "It is the default for many devices and the first thing guessed.", "options": [{"text": "Default / Easily guessed", "is_correct": True}, {"text": "Hard to remember", "is_correct": False}, {"text": "Too long", "is_correct": False}, {"text": "Cannot be typed", "is_correct": False}]},
+    ])
+
+    # --- 7. CSRF ---
+    questions.extend([
+        {"text": "What does CSRF stand for?", "type": "multiple_choice", "topic": "CSRF", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Cross-Site Request Forgery.", "options": [{"text": "Cross-Site Request Forgery", "is_correct": True}, {"text": "Common Server Request Fail", "is_correct": False}, {"text": "Client Side Router Fix", "is_correct": False}, {"text": "Cross System Root File", "is_correct": False}]},
+        {"text": "What does a CSRF attack achieve?", "type": "multiple_choice", "topic": "CSRF", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Forces an authenticated user to perform an unwanted action.", "options": [{"text": "Forces user to perform unwanted action", "is_correct": True}, {"text": "Steals user password", "is_correct": False}, {"text": "Crashes the server", "is_correct": False}, {"text": "Intercepts Wi-Fi", "is_correct": False}]},
+        {"text": "What is the standard defense against CSRF?", "type": "multiple_choice", "topic": "CSRF", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Anti-CSRF Tokens (Synchronizer Token Pattern).", "options": [{"text": "Anti-CSRF Tokens", "is_correct": True}, {"text": "Encryption", "is_correct": False}, {"text": "Complex Passwords", "is_correct": False}, {"text": "Hiding URLs", "is_correct": False}]},
+        {"text": "Which cookie attribute helps prevent CSRF?", "type": "multiple_choice", "topic": "CSRF", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "SameSite=Strict/Lax prevents sending cookies on cross-site requests.", "options": [{"text": "SameSite", "is_correct": True}, {"text": "HttpOnly", "is_correct": False}, {"text": "Secure", "is_correct": False}, {"text": "Expires", "is_correct": False}]},
+        {"text": "Does CSRF work if the user is NOT logged in?", "type": "multiple_choice", "topic": "CSRF", "difficulty": "Easy", "skill_focus": "Theory", "explanation": "No, it relies on the user's active session.", "options": [{"text": "No", "is_correct": True}, {"text": "Yes", "is_correct": False}, {"text": "Only on mobile", "is_correct": False}, {"text": "Only on Wi-Fi", "is_correct": False}]},
+        {"text": "Is reading data usually possible with standard CSRF?", "type": "multiple_choice", "topic": "CSRF", "difficulty": "Hard", "skill_focus": "Theory", "explanation": "No, CSRF is 'blind'. It sends state-changing requests but attacker can't see response (usually).", "options": [{"text": "No, it's a state-changing attack", "is_correct": True}, {"text": "Yes, always", "is_correct": False}, {"text": "Only JSON data", "is_correct": False}, {"text": "Only Images", "is_correct": False}]},
+        {"text": "Which HTTP method is most dangerous for CSRF if misconfigured?", "type": "multiple_choice", "topic": "CSRF", "difficulty": "Medium", "skill_focus": "Theory", "explanation": "GET requests should not change state; if they do, CSRF is trivial (via image tags).", "options": [{"text": "GET (if used for state changes)", "is_correct": True}, {"text": "OPTIONS", "is_correct": False}, {"text": "HEAD", "is_correct": False}, {"text": "TRACE", "is_correct": False}]},
+        {"text": "What is 'Login CSRF'?", "type": "multiple_choice", "topic": "CSRF", "difficulty": "Hard", "skill_focus": "Exploitation", "explanation": "Logging a victim into the attacker's account to track their activity.", "options": [{"text": "Logging victim into attacker's account", "is_correct": True}, {"text": "Stealing login credentials", "is_correct": False}, {"text": "Deleting login page", "is_correct": False}, {"text": "Brute forcing login", "is_correct": False}]},
+        {"text": "Why doesn't the Same Origin Policy (SOP) stop CSRF?", "type": "multiple_choice", "topic": "CSRF", "difficulty": "Hard", "skill_focus": "Theory", "explanation": "SOP prevents reading responses, not sending requests.", "options": [{"text": "SOP prevents reading, not sending", "is_correct": True}, {"text": "SOP is deprecated", "is_correct": False}, {"text": "CSRF bypasses SOP automatically", "is_correct": False}, {"text": "SOP only works for images", "is_correct": False}]},
+        {"text": "Can CAPTCHA prevent CSRF?", "type": "multiple_choice", "topic": "CSRF", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Yes, because the attacker cannot solve the CAPTCHA programmatically.", "options": [{"text": "Yes", "is_correct": True}, {"text": "No", "is_correct": False}, {"text": "Only google captcha", "is_correct": False}, {"text": "Only on Tuesdays", "is_correct": False}]},
+    ])
+
+    # --- 8. SSRF ---
+    questions.extend([
+        {"text": "What does SSRF stand for?", "type": "multiple_choice", "topic": "SSRF", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Server-Side Request Forgery.", "options": [{"text": "Server-Side Request Forgery", "is_correct": True}, {"text": "Secure Socket Remote File", "is_correct": False}, {"text": "System Side Root Fix", "is_correct": False}, {"text": "Site Security Request Form", "is_correct": False}]},
+        {"text": "Who performs the request in an SSRF attack?", "type": "multiple_choice", "topic": "SSRF", "difficulty": "Easy", "skill_focus": "Theory", "explanation": "The vulnerable server makes the request.", "options": [{"text": "The Web Server", "is_correct": True}, {"text": "The User's Browser", "is_correct": False}, {"text": "The Hacker's Laptop directly", "is_correct": False}, {"text": "The ISP", "is_correct": False}]},
+        {"text": "What is a common target for SSRF in cloud environments?", "type": "multiple_choice", "topic": "SSRF", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Instance Metadata Services (e.g., 169.254.169.254) contain keys.", "options": [{"text": "Metadata Services (169.254.169.254)", "is_correct": True}, {"text": "YouTube", "is_correct": False}, {"text": "Facebook", "is_correct": False}, {"text": "Public DNS", "is_correct": False}]},
+        {"text": "Can SSRF be used to scan internal networks?", "type": "multiple_choice", "topic": "SSRF", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Yes, the server can reach internal IPs that the outsider cannot.", "options": [{"text": "Yes, port scanning internal IPs", "is_correct": True}, {"text": "No, firewalls stop it", "is_correct": False}, {"text": "Only external IPs", "is_correct": False}, {"text": "Only if using FTP", "is_correct": False}]},
+        {"text": "What URL scheme is often used in SSRF to read local files?", "type": "multiple_choice", "topic": "SSRF", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "file:///etc/passwd", "options": [{"text": "file://", "is_correct": True}, {"text": "http://", "is_correct": False}, {"text": "mailto:", "is_correct": False}, {"text": "tel:", "is_correct": False}]},
+        {"text": "What is Blind SSRF?", "type": "multiple_choice", "topic": "SSRF", "difficulty": "Hard", "skill_focus": "Theory", "explanation": "The attacker doesn't see the response, but can observe timing or side effects.", "options": [{"text": "No response returned to attacker", "is_correct": True}, {"text": "Attacker is blindfolded", "is_correct": False}, {"text": "Server is offline", "is_correct": False}, {"text": "Full data is returned", "is_correct": False}]},
+        {"text": "How do you mitigate SSRF?", "type": "multiple_choice", "topic": "SSRF", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Allowlisting domains and validating user input.", "options": [{"text": "Input Validation & Allowlisting", "is_correct": True}, {"text": "Disabling JS", "is_correct": False}, {"text": "Using HTTPS", "is_correct": False}, {"text": "Using Cookies", "is_correct": False}]},
+        {"text": "Which vulnerability allows an attacker to make the server attack other servers?", "type": "multiple_choice", "topic": "SSRF", "difficulty": "Easy", "skill_focus": "Theory", "explanation": "SSRF makes the server a proxy for attacks.", "options": [{"text": "SSRF", "is_correct": True}, {"text": "XSS", "is_correct": False}, {"text": "CSRF", "is_correct": False}, {"text": "SQLi", "is_correct": False}]},
+        {"text": "Can SSRF bypass local firewalls?", "type": "multiple_choice", "topic": "SSRF", "difficulty": "Medium", "skill_focus": "Theory", "explanation": "Yes, because the request originates from the trusted server inside the firewall.", "options": [{"text": "Yes, request is from trusted internal source", "is_correct": True}, {"text": "No, firewalls block everything", "is_correct": False}, {"text": "Only on Windows", "is_correct": False}, {"text": "Only on Linux", "is_correct": False}]},
+        {"text": "What is 'DNS Rebinding' in the context of SSRF?", "type": "multiple_choice", "topic": "SSRF", "difficulty": "Hard", "skill_focus": "Exploitation", "explanation": "Changing DNS resolution from a safe IP to a malicious/internal IP during the check-time/use-time gap.", "options": [{"text": "Bypassing IP checks via DNS changes", "is_correct": True}, {"text": "Rebooting DNS server", "is_correct": False}, {"text": "Binding two DNS servers", "is_correct": False}, {"text": "Encrypting DNS", "is_correct": False}]},
+    ])
+
+    # --- 9. Ransomware ---
+    questions.extend([
+        {"text": "What does Ransomware do?", "type": "multiple_choice", "topic": "Ransomware", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Encrypts files and demands payment.", "options": [{"text": "Encrypts files and demands payment", "is_correct": True}, {"text": "Deletes files silently", "is_correct": False}, {"text": "Steals internet bandwidth", "is_correct": False}, {"text": "Mines bitcoin only", "is_correct": False}]},
+        {"text": "What is the best recovery method for Ransomware?", "type": "multiple_choice", "topic": "Ransomware", "difficulty": "Easy", "skill_focus": "Defense", "explanation": "Offline backups allow restoration without paying.", "options": [{"text": "Offline/Offline Backups", "is_correct": True}, {"text": "Paying the ransom", "is_correct": False}, {"text": "Restarting the PC", "is_correct": False}, {"text": "Calling the police", "is_correct": False}]},
+        {"text": "What is 'Double Extortion' ransomware?", "type": "multiple_choice", "topic": "Ransomware", "difficulty": "Medium", "skill_focus": "Knowledge", "explanation": "Encrypting files AND threatening to leak stolen data.", "options": [{"text": "Encryption + Data Leak Threat", "is_correct": True}, {"text": "Asking for double money", "is_correct": False}, {"text": "Infecting two computers", "is_correct": False}, {"text": "Encrypting twice", "is_correct": False}]},
+        {"text": "What cryptocurrency is most commonly requested in ransomware?", "type": "multiple_choice", "topic": "Ransomware", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Bitcoin (or Monero) for anonymity.", "options": [{"text": "Bitcoin/Monero", "is_correct": True}, {"text": "Credit Card", "is_correct": False}, {"text": "Paypal", "is_correct": False}, {"text": "Bank Transfer", "is_correct": False}]},
+        {"text": "WannaCry ransomware exploited which protocol?", "type": "multiple_choice", "topic": "Ransomware", "difficulty": "Medium", "skill_focus": "History", "explanation": "SMB (Server Message Block) via EternalBlue exploit.", "options": [{"text": "SMB (Server Message Block)", "is_correct": True}, {"text": "HTTP", "is_correct": False}, {"text": "FTP", "is_correct": False}, {"text": "SSH", "is_correct": False}]},
+        {"text": "How is ransomware often delivered?", "type": "multiple_choice", "topic": "Ransomware", "difficulty": "Easy", "skill_focus": "Exploitation", "explanation": "Phishing emails are the top vector.", "options": [{"text": "Phishing Emails", "is_correct": True}, {"text": "Magic", "is_correct": False}, {"text": "Hardware failure", "is_correct": False}, {"text": "Power surge", "is_correct": False}]},
+        {"text": "What is RaaS?", "type": "multiple_choice", "topic": "Ransomware", "difficulty": "Medium", "skill_focus": "Knowledge", "explanation": "Ransomware as a Service (affiliate model).", "options": [{"text": "Ransomware as a Service", "is_correct": True}, {"text": "Real and active Security", "is_correct": False}, {"text": "Root as a Service", "is_correct": False}, {"text": "Recovery as a Service", "is_correct": False}]},
+        {"text": "Should you pay the ransom?", "type": "multiple_choice", "topic": "Ransomware", "difficulty": "Easy", "skill_focus": "Ethics/Policy", "explanation": "FBI advises no; it encourages attacks and doesn't guarantee data return.", "options": [{"text": "Generally No (No guarantee)", "is_correct": True}, {"text": "Yes, always", "is_correct": False}, {"text": "Only if it's cheap", "is_correct": False}, {"text": "Only on weekends", "is_correct": False}]},
+        {"text": "What type of encryption does ransomware usually use?", "type": "multiple_choice", "topic": "Ransomware", "difficulty": "Hard", "skill_focus": "Crypto", "explanation": "Asymmetric (Public/Private key) so the victim can't decrypt without the private key held by attacker.", "options": [{"text": "Asymmetric (Public/Private Key)", "is_correct": True}, {"text": "ROT13", "is_correct": False}, {"text": "Base64", "is_correct": False}, {"text": "XOR", "is_correct": False}]},
+        {"text": "What is a 'Kill Switch' in ransomware context?", "type": "multiple_choice", "topic": "Ransomware", "difficulty": "Medium", "skill_focus": "History", "explanation": "A mechanism (like a domain check) that stops the malware spreading (famous in WannaCry).", "options": [{"text": "Mechanism to stop execution", "is_correct": True}, {"text": "Button to delete PC", "is_correct": False}, {"text": "Deleting the virus", "is_correct": False}, {"text": "Turning off power", "is_correct": False}]},
+    ])
+
+    # --- 10. Buffer Overflow ---
+    questions.extend([
+        {"text": "What causes a Buffer Overflow?", "type": "multiple_choice", "topic": "Buffer Overflow", "difficulty": "Easy", "skill_focus": "Theory", "explanation": "Writing more data to a buffer than it can hold.", "options": [{"text": "Writing past memory boundaries", "is_correct": True}, {"text": "Hard drive full", "is_correct": False}, {"text": "Too many files", "is_correct": False}, {"text": "Slow CPU", "is_correct": False}]},
+        {"text": "Which languages are most susceptible to Buffer Overflows?", "type": "multiple_choice", "topic": "Buffer Overflow", "difficulty": "Medium", "skill_focus": "Knowledge", "explanation": "C and C++ do not have built-in memory safety.", "options": [{"text": "C / C++", "is_correct": True}, {"text": "Python", "is_correct": False}, {"text": "Java", "is_correct": False}, {"text": "JavaScript", "is_correct": False}]},
+        {"text": "What is the 'Stack' in memory?", "type": "multiple_choice", "topic": "Buffer Overflow", "difficulty": "Medium", "skill_focus": "Theory", "explanation": "Memory region for local variables and function control flow.", "options": [{"text": "Region for local variables/control flow", "is_correct": True}, {"text": "Long term storage", "is_correct": False}, {"text": "Hard drive space", "is_correct": False}, {"text": "Graphics memory", "is_correct": False}]},
+        {"text": "What is the 'Heap'?", "type": "multiple_choice", "topic": "Buffer Overflow", "difficulty": "Medium", "skill_focus": "Theory", "explanation": "Dynamic memory allocation.", "options": [{"text": "Dynamic memory area", "is_correct": True}, {"text": "Static memory area", "is_correct": False}, {"text": "Code area", "is_correct": False}, {"text": "Kernel area", "is_correct": False}]},
+        {"text": "What does a Buffer Overflow often allow an attacker to overwrite?", "type": "multiple_choice", "topic": "Buffer Overflow", "difficulty": "Hard", "skill_focus": "Exploitation", "explanation": "The Return Address (EIP/RIP) controls what code executes next.", "options": [{"text": "Return Address (EIP/RIP)", "is_correct": True}, {"text": "Screen resolution", "is_correct": False}, {"text": "Keyboard layout", "is_correct": False}, {"text": "Mouse speed", "is_correct": False}]},
+        {"text": "What is 'Shellcode'?", "type": "multiple_choice", "topic": "Buffer Overflow", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Small piece of code used as the payload (usually spawns a shell).", "options": [{"text": "Payload code to spawn a shell", "is_correct": True}, {"text": "Code to format drive", "is_correct": False}, {"text": "Code to change colors", "is_correct": False}, {"text": "Code to zip files", "is_correct": False}]},
+        {"text": "What is ASLR?", "type": "multiple_choice", "topic": "Buffer Overflow", "difficulty": "Hard", "skill_focus": "Defense", "explanation": "Address Space Layout Randomization moves memory locations around.", "options": [{"text": "Address Space Layout Randomization", "is_correct": True}, {"text": "Anti-Shell Logic Rule", "is_correct": False}, {"text": "Advanced Security Level Rating", "is_correct": False}, {"text": "Auto System Lock Routine", "is_correct": False}]},
+        {"text": "What is a Canary (Stack Cookie)?", "type": "multiple_choice", "topic": "Buffer Overflow", "difficulty": "Hard", "skill_focus": "Defense", "explanation": "A value placed on the stack to detect overflows before the return address is reached.", "options": [{"text": "Value to detect stack corruption", "is_correct": True}, {"text": "A bird", "is_correct": False}, {"text": "A password", "is_correct": False}, {"text": "A firewall rule", "is_correct": False}]},
+        {"text": "What is a NOP Sled?", "type": "multiple_choice", "topic": "Buffer Overflow", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Sequence of No-Operation instructions to slide execution into shellcode.", "options": [{"text": "Sequence of No-Operation instructions", "is_correct": True}, {"text": "A hacking tool", "is_correct": False}, {"text": "A password cracker", "is_correct": False}, {"text": "A network scanner", "is_correct": False}]},
+        {"text": "What is DEP / NX?", "type": "multiple_choice", "topic": "Buffer Overflow", "difficulty": "Hard", "skill_focus": "Defense", "explanation": "Data Execution Prevention / No-Execute makes the stack non-executable.", "options": [{"text": "Prevents code execution in data segments", "is_correct": True}, {"text": "Prevents data deletion", "is_correct": False}, {"text": "Prevents encryption", "is_correct": False}, {"text": "Prevents networking", "is_correct": False}]},
+    ])
+
+    # --- 11. XXE (XML External Entity) ---
+    questions.extend([
+        {"text": "What does XXE stand for?", "type": "multiple_choice", "topic": "XXE", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "XML External Entity.", "options": [{"text": "XML External Entity", "is_correct": True}, {"text": "X-Ray External Entry", "is_correct": False}, {"text": "XML Extra Encryption", "is_correct": False}, {"text": "Xenon Extra Entry", "is_correct": False}]},
+        {"text": "XXE attacks target applications that parse what format?", "type": "multiple_choice", "topic": "XXE", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "XML.", "options": [{"text": "XML", "is_correct": True}, {"text": "JSON", "is_correct": False}, {"text": "YAML", "is_correct": False}, {"text": "CSV", "is_correct": False}]},
+        {"text": "What is a common impact of XXE?", "type": "multiple_choice", "topic": "XXE", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Local File Disclosure (reading /etc/passwd).", "options": [{"text": "Reading local files", "is_correct": True}, {"text": "Formatting C drive", "is_correct": False}, {"text": "Changing CSS", "is_correct": False}, {"text": "Playing audio", "is_correct": False}]},
+        {"text": "What entity definition is usually used in XXE?", "type": "multiple_choice", "topic": "XXE", "difficulty": "Hard", "skill_focus": "Exploitation", "explanation": "<!DOCTYPE foo [ <!ENTITY xxe SYSTEM 'file:///etc/passwd'> ]>", "options": [{"text": "SYSTEM entity", "is_correct": True}, {"text": "LOCAL entity", "is_correct": False}, {"text": "GLOBAL entity", "is_correct": False}, {"text": "PRIVATE entity", "is_correct": False}]},
+        {"text": "How do you prevent XXE?", "type": "multiple_choice", "topic": "XXE", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Disable DTDs (Document Type Definitions) and external entities.", "options": [{"text": "Disable DTDs / External Entities", "is_correct": True}, {"text": "Use Firewall", "is_correct": False}, {"text": "Use HTTPS", "is_correct": False}, {"text": "Reboot Server", "is_correct": False}]},
+        {"text": "Can XXE lead to SSRF?", "type": "multiple_choice", "topic": "XXE", "difficulty": "Medium", "skill_focus": "Theory", "explanation": "Yes, by making the XML parser fetch a URL.", "options": [{"text": "Yes", "is_correct": True}, {"text": "No", "is_correct": False}, {"text": "Only via Bluetooth", "is_correct": False}, {"text": "Only on Mac", "is_correct": False}]},
+        {"text": "What is a 'Billion Laughs' attack?", "type": "multiple_choice", "topic": "XXE", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "XML Bomb (DoS) using recursive entity expansion.", "options": [{"text": "XML Bomb / DoS", "is_correct": True}, {"text": "Funny Virus", "is_correct": False}, {"text": "Audio attack", "is_correct": False}, {"text": "Video attack", "is_correct": False}]},
+        {"text": "Is JSON vulnerable to XXE?", "type": "multiple_choice", "topic": "XXE", "difficulty": "Easy", "skill_focus": "Theory", "explanation": "No, JSON does not have entities like XML.", "options": [{"text": "No", "is_correct": True}, {"text": "Yes", "is_correct": False}, {"text": "Sometimes", "is_correct": False}, {"text": "If converted to XML", "is_correct": False}]},
+        {"text": "What does DTD stand for?", "type": "multiple_choice", "topic": "XXE", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Document Type Definition.", "options": [{"text": "Document Type Definition", "is_correct": True}, {"text": "Data Type Definition", "is_correct": False}, {"text": "Domain Transfer Data", "is_correct": False}, {"text": "Direct Text Data", "is_correct": False}]},
+        {"text": "Which XML feature is the root cause of XXE?", "type": "multiple_choice", "topic": "XXE", "difficulty": "Medium", "skill_focus": "Theory", "explanation": "External entities.", "options": [{"text": "External Entities", "is_correct": True}, {"text": "Tags", "is_correct": False}, {"text": "Attributes", "is_correct": False}, {"text": "Comments", "is_correct": False}]},
+    ])
+
+    # --- 12. Directory / Path Traversal ---
+    questions.extend([
+        {"text": "What character sequence is used for Directory Traversal?", "type": "multiple_choice", "topic": "Path Traversal", "difficulty": "Easy", "skill_focus": "Exploitation", "explanation": "../ moves up a directory.", "options": [{"text": "../ (Dot Dot Slash)", "is_correct": True}, {"text": "||", "is_correct": False}, {"text": "&&", "is_correct": False}, {"text": "##", "is_correct": False}]},
+        {"text": "What is the goal of Path Traversal?", "type": "multiple_choice", "topic": "Path Traversal", "difficulty": "Easy", "skill_focus": "Exploitation", "explanation": "Access files outside the web root.", "options": [{"text": "Access files outside web root", "is_correct": True}, {"text": "Delete files", "is_correct": False}, {"text": "Upload files", "is_correct": False}, {"text": "Execute files", "is_correct": False}]},
+        {"text": "If you see 'image=../../etc/passwd', what attack is this?", "type": "multiple_choice", "topic": "Path Traversal", "difficulty": "Easy", "skill_focus": "Recognition", "explanation": "Path Traversal.", "options": [{"text": "Path Traversal", "is_correct": True}, {"text": "SQL Injection", "is_correct": False}, {"text": "XSS", "is_correct": False}, {"text": "CSRF", "is_correct": False}]},
+        {"text": "How do you prevent Path Traversal?", "type": "multiple_choice", "topic": "Path Traversal", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Validate input against a whitelist of filenames and avoid direct file API access.", "options": [{"text": "Input validation and canonicalization", "is_correct": True}, {"text": "Disable images", "is_correct": False}, {"text": "Use CSS", "is_correct": False}, {"text": "Shorten URLs", "is_correct": False}]},
+        {"text": "What is 'Canonicalization'?", "type": "multiple_choice", "topic": "Path Traversal", "difficulty": "Hard", "skill_focus": "Defense", "explanation": "Converting data to its simplest, standard form (resolving ../).", "options": [{"text": "Resolving paths to standard form", "is_correct": True}, {"text": "Zipping files", "is_correct": False}, {"text": "Encrypting files", "is_correct": False}, {"text": "Deleting logs", "is_correct": False}]},
+        {"text": "What is the null byte (%00) trick used for?", "type": "multiple_choice", "topic": "Path Traversal", "difficulty": "Hard", "skill_focus": "Exploitation", "explanation": "In older systems (C-based), it terminates the string, bypassing extension checks (.php%00.jpg).", "options": [{"text": "Terminating strings early", "is_correct": True}, {"text": "Making files empty", "is_correct": False}, {"text": "Adding zero value", "is_correct": False}, {"text": "Nothing", "is_correct": False}]},
+        {"text": "Can Path Traversal lead to Remote Code Execution?", "type": "multiple_choice", "topic": "Path Traversal", "difficulty": "Medium", "skill_focus": "Theory", "explanation": "Yes, if you can upload a file and then traverse to execute it, or read config files with passwords.", "options": [{"text": "Yes, in some scenarios", "is_correct": True}, {"text": "No, never", "is_correct": False}, {"text": "Only on Tuesdays", "is_correct": False}, {"text": "Only via Email", "is_correct": False}]},
+        {"text": "What OS uses backslashes '\\' often causing traversal confusion?", "type": "multiple_choice", "topic": "Path Traversal", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Windows.", "options": [{"text": "Windows", "is_correct": True}, {"text": "Linux", "is_correct": False}, {"text": "Mac", "is_correct": False}, {"text": "Android", "is_correct": False}]},
+        {"text": "What is 'Dot Dot Pwn'?", "type": "multiple_choice", "topic": "Path Traversal", "difficulty": "Medium", "skill_focus": "Tools", "explanation": "A fuzzer for directory traversal.", "options": [{"text": "Traversal Fuzzer Tool", "is_correct": True}, {"text": "A game", "is_correct": False}, {"text": "A virus", "is_correct": False}, {"text": "A firewall", "is_correct": False}]},
+        {"text": "Is chroot() a defense against traversal?", "type": "multiple_choice", "topic": "Path Traversal", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Yes, it jails the process to a specific directory.", "options": [{"text": "Yes, it jails the process", "is_correct": True}, {"text": "No", "is_correct": False}, {"text": "It makes it worse", "is_correct": False}, {"text": "Only for root users", "is_correct": False}]},
+    ])
+
+    # --- 13. Insecure Deserialization ---
+    questions.extend([
+        {"text": "What is Serialization?", "type": "multiple_choice", "topic": "Deserialization", "difficulty": "Easy", "skill_focus": "Theory", "explanation": "Converting an object into a data stream (e.g., JSON, XML, Binary).", "options": [{"text": "Converting object to data stream", "is_correct": True}, {"text": "Encrypting data", "is_correct": False}, {"text": "Deleting data", "is_correct": False}, {"text": "Sorting data", "is_correct": False}]},
+        {"text": "What is Deserialization?", "type": "multiple_choice", "topic": "Deserialization", "difficulty": "Easy", "skill_focus": "Theory", "explanation": "Converting data stream back to an object.", "options": [{"text": "Converting stream back to object", "is_correct": True}, {"text": "Decrypting data", "is_correct": False}, {"text": "Creating data", "is_correct": False}, {"text": "Hiding data", "is_correct": False}]},
+        {"text": "What is the danger of Insecure Deserialization?", "type": "multiple_choice", "topic": "Deserialization", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Remote Code Execution (RCE) via object injection.", "options": [{"text": "Remote Code Execution (RCE)", "is_correct": True}, {"text": "CSS injection", "is_correct": False}, {"text": "Slow internet", "is_correct": False}, {"text": "Spam emails", "is_correct": False}]},
+        {"text": "Which Java tool is famous for generating deserialization payloads?", "type": "multiple_choice", "topic": "Deserialization", "difficulty": "Hard", "skill_focus": "Tools", "explanation": "ysoserial.", "options": [{"text": "ysoserial", "is_correct": True}, {"text": "javahack", "is_correct": False}, {"text": "serialkiller", "is_correct": False}, {"text": "objectmapper", "is_correct": False}]},
+        {"text": "In Python, which library is known for deserialization vulnerabilities?", "type": "multiple_choice", "topic": "Deserialization", "difficulty": "Medium", "skill_focus": "Knowledge", "explanation": "Pickle.", "options": [{"text": "Pickle", "is_correct": True}, {"text": "Pandas", "is_correct": False}, {"text": "NumPy", "is_correct": False}, {"text": "Requests", "is_correct": False}]},
+        {"text": "What is a 'Gadget Chain'?", "type": "multiple_choice", "topic": "Deserialization", "difficulty": "Hard", "skill_focus": "Theory", "explanation": "A sequence of existing code snippets executed during deserialization to achieve RCE.", "options": [{"text": "Sequence of code chunks for RCE", "is_correct": True}, {"text": "A physical tool", "is_correct": False}, {"text": "A blockchain", "is_correct": False}, {"text": "A password list", "is_correct": False}]},
+        {"text": "How do you prevent Deserialization attacks?", "type": "multiple_choice", "topic": "Deserialization", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Don't deserialize untrusted data; use simple formats like JSON without logic.", "options": [{"text": "Avoid deserializing untrusted data", "is_correct": True}, {"text": "Use shorter variables", "is_correct": False}, {"text": "Use more memory", "is_correct": False}, {"text": "Restart often", "is_correct": False}]},
+        {"text": "Is PHP `unserialize()` vulnerable?", "type": "multiple_choice", "topic": "Deserialization", "difficulty": "Medium", "skill_focus": "Knowledge", "explanation": "Yes, if input is user-controlled.", "options": [{"text": "Yes", "is_correct": True}, {"text": "No", "is_correct": False}, {"text": "Only in PHP 4", "is_correct": False}, {"text": "Only on Linux", "is_correct": False}]},
+        {"text": "What magic method in PHP is often a target?", "type": "multiple_choice", "topic": "Deserialization", "difficulty": "Hard", "skill_focus": "Knowledge", "explanation": "__destruct() or __wakeup().", "options": [{"text": "__destruct()", "is_correct": True}, {"text": "__init()", "is_correct": False}, {"text": "__main()", "is_correct": False}, {"text": "__print()", "is_correct": False}]},
+        {"text": "Are cookies a vector for deserialization attacks?", "type": "multiple_choice", "topic": "Deserialization", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Yes, if the cookie contains a serialized object.", "options": [{"text": "Yes", "is_correct": True}, {"text": "No", "is_correct": False}, {"text": "Only session IDs", "is_correct": False}, {"text": "Cookies are text only", "is_correct": False}]},
+    ])
+
+    # --- 14. Session Hijacking ---
+    questions.extend([
+        {"text": "What is Session Hijacking?", "type": "multiple_choice", "topic": "Session Hijacking", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Taking over a user's active session.", "options": [{"text": "Taking over active session", "is_correct": True}, {"text": "Stealing a laptop", "is_correct": False}, {"text": "Crashing the server", "is_correct": False}, {"text": "Phishing password", "is_correct": False}]},
+        {"text": "What is the most common token used to track sessions?", "type": "multiple_choice", "topic": "Session Hijacking", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Session ID (Cookie).", "options": [{"text": "Session ID Cookie", "is_correct": True}, {"text": "IP Address", "is_correct": False}, {"text": "MAC Address", "is_correct": False}, {"text": "Username", "is_correct": False}]},
+        {"text": "What is 'Session Fixation'?", "type": "multiple_choice", "topic": "Session Hijacking", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Attacker sets the user's session ID before they log in.", "options": [{"text": "Attacker sets Session ID beforehand", "is_correct": True}, {"text": "Fixing broken sessions", "is_correct": False}, {"text": "Deleting sessions", "is_correct": False}, {"text": "Locking sessions", "is_correct": False}]},
+        {"text": "What defense prevents Session Hijacking via XSS?", "type": "multiple_choice", "topic": "Session Hijacking", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "HttpOnly flag prevents JS reading cookies.", "options": [{"text": "HttpOnly flag", "is_correct": True}, {"text": "CSS", "is_correct": False}, {"text": "HTML5", "is_correct": False}, {"text": "Flash", "is_correct": False}]},
+        {"text": "What should happen to the Session ID after login?", "type": "multiple_choice", "topic": "Session Hijacking", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "It should be regenerated to prevent Fixation.", "options": [{"text": "Regenerated", "is_correct": True}, {"text": "Kept same", "is_correct": False}, {"text": "Deleted", "is_correct": False}, {"text": "Printed", "is_correct": False}]},
+        {"text": "Predictable Session IDs allow what?", "type": "multiple_choice", "topic": "Session Hijacking", "difficulty": "Easy", "skill_focus": "Exploitation", "explanation": "Guessing valid sessions of other users.", "options": [{"text": "Guessing other users' sessions", "is_correct": True}, {"text": "Faster login", "is_correct": False}, {"text": "Better UI", "is_correct": False}, {"text": "Less bandwidth", "is_correct": False}]},
+        {"text": "What protocol protects Session IDs in transit?", "type": "multiple_choice", "topic": "Session Hijacking", "difficulty": "Easy", "skill_focus": "Defense", "explanation": "TLS (HTTPS).", "options": [{"text": "TLS/HTTPS", "is_correct": True}, {"text": "HTTP", "is_correct": False}, {"text": "FTP", "is_correct": False}, {"text": "Telnet", "is_correct": False}]},
+        {"text": "What is 'Session Side-Jacking'?", "type": "multiple_choice", "topic": "Session Hijacking", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Sniffing unencrypted cookies on Wi-Fi.", "options": [{"text": "Sniffing cookies on Wi-Fi", "is_correct": True}, {"text": "Stealing laptops", "is_correct": False}, {"text": "Breaking into servers", "is_correct": False}, {"text": "Phishing", "is_correct": False}]},
+        {"text": "How long should a session timeout be?", "type": "multiple_choice", "topic": "Session Hijacking", "difficulty": "Easy", "skill_focus": "Defense", "explanation": "Short enough to minimize risk, long enough for usability.", "options": [{"text": "Short (e.g., 15-30 mins inactivity)", "is_correct": True}, {"text": "Infinite", "is_correct": False}, {"text": "1 year", "is_correct": False}, {"text": "1 second", "is_correct": False}]},
+        {"text": "Can JWTs (JSON Web Tokens) be hijacked?", "type": "multiple_choice", "topic": "Session Hijacking", "difficulty": "Medium", "skill_focus": "Theory", "explanation": "Yes, if the token is stolen, it can be used until expiry.", "options": [{"text": "Yes, they are bearer tokens", "is_correct": True}, {"text": "No, they are secure", "is_correct": False}, {"text": "Only if signed", "is_correct": False}, {"text": "Only if encrypted", "is_correct": False}]},
+    ])
+
+    # --- 15. Command Injection ---
+    questions.extend([
+        {"text": "What is OS Command Injection?", "type": "multiple_choice", "topic": "Command Injection", "difficulty": "Easy", "skill_focus": "Theory", "explanation": "Executing system commands on the server via input.", "options": [{"text": "Executing system commands via input", "is_correct": True}, {"text": "Injecting SQL", "is_correct": False}, {"text": "Injecting CSS", "is_correct": False}, {"text": "Opening a command prompt on client", "is_correct": False}]},
+        {"text": "Which character separates commands in Linux (e.g., cat file; ls)?", "type": "multiple_choice", "topic": "Command Injection", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "; (Semicolon) allows chaining commands.", "options": [{"text": "; (Semicolon)", "is_correct": True}, {"text": ": (Colon)", "is_correct": False}, {"text": ". (Dot)", "is_correct": False}, {"text": "_ (Underscore)", "is_correct": False}]},
+        {"text": "What does the pipe operator '|' do?", "type": "multiple_choice", "topic": "Command Injection", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Passes output of one command to another.", "options": [{"text": "Pipes output to next command", "is_correct": True}, {"text": "Stops command", "is_correct": False}, {"text": "Deletes command", "is_correct": False}, {"text": "Nothing", "is_correct": False}]},
+        {"text": "In Python, which function is dangerous if inputs aren't sanitized?", "type": "multiple_choice", "topic": "Command Injection", "difficulty": "Medium", "skill_focus": "Knowledge", "explanation": "os.system() or subprocess.call(shell=True).", "options": [{"text": "os.system()", "is_correct": True}, {"text": "print()", "is_correct": False}, {"text": "len()", "is_correct": False}, {"text": "math.sqrt()", "is_correct": False}]},
+        {"text": "What is the best defense against Command Injection?", "type": "multiple_choice", "topic": "Command Injection", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Avoid calling system commands; use language APIs.", "options": [{"text": "Use API libraries instead of shell commands", "is_correct": True}, {"text": "Use Firewalls", "is_correct": False}, {"text": "Use Antivirus", "is_correct": False}, {"text": "Hide the code", "is_correct": False}]},
+        {"text": "What command helps check current user identity?", "type": "multiple_choice", "topic": "Command Injection", "difficulty": "Easy", "skill_focus": "Exploitation", "explanation": "whoami", "options": [{"text": "whoami", "is_correct": True}, {"text": "whereami", "is_correct": False}, {"text": "whatisthis", "is_correct": False}, {"text": "hello", "is_correct": False}]},
+        {"text": "What is 'Blind' Command Injection?", "type": "multiple_choice", "topic": "Command Injection", "difficulty": "Hard", "skill_focus": "Theory", "explanation": "No output is returned; attacker uses time delays (ping/sleep).", "options": [{"text": "No output returned, uses time delays", "is_correct": True}, {"text": "Output is encrypted", "is_correct": False}, {"text": "Screen turns black", "is_correct": False}, {"text": "Keyboard stops working", "is_correct": False}]},
+        {"text": "Which character represents a variable in bash?", "type": "multiple_choice", "topic": "Command Injection", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "$", "options": [{"text": "$", "is_correct": True}, {"text": "#", "is_correct": False}, {"text": "%", "is_correct": False}, {"text": "&", "is_correct": False}]},
+        {"text": "Why is '&&' dangerous in inputs?", "type": "multiple_choice", "topic": "Command Injection", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "It executes the second command if the first succeeds.", "options": [{"text": "Executes next command if previous succeeds", "is_correct": True}, {"text": "It means AND logic", "is_correct": False}, {"text": "It comments out code", "is_correct": False}, {"text": "It escapes characters", "is_correct": False}]},
+        {"text": "Does 'escapeshellarg()' in PHP make it safe?", "type": "multiple_choice", "topic": "Command Injection", "difficulty": "Hard", "skill_focus": "Defense", "explanation": "It helps by adding quotes, but avoiding shell execution is better.", "options": [{"text": "It adds quotes to make it safer", "is_correct": True}, {"text": "It executes the command", "is_correct": False}, {"text": "It deletes the command", "is_correct": False}, {"text": "It does nothing", "is_correct": False}]},
+    ])
+
+    # --- 16. Zero-Day Exploits ---
+    questions.extend([
+        {"text": "What is a Zero-Day vulnerability?", "type": "multiple_choice", "topic": "Zero-Day", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "A vulnerability known to attackers but not the vendor (0 days to patch).", "options": [{"text": "Unknown to vendor, no patch exists", "is_correct": True}, {"text": "A virus that lasts 0 days", "is_correct": False}, {"text": "Old vulnerability", "is_correct": False}, {"text": "Fake vulnerability", "is_correct": False}]},
+        {"text": "What is a Zero-Day Exploit?", "type": "multiple_choice", "topic": "Zero-Day", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Code that takes advantage of a Zero-Day vulnerability.", "options": [{"text": "Code attacking a Zero-Day", "is_correct": True}, {"text": "A patch", "is_correct": False}, {"text": "A scanner", "is_correct": False}, {"text": "A firewall", "is_correct": False}]},
+        {"text": "Who typically buys Zero-Days?", "type": "multiple_choice", "topic": "Zero-Day", "difficulty": "Medium", "skill_focus": "Context", "explanation": "Governments, criminals, and security brokers (like Zerodium).", "options": [{"text": "Governments / Criminals / Brokers", "is_correct": True}, {"text": "Regular users", "is_correct": False}, {"text": "Students", "is_correct": False}, {"text": "Libraries", "is_correct": False}]},
+        {"text": "What is 'Responsible Disclosure'?", "type": "multiple_choice", "topic": "Zero-Day", "difficulty": "Medium", "skill_focus": "Ethics", "explanation": "Telling the vendor privately so they can patch it before public release.", "options": [{"text": "Reporting to vendor privately first", "is_correct": True}, {"text": "Posting on Twitter immediately", "is_correct": False}, {"text": "Selling it on Dark Web", "is_correct": False}, {"text": "Keeping it secret forever", "is_correct": False}]},
+        {"text": "What is a Bug Bounty Program?", "type": "multiple_choice", "topic": "Zero-Day", "difficulty": "Easy", "skill_focus": "Context", "explanation": "Companies paying hackers for reporting bugs.", "options": [{"text": "Paying for reported bugs", "is_correct": True}, {"text": "Hunting insects", "is_correct": False}, {"text": "Buying software", "is_correct": False}, {"text": "Hiring support", "is_correct": False}]},
+        {"text": "Stuxnet used how many Zero-Days?", "type": "multiple_choice", "topic": "Zero-Day", "difficulty": "Hard", "skill_focus": "History", "explanation": "Stuxnet famously used 4 Zero-Days.", "options": [{"text": "4", "is_correct": True}, {"text": "1", "is_correct": False}, {"text": "0", "is_correct": False}, {"text": "100", "is_correct": False}]},
+        {"text": "How do you defend against Zero-Days?", "type": "multiple_choice", "topic": "Zero-Day", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Defense in Depth (layering security) since you can't patch what you don't know.", "options": [{"text": "Defense in Depth / Behavioral Analysis", "is_correct": True}, {"text": "Update windows", "is_correct": False}, {"text": "Use weak passwords", "is_correct": False}, {"text": "Turn off internet", "is_correct": False}]},
+        {"text": "What is 'Heuristic Analysis'?", "type": "multiple_choice", "topic": "Zero-Day", "difficulty": "Hard", "skill_focus": "Defense", "explanation": "Detecting malware by behavior/patterns rather than signatures.", "options": [{"text": "Detecting by behavior/patterns", "is_correct": True}, {"text": "Detecting by exact match", "is_correct": False}, {"text": "Manual reading", "is_correct": False}, {"text": "Guessing", "is_correct": False}]},
+        {"text": "What does CVE stand for?", "type": "multiple_choice", "topic": "Zero-Day", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Common Vulnerabilities and Exposures.", "options": [{"text": "Common Vulnerabilities and Exposures", "is_correct": True}, {"text": "Computer Virus Entry", "is_correct": False}, {"text": "Critical Value Error", "is_correct": False}, {"text": "Central Virus Engine", "is_correct": False}]},
+        {"text": "Once a patch is released, is it still a Zero-Day?", "type": "multiple_choice", "topic": "Zero-Day", "difficulty": "Easy", "skill_focus": "Theory", "explanation": "No, it becomes a known vulnerability (N-Day).", "options": [{"text": "No", "is_correct": True}, {"text": "Yes", "is_correct": False}, {"text": "Forever", "is_correct": False}, {"text": "Maybe", "is_correct": False}]},
+    ])
+
+    # --- 17. DNS Spoofing / Poisoning ---
+    questions.extend([
+        {"text": "What is DNS Cache Poisoning?", "type": "multiple_choice", "topic": "DNS Spoofing", "difficulty": "Medium", "skill_focus": "Theory", "explanation": "Injecting fake records into a DNS resolver's cache.", "options": [{"text": "Injecting fake records into cache", "is_correct": True}, {"text": "Deleting DNS server", "is_correct": False}, {"text": "Stealing DNS server", "is_correct": False}, {"text": "Encrypting DNS", "is_correct": False}]},
+        {"text": "What is the result of DNS Spoofing?", "type": "multiple_choice", "topic": "DNS Spoofing", "difficulty": "Easy", "skill_focus": "Exploitation", "explanation": "Users typing 'google.com' go to a malicious site.", "options": [{"text": "Redirecting users to wrong sites", "is_correct": True}, {"text": "Faster internet", "is_correct": False}, {"text": "Free internet", "is_correct": False}, {"text": "Blue screen", "is_correct": False}]},
+        {"text": "What security extension prevents DNS Spoofing?", "type": "multiple_choice", "topic": "DNS Spoofing", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "DNSSEC signs records cryptographically.", "options": [{"text": "DNSSEC", "is_correct": True}, {"text": "HTTPS", "is_correct": False}, {"text": "SSL", "is_correct": False}, {"text": "WEP", "is_correct": False}]},
+        {"text": "What file on a local computer overrides DNS?", "type": "multiple_choice", "topic": "DNS Spoofing", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "The 'hosts' file.", "options": [{"text": "hosts file", "is_correct": True}, {"text": "config.sys", "is_correct": False}, {"text": "registry", "is_correct": False}, {"text": "autoexec.bat", "is_correct": False}]},
+        {"text": "What is 'Pharming'?", "type": "multiple_choice", "topic": "DNS Spoofing", "difficulty": "Medium", "skill_focus": "Knowledge", "explanation": "Redirecting traffic to a fake site via DNS poisoning (without user clicking links).", "options": [{"text": "Redirecting traffic via DNS manipulation", "is_correct": True}, {"text": "Farming gold", "is_correct": False}, {"text": "Planting viruses", "is_correct": False}, {"text": "Harvesting emails", "is_correct": False}]},
+        {"text": "What UDP port does DNS use?", "type": "multiple_choice", "topic": "DNS Spoofing", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "53.", "options": [{"text": "53", "is_correct": True}, {"text": "80", "is_correct": False}, {"text": "443", "is_correct": False}, {"text": "21", "is_correct": False}]},
+        {"text": "Why is UDP used for DNS (making it easier to spoof)?", "type": "multiple_choice", "topic": "DNS Spoofing", "difficulty": "Medium", "skill_focus": "Theory", "explanation": "UDP is connectionless and faster, but easier to forge packets.", "options": [{"text": "Connectionless / Faster", "is_correct": True}, {"text": "More secure", "is_correct": False}, {"text": "Encrypted", "is_correct": False}, {"text": "Newer", "is_correct": False}]},
+        {"text": "What is the Kaminsky Vulnerability?", "type": "multiple_choice", "topic": "DNS Spoofing", "difficulty": "Hard", "skill_focus": "History", "explanation": "A famous flaw allowing reliable DNS cache poisoning via transaction ID guessing.", "options": [{"text": "Flaw allowing reliable cache poisoning", "is_correct": True}, {"text": "A virus", "is_correct": False}, {"text": "A firewall hole", "is_correct": False}, {"text": "A browser bug", "is_correct": False}]},
+        {"text": "DoVPNs help against local DNS Spoofing?", "type": "multiple_choice", "topic": "DNS Spoofing", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Yes, they encrypt traffic to a trusted DNS server, bypassing local spoofing.", "options": [{"text": "Yes", "is_correct": True}, {"text": "No", "is_correct": False}, {"text": "Makes it worse", "is_correct": False}, {"text": "Only in China", "is_correct": False}]},
+        {"text": "What is DNS over HTTPS (DoH)?", "type": "multiple_choice", "topic": "DNS Spoofing", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Encrypting DNS queries inside HTTPS traffic.", "options": [{"text": "Encrypted DNS via HTTPS", "is_correct": True}, {"text": "Websites over DNS", "is_correct": False}, {"text": "Fast DNS", "is_correct": False}, {"text": "Illegal DNS", "is_correct": False}]},
+    ])
+
+    # --- 18. Trojan Horses ---
+    questions.extend([
+        {"text": "What is a Trojan Horse?", "type": "multiple_choice", "topic": "Trojan Horse", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Malware disguised as legitimate software.", "options": [{"text": "Malware disguised as legitimate software", "is_correct": True}, {"text": "Self-replicating worm", "is_correct": False}, {"text": "A wooden horse", "is_correct": False}, {"text": "A hardware bug", "is_correct": False}]},
+        {"text": "Do Trojans self-replicate like worms?", "type": "multiple_choice", "topic": "Trojan Horse", "difficulty": "Medium", "skill_focus": "Theory", "explanation": "No, they require user interaction (execution) to spread.", "options": [{"text": "No", "is_correct": True}, {"text": "Yes", "is_correct": False}, {"text": "Sometimes", "is_correct": False}, {"text": "Only on Sundays", "is_correct": False}]},
+        {"text": "What is a Remote Access Trojan (RAT)?", "type": "multiple_choice", "topic": "Trojan Horse", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Gives attacker full remote control of the victim PC.", "options": [{"text": "Gives attacker remote control", "is_correct": True}, {"text": "A mouse virus", "is_correct": False}, {"text": "A screen recorder", "is_correct": False}, {"text": "A fast trojan", "is_correct": False}]},
+        {"text": "How are Trojans usually delivered?", "type": "multiple_choice", "topic": "Trojan Horse", "difficulty": "Easy", "skill_focus": "Exploitation", "explanation": "Via downloaded games, cracks, or email attachments.", "options": [{"text": "Downloads / Email Attachments", "is_correct": True}, {"text": "Magic", "is_correct": False}, {"text": "Power cables", "is_correct": False}, {"text": "Monitor screen", "is_correct": False}]},
+        {"text": "What is a 'Backdoor'?", "type": "multiple_choice", "topic": "Trojan Horse", "difficulty": "Easy", "skill_focus": "Theory", "explanation": "A hidden method for bypassing authentication to access a system.", "options": [{"text": "Hidden entry point", "is_correct": True}, {"text": "Rear door of a building", "is_correct": False}, {"text": "A firewall", "is_correct": False}, {"text": "A password", "is_correct": False}]},
+        {"text": "What is a 'Logic Bomb'?", "type": "multiple_choice", "topic": "Trojan Horse", "difficulty": "Medium", "skill_focus": "Theory", "explanation": "Malicious code that executes only when specific conditions are met (time, date).", "options": [{"text": "Executes under specific conditions", "is_correct": True}, {"text": "An explosive", "is_correct": False}, {"text": "A math problem", "is_correct": False}, {"text": "A logical error", "is_correct": False}]},
+        {"text": "What is Emotet?", "type": "multiple_choice", "topic": "Trojan Horse", "difficulty": "Medium", "skill_focus": "History", "explanation": "A famous banking Trojan that evolved into a malware distributor.", "options": [{"text": "Famous Banking Trojan / Loader", "is_correct": True}, {"text": "An emotion", "is_correct": False}, {"text": "A game", "is_correct": False}, {"text": "An antivirus", "is_correct": False}]},
+        {"text": "Can a Trojan be inside a PDF?", "type": "multiple_choice", "topic": "Trojan Horse", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Yes, exploits in the PDF reader can drop malware.", "options": [{"text": "Yes", "is_correct": True}, {"text": "No", "is_correct": False}, {"text": "Only TXT files", "is_correct": False}, {"text": "Only MP3s", "is_correct": False}]},
+        {"text": "What is 'Binding' in the context of Trojans?", "type": "multiple_choice", "topic": "Trojan Horse", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Merging a malicious file with a legitimate one (e.g., calc.exe + trojan).", "options": [{"text": "Merging malicious file with legitimate one", "is_correct": True}, {"text": "Tying knots", "is_correct": False}, {"text": "Compiling code", "is_correct": False}, {"text": "Zipping files", "is_correct": False}]},
+        {"text": "What tool detects Trojans?", "type": "multiple_choice", "topic": "Trojan Horse", "difficulty": "Easy", "skill_focus": "Defense", "explanation": "Antivirus / Antimalware.", "options": [{"text": "Antivirus", "is_correct": True}, {"text": "Calculator", "is_correct": False}, {"text": "Paint", "is_correct": False}, {"text": "Notepad", "is_correct": False}]},
+    ])
+
+    # --- 19. Keylogging ---
+    questions.extend([
+        {"text": "What does a Keylogger do?", "type": "multiple_choice", "topic": "Keylogging", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Records every keystroke made by the user.", "options": [{"text": "Records keystrokes", "is_correct": True}, {"text": "Locks keys", "is_correct": False}, {"text": "Makes keys louder", "is_correct": False}, {"text": "Types for you", "is_correct": False}]},
+        {"text": "Can Keyloggers be Hardware-based?", "type": "multiple_choice", "topic": "Keylogging", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Yes, physical devices plugged between keyboard and PC.", "options": [{"text": "Yes", "is_correct": True}, {"text": "No", "is_correct": False}, {"text": "Only on Mac", "is_correct": False}, {"text": "Only on Linux", "is_correct": False}]},
+        {"text": "What is a 'Virtual Keyboard' used for?", "type": "multiple_choice", "topic": "Keylogging", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Clicking letters on screen bypasses hardware keyloggers (and some software ones).", "options": [{"text": "Bypassing keyloggers", "is_correct": True}, {"text": "Typing faster", "is_correct": False}, {"text": "Looking cool", "is_correct": False}, {"text": "Saving power", "is_correct": False}]},
+        {"text": "What is 'Spyware'?", "type": "multiple_choice", "topic": "Keylogging", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Software that secretly gathers information about a person.", "options": [{"text": "Software gathering info secretly", "is_correct": True}, {"text": "James Bond movie", "is_correct": False}, {"text": "Antivirus", "is_correct": False}, {"text": "A game", "is_correct": False}]},
+        {"text": "Can a keylogger steal copied text (Clipboard)?", "type": "multiple_choice", "topic": "Keylogging", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Yes, advanced loggers monitor clipboard data too.", "options": [{"text": "Yes", "is_correct": True}, {"text": "No", "is_correct": False}, {"text": "Only if you paste twice", "is_correct": False}, {"text": "Only images", "is_correct": False}]},
+        {"text": "How do you detect a Hardware Keylogger?", "type": "multiple_choice", "topic": "Keylogging", "difficulty": "Medium", "skill_focus": "Defense", "explanation": "Physical inspection of the computer ports.", "options": [{"text": "Physical inspection", "is_correct": True}, {"text": "Antivirus software", "is_correct": False}, {"text": "Firewall", "is_correct": False}, {"text": "Restarting PC", "is_correct": False}]},
+        {"text": "What is 'Stalkerware'?", "type": "multiple_choice", "topic": "Keylogging", "difficulty": "Medium", "skill_focus": "Context", "explanation": "Spyware used in domestic abuse scenarios to track partners.", "options": [{"text": "Spyware used to track partners/spouses", "is_correct": True}, {"text": "Tracking animals", "is_correct": False}, {"text": "Tracking satellites", "is_correct": False}, {"text": "Tracking packages", "is_correct": False}]},
+        {"text": "Does encryption help against Keyloggers?", "type": "multiple_choice", "topic": "Keylogging", "difficulty": "Medium", "skill_focus": "Theory", "explanation": "No, because the keylogger captures the input *before* it is encrypted.", "options": [{"text": "No, input is captured before encryption", "is_correct": True}, {"text": "Yes, always", "is_correct": False}, {"text": "Only AES", "is_correct": False}, {"text": "Only RSA", "is_correct": False}]},
+        {"text": "What is 'Form Grabbing'?", "type": "multiple_choice", "topic": "Keylogging", "difficulty": "Hard", "skill_focus": "Exploitation", "explanation": "Stealing data from web forms upon submission (often used by banking trojans).", "options": [{"text": "Stealing web form data", "is_correct": True}, {"text": "Grabbing a window", "is_correct": False}, {"text": "Moving forms", "is_correct": False}, {"text": "Creating forms", "is_correct": False}]},
+        {"text": "Is a keylogger always malware?", "type": "multiple_choice", "topic": "Keylogging", "difficulty": "Easy", "skill_focus": "Context", "explanation": "No, they can be used for parental control or employee monitoring (legally grey/dependent on consent).", "options": [{"text": "No, used for monitoring too", "is_correct": True}, {"text": "Yes, always illegal", "is_correct": False}, {"text": "Only in Russia", "is_correct": False}, {"text": "Only in USA", "is_correct": False}]},
+    ])
+
+    # --- 20. Privilege Escalation ---
+    questions.extend([
+        {"text": "What is Privilege Escalation?", "type": "multiple_choice", "topic": "Privilege Escalation", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "Gaining higher permissions than initially granted.", "options": [{"text": "Gaining higher permissions", "is_correct": True}, {"text": "Going up an elevator", "is_correct": False}, {"text": "Downloading files", "is_correct": False}, {"text": "Installing software", "is_correct": False}]},
+        {"text": "What is Vertical Privilege Escalation?", "type": "multiple_choice", "topic": "Privilege Escalation", "difficulty": "Medium", "skill_focus": "Theory", "explanation": "User -> Admin (Moving up).", "options": [{"text": "User to Admin", "is_correct": True}, {"text": "User to User", "is_correct": False}, {"text": "Admin to User", "is_correct": False}, {"text": "Admin to Root", "is_correct": False}]},
+        {"text": "What is Horizontal Privilege Escalation?", "type": "multiple_choice", "topic": "Privilege Escalation", "difficulty": "Medium", "skill_focus": "Theory", "explanation": "User A -> User B (Same level, different account).", "options": [{"text": "User A to User B", "is_correct": True}, {"text": "User to Admin", "is_correct": False}, {"text": "Admin to Root", "is_correct": False}, {"text": "Guest to User", "is_correct": False}]},
+        {"text": "What Linux command is often targeted for escalation (SUID)?", "type": "multiple_choice", "topic": "Privilege Escalation", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Commands with SUID bit run as owner (root).", "options": [{"text": "SUID binaries", "is_correct": True}, {"text": "ls", "is_correct": False}, {"text": "cd", "is_correct": False}, {"text": "echo", "is_correct": False}]},
+        {"text": "What is 'Dirty COW'?", "type": "multiple_choice", "topic": "Privilege Escalation", "difficulty": "Hard", "skill_focus": "History", "explanation": "A famous Linux kernel vulnerability (Copy-On-Write) for root escalation.", "options": [{"text": "Linux Kernel Exploit", "is_correct": True}, {"text": "A farm game", "is_correct": False}, {"text": "Windows Virus", "is_correct": False}, {"text": "Mac App", "is_correct": False}]},
+        {"text": "What Windows file contains password hashes (SAM)?", "type": "multiple_choice", "topic": "Privilege Escalation", "difficulty": "Medium", "skill_focus": "Knowledge", "explanation": "SAM (Security Account Manager).", "options": [{"text": "SAM", "is_correct": True}, {"text": "PASS.TXT", "is_correct": False}, {"text": "WIN.INI", "is_correct": False}, {"text": "BOOT.INI", "is_correct": False}]},
+        {"text": "What is 'UAC Bypass'?", "type": "multiple_choice", "topic": "Privilege Escalation", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "Bypassing Windows User Account Control prompts.", "options": [{"text": "Bypassing Windows UAC", "is_correct": True}, {"text": "Unlocking A Car", "is_correct": False}, {"text": "Using A Computer", "is_correct": False}, {"text": "Under A Cloud", "is_correct": False}]},
+        {"text": "What is a 'Kernel Exploit' usually used for?", "type": "multiple_choice", "topic": "Privilege Escalation", "difficulty": "Hard", "skill_focus": "Exploitation", "explanation": "Gaining Root/System privileges.", "options": [{"text": "Gaining Root/System privileges", "is_correct": True}, {"text": "Crashing the browser", "is_correct": False}, {"text": "Playing music", "is_correct": False}, {"text": "Sending email", "is_correct": False}]},
+        {"text": "Why are misconfigured Cron jobs (Linux) dangerous?", "type": "multiple_choice", "topic": "Privilege Escalation", "difficulty": "Medium", "skill_focus": "Exploitation", "explanation": "If a writable script runs as root, a user can modify it to become root.", "options": [{"text": "User can modify root scripts", "is_correct": True}, {"text": "They slow down PC", "is_correct": False}, {"text": "They consume disk space", "is_correct": False}, {"text": "They send spam", "is_correct": False}]},
+        {"text": "What does 'sudo' stand for?", "type": "multiple_choice", "topic": "Privilege Escalation", "difficulty": "Easy", "skill_focus": "Knowledge", "explanation": "SuperUser DO.", "options": [{"text": "SuperUser DO", "is_correct": True}, {"text": "Super User Don't", "is_correct": False}, {"text": "System Undo Do", "is_correct": False}, {"text": "Simple User Do", "is_correct": False}]},
+    ])
+
+    return questions
+
 def seed_data():
     wait_for_db()
     
+    # --- CRITICAL FIX: CREATE TABLES BEFORE SEEDING ---
+    logger.info("Ensuring database tables exist...")
+    models.Base.metadata.create_all(bind=engine)
+    # --------------------------------------------------
+
     db: Session = SessionLocal()
     try:
-        # Check if we have enough questions
-        question_count = db.query(models.Question).count()
-        if question_count >= 200:
-            logger.info(f"Database already has {question_count} questions. Skipping seeding.")
+        # 1. Seed Users (Admin/Instructor)
+        seed_users(db)
+
+        # 2. Seed Questions
+        existing_count = db.query(models.Question).count()
+        if existing_count >= 200:
+            logger.info(f"Database already has {existing_count} questions. Skipping seeding.")
             return
 
-        logger.info(f"Database has {question_count} questions. Seeding to reach 200...")
+        logger.info(f"Database has {existing_count} questions. Seeding to reach 200...")
 
-        
-        # List of all questions
-        questions_data = [
-            # 1. SQL Injection (20 Questions)
-            {
-                "text": "What does SQL stand for?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "SQL stands for Structured Query Language.",
-                "options": [
-                    {"text": "Structured Query Language", "is_correct": True},
-                    {"text": "Simple Query Language", "is_correct": False},
-                    {"text": "Standard Query Logic", "is_correct": False},
-                    {"text": "System Query Loop", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which symbol is typically used to inject SQL commands?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Easy",
-                "skill_focus": "Exploitation",
-                "explanation": "The single quote is often used to delimit strings in SQL, and can be used to break out of data context.",
-                "options": [
-                    {"text": "'", "is_correct": True},
-                    {"text": "#", "is_correct": False},
-                    {"text": "@", "is_correct": False},
-                    {"text": "$", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the primary impact of SQL Injection?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "SQLi allows attackers to access, modify, or delete data in the database.",
-                "options": [
-                    {"text": "Unauthorized database access", "is_correct": True},
-                    {"text": "Slow internet connection", "is_correct": False},
-                    {"text": "Browser crash", "is_correct": False},
-                    {"text": "Server overheat", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which SQL statement is used to extract data from a database?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "SELECT is the standard command for querying data.",
-                "options": [
-                    {"text": "GET", "is_correct": False},
-                    {"text": "SELECT", "is_correct": True},
-                    {"text": "OPEN", "is_correct": False},
-                    {"text": "EXTRACT", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does '1=1' represent in a SQL injection attack?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Easy",
-                "skill_focus": "Exploitation",
-                "explanation": "It is a tautology, a condition that is always true.",
-                "options": [
-                    {"text": "A false condition", "is_correct": False},
-                    {"text": "A syntax error", "is_correct": False},
-                    {"text": "A tautology (always true)", "is_correct": True},
-                    {"text": "A database error", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which comment syntax is valid in MySQL to comment out the rest of the query?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "'#' is a comment character in MySQL (along with '-- ').",
-                "options": [
-                    {"text": "//", "is_correct": False},
-                    {"text": "#", "is_correct": True},
-                    {"text": "<!--", "is_correct": False},
-                    {"text": "%%", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What type of SQL Injection relies on true/false responses?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Knowledge",
-                "explanation": "Boolean-based Blind SQL Injection relies on inferring data from true/false responses.",
-                "options": [
-                    {"text": "Error-based", "is_correct": False},
-                    {"text": "Union-based", "is_correct": False},
-                    {"text": "Boolean-based Blind", "is_correct": True},
-                    {"text": "Time-based Blind", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What SQL function can cause a delay, useful for Time-Based Blind SQLi in MySQL?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "SLEEP() causes the database to pause for a specified number of seconds.",
-                "options": [
-                    {"text": "WAIT()", "is_correct": False},
-                    {"text": "SLEEP()", "is_correct": True},
-                    {"text": "DELAY()", "is_correct": False},
-                    {"text": "PAUSE()", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which operator is used to combine results of two queries in Union-based SQLi?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "UNION combines result sets of two or more SELECT statements.",
-                "options": [
-                    {"text": "JOIN", "is_correct": False},
-                    {"text": "UNION", "is_correct": True},
-                    {"text": "AND", "is_correct": False},
-                    {"text": "PLUS", "is_correct": False}
-                ]
-            },
-            {
-                "text": "To use UNION based SQL injection, what must match between the two queries?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "The number of columns and data types must correspond.",
-                "options": [
-                    {"text": "Table names", "is_correct": False},
-                    {"text": "Number of columns", "is_correct": True},
-                    {"text": "Row count", "is_correct": False},
-                    {"text": "Database user", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the best way to prevent SQL Injection in modern applications?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "Parameterized queries (Prepared Statements) separate code from data.",
-                "options": [
-                    {"text": "Sanitizing input with regex", "is_correct": False},
-                    {"text": "Parameterized Queries", "is_correct": True},
-                    {"text": "Using a WAF", "is_correct": False},
-                    {"text": "Trusting user input", "is_correct": False}
-                ]
-            },
-            {
-                "text": "In a SQLi context, what is 'Out-of-Band' injection?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Knowledge",
-                "explanation": "It involves triggering an external network connection (like DNS or HTTP) to exfiltrate data.",
-                "options": [
-                    {"text": "Using a different band of wifi", "is_correct": False},
-                    {"text": "Exfiltrating data via a different channel", "is_correct": True},
-                    {"text": "Injecting into the band table", "is_correct": False},
-                    {"text": "Injection that crashes the server", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What system table often holds metadata about tables (like table names) in MySQL?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Exploitation",
-                "explanation": "information_schema.tables contains metadata about all tables.",
-                "options": [
-                    {"text": "mysql.tables", "is_correct": False},
-                    {"text": "sys.objects", "is_correct": False},
-                    {"text": "information_schema.tables", "is_correct": True},
-                    {"text": "dbo.sysobjects", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which SQL injection tool is widely used for automated exploitation?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Tools",
-                "explanation": "SQLMap is a popular open-source penetration testing tool.",
-                "options": [
-                    {"text": "Metasploit", "is_correct": False},
-                    {"text": "SQLMap", "is_correct": True},
-                    {"text": "Wireshark", "is_correct": False},
-                    {"text": "Nmap", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Second Order' SQL Injection?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Concept",
-                "explanation": "Malicious input is stored in the database and later executed when retrieved and used in a new query.",
-                "options": [
-                    {"text": "Injection that happens twice", "is_correct": False},
-                    {"text": "Stored injection executed later", "is_correct": True},
-                    {"text": "Injection into a secondary database", "is_correct": False},
-                    {"text": "Using two quotes instead of one", "is_correct": False}
-                ]
-            },
-            {
-                "text": "If `SELECT * FROM items WHERE id = $id` is vulnerable, what input leaks all items?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "Inputting `1 OR 1=1` results in `id = 1 OR 1=1`, which is true for all rows.",
-                "options": [
-                    {"text": "1", "is_correct": False},
-                    {"text": "1 OR 1=1", "is_correct": True},
-                    {"text": "0", "is_correct": False},
-                    {"text": "NULL", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What technique bypasses a WAF that blocks 'UNION SELECT'?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Evasion",
-                "explanation": "SQL comments, case variation (UnIoN SeLeCt), or encoding can sometimes bypass filters.",
-                "options": [
-                    {"text": "Using 'UNION JOIN'", "is_correct": False},
-                    {"text": "Case variation or encoding", "is_correct": True},
-                    {"text": "Using HTTPS", "is_correct": False},
-                    {"text": "Using a proxy", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which database is likely in use if `version()` returns the version?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Fingerprinting",
-                "explanation": "MySQL and PostgreSQL use `version()`. MSSQL uses `@@version`.",
-                "options": [
-                    {"text": "Oracle", "is_correct": False},
-                    {"text": "Microsoft SQL Server", "is_correct": False},
-                    {"text": "MySQL / PostgreSQL", "is_correct": True},
-                    {"text": "Access", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does a query with `LIMIT 0,1` typically return?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "It returns the first row of the result set.",
-                "options": [
-                    {"text": "No rows", "is_correct": False},
-                    {"text": "The first row", "is_correct": True},
-                    {"text": "The last row", "is_correct": False},
-                    {"text": "All rows", "is_correct": False}
-                ]
-            },
-            {
-                "text": "How can you test if a parameter is vulnerable to SQLi without triggering errors?",
-                "type": "multiple_choice",
-                "topic": "SQL Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Exploitation",
-                "explanation": "Using mathematical operations (e.g., id=2-1) to see if the same content loads as id=1.",
-                "options": [
-                    {"text": "Deleting the parameter", "is_correct": False},
-                    {"text": "Using math (e.g., 2-1)", "is_correct": True},
-                    {"text": "Injecting random strings", "is_correct": False},
-                    {"text": "Changing method to POST", "is_correct": False}
-                ]
-            },
-                
-            # 2. XSS (20 Questions)
-            {
-                "text": "What is the full form of XSS?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "It stands for Cross-Site Scripting.",
-                "options": [
-                    {"text": "Cross-Site Styling", "is_correct": False},
-                    {"text": "Cross-Site Scripting", "is_correct": True},
-                    {"text": "Extreme Site Security", "is_correct": False},
-                    {"text": "XML Style Sheet", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which part of the CIA triad does XSS primarily compromise?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Easy",
-                "skill_focus": "Concept",
-                "explanation": "It compromises Integrity (modifying page) and often Confidentiality (stealing cookies).",
-                "options": [
-                    {"text": "Availability only", "is_correct": False},
-                    {"text": "Integrity only", "is_correct": False},
-                    {"text": "Integrity and Confidentiality", "is_correct": True},
-                    {"text": "None", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Where does Stored XSS execute?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Easy",
-                "skill_focus": "Concept",
-                "explanation": "It executes in the browser of the victim who views the stored data.",
-                "options": [
-                    {"text": "On the web server", "is_correct": False},
-                    {"text": "In the victim's browser", "is_correct": True},
-                    {"text": "in the database", "is_correct": False},
-                    {"text": "In the network firewall", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the most common impact of XSS?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Session hijacking via stolen cookies is a very common high-impact outcome.",
-                "options": [
-                    {"text": "Server crash", "is_correct": False},
-                    {"text": "Session Hijacking (Stealing Cookies)", "is_correct": True},
-                    {"text": "Deleting the database", "is_correct": False},
-                    {"text": "Remote Code Execution on server", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which context is Reflected XSS associated with?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Easy",
-                "skill_focus": "Concept",
-                "explanation": "The payload is reflected from the request (URL or parameter) back to the response.",
-                "options": [
-                    {"text": "Stored database records", "is_correct": False},
-                    {"text": "The requestURL/parameters", "is_correct": True},
-                    {"text": "The server file system", "is_correct": False},
-                    {"text": "Third-party APIs", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which HTML attribute is often vulnerable to XSS if not sanitized?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "Event handlers like `onload`, `onclick`, `onerror`, `src`, `href` are common vectors.",
-                "options": [
-                    {"text": "class", "is_correct": False},
-                    {"text": "id", "is_correct": False},
-                    {"text": "onload / onclick", "is_correct": True},
-                    {"text": "width", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is DOM-based XSS?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "The vulnerability lies in client-side scripts manipulating the DOM using unsafe data sources.",
-                "options": [
-                    {"text": "Server sends malicious HTML", "is_correct": False},
-                    {"text": "Client-side script processes unsanitized input into DOM", "is_correct": True},
-                    {"text": "Database injection", "is_correct": False},
-                    {"text": "Network intercept", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which character encoding is often used to bypass XSS filters?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Evasion",
-                "explanation": "URL encoding, HTML entity encoding, or Unicode escapes can sometimes bypass simple filters.",
-                "options": [
-                    {"text": "Base64", "is_correct": False},
-                    {"text": "URL/HTML Entity Encoding", "is_correct": True},
-                    {"text": "AES Encryption", "is_correct": False},
-                    {"text": "Hashing", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which JS property is 'dangerous' sinks for DOM XSS?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "`innerHTML` parses string as HTML, executing scripts in some contexts (or `img onerror`). `outerHTML`, `document.write` are also dangerous.",
-                "options": [
-                    {"text": "innerText", "is_correct": False},
-                    {"text": "textContent", "is_correct": False},
-                    {"text": "innerHTML", "is_correct": True},
-                    {"text": "value", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What header helps prevent XSS exploits?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "Content-Security-Policy (CSP) defines what sources are trusted.",
-                "options": [
-                    {"text": "X-Frame-Options", "is_correct": False},
-                    {"text": "Content-Security-Policy (CSP)", "is_correct": True},
-                    {"text": "Strict-Transport-Security", "is_correct": False},
-                    {"text": "Cache-Control", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does the `HttpOnly` flag on a cookie do?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Mitigation",
-                "explanation": "It prevents JavaScript (and thus XSS) from accessing the cookie.",
-                "options": [
-                    {"text": "Encrypts the cookie", "is_correct": False},
-                    {"text": "Prevents client-side scripts from accessing the cookie", "is_correct": True},
-                    {"text": "Makes the cookie visible only to HTTP (not HTTPS)", "is_correct": False},
-                    {"text": "Expires the cookie immediately", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which of these is a Polyglot in XSS context?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Exploitation",
-                "explanation": "A polyglot payload is designed to be valid and executable in multiple contexts (e.g. inside attribute, inside script, inside HTML).",
-                "options": [
-                    {"text": "A payload that speaks multiple languages", "is_correct": False},
-                    {"text": "A payload executable in multiple injection contexts", "is_correct": True},
-                    {"text": "A specialized browser", "is_correct": False},
-                    {"text": "A server configuration", "is_correct": False}
-                ]
-            },
-            {
-                "text": "If `javascript:` pseudo-protocol is used in an `href` attribute, what happens?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "The browser executes the code following `javascript:` when the link is clicked.",
-                "options": [
-                    {"text": "It links to a file named javascript", "is_correct": False},
-                    {"text": "It executes the JavaScript code", "is_correct": True},
-                    {"text": "It is ignored", "is_correct": False},
-                    {"text": "It throws a syntax error", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which sink is safe to use to avoid XSS when setting text content?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "`textContent` or `innerText` treats content as plain text, not HTML.",
-                "options": [
-                    {"text": "innerHTML", "is_correct": False},
-                    {"text": "document.write", "is_correct": False},
-                    {"text": "textContent", "is_correct": True},
-                    {"text": "outerHTML", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does 'Mutated XSS' (mXSS) rely on?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Concept",
-                "explanation": "It relies on differences in how browsers parse and mutate HTML (e.g. fixing broken tags) which can turn safe markup into unsafe markup.",
-                "options": [
-                    {"text": "Mutation Observers", "is_correct": False},
-                    {"text": "Browser HTML parsing/fixups creating executable code", "is_correct": True},
-                    {"text": "Server-side mutation", "is_correct": False},
-                    {"text": "Genetic algorithms", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Can XSS be used to perform CSRF attacks?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Chaining",
-                "explanation": "Yes, XSS can execute arbitrary JS, which can send forged requests on behalf of the user, bypassing CSRF tokens if they can be read.",
-                "options": [
-                    {"text": "No, they are different", "is_correct": False},
-                    {"text": "Yes, XSS can automate requests and steal tokens", "is_correct": True},
-                    {"text": "Only if the user is admin", "is_correct": False},
-                    {"text": "Only in Internet Explorer", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the 'Self-XSS'?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "It requires the victim to manually inject the payload (e.g., pasting into console), usually via social engineering.",
-                "options": [
-                    {"text": "XSS that fixes itself", "is_correct": False},
-                    {"text": "Attack where victim is tricked into executing code on themselves", "is_correct": True},
-                    {"text": "XSS on your own server", "is_correct": False},
-                    {"text": "An automated XSS scanner", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which framework feature often mitigates XSS by default?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Easy",
-                "skill_focus": "Prevention",
-                "explanation": "Modern frameworks like React, Angular, and Vue automatically escape content bound to views.",
-                "options": [
-                    {"text": "Automatic Context-Aware Encoding/Escaping", "is_correct": True},
-                    {"text": "Faster rendering", "is_correct": False},
-                    {"text": "Virtual DOM", "is_correct": False},
-                    {"text": "Components", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is a 'Blind' XSS?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Concept",
-                "explanation": "The attacker inputs the payload but it triggers elsewhere (e.g., in an admin panel or logs) where the attacker can't see it.",
-                "options": [
-                    {"text": "XSS without a monitor", "is_correct": False},
-                    {"text": "Payload fires in an application part not visible to attacker", "is_correct": True},
-                    {"text": "XSS using audio", "is_correct": False},
-                    {"text": "It is impossible", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which tool is commonly used to exploit XSS by hooking browsers?",
-                "type": "multiple_choice",
-                "topic": "XSS Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Tools",
-                "explanation": "BeEF (Browser Exploitation Framework) is designed to hook browsers vulnerable to XSS.",
-                "options": [
-                    {"text": "Metasploit", "is_correct": False},
-                    {"text": "BeEF", "is_correct": True},
-                    {"text": "Wireshark", "is_correct": False},
-                    {"text": "Hydra", "is_correct": False}
-                ]
-            },
+        # Get the massive list of 200 questions
+        questions_data = generate_questions()
 
-            # 3. CSRF (20 Questions)
-            {
-                "text": "What does CSRF stand for?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Cross-Site Request Forgery.",
-                "options": [
-                    {"text": "Cross-Site Request Forgery", "is_correct": True},
-                    {"text": "Client-Side Request Form", "is_correct": False},
-                    {"text": "Common Server Runtime Failure", "is_correct": False},
-                    {"text": "Cross-System Remote File", "is_correct": False}
-                ]
-            },
-            {
-                "text": "How does a CSRF attack work?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Easy",
-                "skill_focus": "Concept",
-                "explanation": "It tricks an authenticated user into executing an unwanted action on a web application they are logged into.",
-                "options": [
-                    {"text": "Steals user password directly", "is_correct": False},
-                    {"text": "Tricks user's browser into sending a request to a vulnerable site", "is_correct": True},
-                    {"text": "Injects scripts into the site", "is_correct": False},
-                    {"text": "Crashes the server", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the primary mechanism that allows CSRF?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "Browsers automatically include ambient credentials (cookies, basic auth) with cross-origin requests.",
-                "options": [
-                    {"text": "Browser bugs", "is_correct": False},
-                    {"text": "Automatic inclusion of session cookies/credentials", "is_correct": True},
-                    {"text": "Weak passwords", "is_correct": False},
-                    {"text": "Open ports", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the most common defense against CSRF?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "Anti-CSRF tokens (synchronizer tokens) ensure the request originated from the legitimate site.",
-                "options": [
-                    {"text": "Encryption", "is_correct": False},
-                    {"text": "Anti-CSRF Tokens", "is_correct": True},
-                    {"text": "Firewalls", "is_correct": False},
-                    {"text": "Hiding the form", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Can `SameSite` cookie attribute prevent CSRF?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "Yes, `SameSite=Strict` or `Lax` prevents cookies from being sent in cross-site requests.",
-                "options": [
-                    {"text": "No, it is for XSS", "is_correct": False},
-                    {"text": "Yes, it restricts cookie sending on cross-origin requests", "is_correct": True},
-                    {"text": "Only in Firefox", "is_correct": False},
-                    {"text": "No, it is deprecated", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which HTTP method is generally logically safe from CSRF via `<img>` tags?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "`<img>` tags issue GET requests. If state-changing actions require POST, simple image tags fail.",
-                "options": [
-                    {"text": "GET", "is_correct": False},
-                    {"text": "POST", "is_correct": True},
-                    {"text": "HEAD", "is_correct": False},
-                    {"text": "OPTIONS", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Why is 'Double Submit Cookie' a CSRF defense?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Prevention",
-                "explanation": "It sends a random value in both a cookie and a request parameter; the server verifies they match.",
-                "options": [
-                    {"text": "It submits the form twice", "is_correct": False},
-                    {"text": "Verifies token in cookie matches token in request body", "is_correct": True},
-                    {"text": "Uses two cookies", "is_correct": False},
-                    {"text": "It is not a defense", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What happens if a site allows changing email via GET request without token?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Easy",
-                "skill_focus": "Exploitation",
-                "explanation": "An attacker can simply send a link (or modify via image src) to change the victim's email.",
-                "options": [
-                    {"text": "It is secure", "is_correct": False},
-                    {"text": "It is vulnerable to CSRF", "is_correct": True},
-                    {"text": "It throws an error", "is_correct": False},
-                    {"text": "It requires admin approval", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Does an XSS vulnerability defeat CSRF protection?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Chaining",
-                "explanation": "Yes, XSS allows reading the CSRF token and constructing a valid forged request.",
-                "options": [
-                    {"text": "No", "is_correct": False},
-                    {"text": "Yes, attacker can read the token via script", "is_correct": True},
-                    {"text": "Only if token is in header", "is_correct": False},
-                    {"text": "Only for GET requests", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Login CSRF'?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "Attacker logs the victim into the attacker's account, so victim's activity is tracked by attacker.",
-                "options": [
-                    {"text": "Logging in as admin", "is_correct": False},
-                    {"text": "Forcing victim to log in to attacker's account", "is_correct": True},
-                    {"text": "Bypassing login", "is_correct": False},
-                    {"text": "Stealing login credentials", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Is JSON-based API automatically safe from CSRF?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Concept",
-                "explanation": "Mostly yes, because HTML forms can't send JSON by default, but with CORS misconfig or flash, it might be possible.",
-                "options": [
-                    {"text": "Yes, always", "is_correct": False},
-                    {"text": "No, if CORS is misconfigured or via other vectors", "is_correct": True},
-                    {"text": "No, because forms send JSON", "is_correct": False},
-                    {"text": "Yes, because browser blocks JSON", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which header is used to check the origin of the request?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "Origin and Referer headers help identify where the request originated.",
-                "options": [
-                    {"text": "Host", "is_correct": False},
-                    {"text": "Origin / Referer", "is_correct": True},
-                    {"text": "User-Agent", "is_correct": False},
-                    {"text": "Accept", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does a CSRF PoC often look like?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Easy",
-                "skill_focus": "Exploitation",
-                "explanation": "Often an HTML page with a hidden form that auto-submits via JavaScript.",
-                "options": [
-                    {"text": "A python script", "is_correct": False},
-                    {"text": "An auto-submitting HTML form", "is_correct": True},
-                    {"text": "A SQL query", "is_correct": False},
-                    {"text": "A binary file", "is_correct": False}
-                ]
-            },
-            {
-                "text": "If a request requires a custom header (e.g. X-Requested-With), is it CSRF vulnerable?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Prevention",
-                "explanation": "Standard HTML forms can't add custom headers. An attacker needs CORS to send custom headers cross-origin.",
-                "options": [
-                    {"text": "Yes, easily", "is_correct": False},
-                    {"text": "Generally no, unless CORS allows it", "is_correct": True},
-                    {"text": "Yes, using <img>", "is_correct": False},
-                    {"text": "It depends on the cookie", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the specialized token pattern name for CSRF defense?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Knowledge",
-                "explanation": "Synchronizer Token Pattern.",
-                "options": [
-                    {"text": "Asynchronous Token Pattern", "is_correct": False},
-                    {"text": "Synchronizer Token Pattern", "is_correct": True},
-                    {"text": "Random Cookie Pattern", "is_correct": False},
-                    {"text": "Session ID Pattern", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Why don't we just use the session ID as the CSRF token?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Concept",
-                "explanation": "It would expose the session ID in the HTML source/URL, increasing risk of session hijacking.",
-                "options": [
-                    {"text": "It is too short", "is_correct": False},
-                    {"text": "It increases risk of session leakage/hijacking", "is_correct": True},
-                    {"text": "It doesn't work", "is_correct": False},
-                    {"text": "It's fine to use it", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Can a CSRF attack retrieve data from the response?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Limit",
-                "explanation": "Standard CSRF is a 'one-way' attack; the attacker sends a request but cannot see the response (unless CORS/XSS allows).",
-                "options": [
-                    {"text": "Yes, always", "is_correct": False},
-                    {"text": "No, it's a state-changing attack, not data retrieval", "is_correct": True},
-                    {"text": "Only if it is JSON", "is_correct": False},
-                    {"text": "Only if status is 200", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the risk of using GET for state-changing actions?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Easy",
-                "skill_focus": "Prevention",
-                "explanation": "It makes CSRF trivial (via image tags, links) and violates HTTP semantics.",
-                "options": [
-                    {"text": "It is slower", "is_correct": False},
-                    {"text": "Trivial CSRF exploitation", "is_correct": True},
-                    {"text": "Data corruption", "is_correct": False},
-                    {"text": "None", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which attribute in `set-cookie` is crucial for CSRF defense in modern browsers?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "SameSite attribute.",
-                "options": [
-                    {"text": "Secure", "is_correct": False},
-                    {"text": "SameSite", "is_correct": True},
-                    {"text": "Domain", "is_correct": False},
-                    {"text": "Path", "is_correct": False}
-                ]
-            },
-            {
-                "text": "If a site checks `Referer` header only, can it be bypassed?",
-                "type": "multiple_choice",
-                "topic": "CSRF Scenario",
-                "difficulty": "Hard",
-                "skill_focus": "Evasion",
-                "explanation": "Yes, referer can be spoofed in some conditions, or omitted (e.g., from HTTPS to HTTP, or via meta tag).",
-                "options": [
-                    {"text": "No, Referer is immutable", "is_correct": False},
-                    {"text": "Yes, referer can be suppressed or sometimes spoofed", "is_correct": True},
-                    {"text": "Only in Chrome", "is_correct": False},
-                    {"text": "Only if user uses VPN", "is_correct": False}
-                ]
-            },
-
-            # 4. Command Injection (20 Questions)
-            {
-                "text": "What is Command Injection?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Execution of arbitrary commands on the host operating system via a vulnerable application.",
-                "options": [
-                    {"text": "Injecting SQL commands", "is_correct": False},
-                    {"text": "Executing OS commands via application input", "is_correct": True},
-                    {"text": "Injecting HTML commands", "is_correct": False},
-                    {"text": "Overwriting memory", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which character is often used to chain commands in Linux?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Easy",
-                "skill_focus": "Exploitation",
-                "explanation": "The semi-colon `;` allows sequential execution of commands.",
-                "options": [
-                    {"text": ".", "is_correct": False},
-                    {"text": ";", "is_correct": True},
-                    {"text": ":", "is_correct": False},
-                    {"text": ",", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the difference between Command Injection and Code Injection?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "Command Injection executes OS commands; Code Injection executes application code (e.g. PHP, Python).",
-                "options": [
-                    {"text": "They are the same", "is_correct": False},
-                    {"text": "Command Injection executes OS commands; Code Injection executes app code", "is_correct": True},
-                    {"text": "Code injection is for databases", "is_correct": False},
-                    {"text": "Command injection is client-side", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which of these functions in PHP is vulnerable to command injection if input is not sanitized?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "`system()` executes an external program and displays the output.",
-                "options": [
-                    {"text": "echo", "is_correct": False},
-                    {"text": "system()", "is_correct": True},
-                    {"text": "print", "is_correct": False},
-                    {"text": "var_dump", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does the command `whoami` return?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Easy",
-                "skill_focus": "Exploitation",
-                "explanation": "It prints the username associated with the current effective user ID.",
-                "options": [
-                    {"text": "The computer's name", "is_correct": False},
-                    {"text": "The current user", "is_correct": True},
-                    {"text": "The IP address", "is_correct": False},
-                    {"text": "The current directory", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which character is used to separate commands in Windows command line?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "`&` or `&&` are used to chain commands in Windows CMD.",
-                "options": [
-                    {"text": ";", "is_correct": False},
-                    {"text": "&", "is_correct": True},
-                    {"text": "#", "is_correct": False},
-                    {"text": "$", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Blind' Command Injection?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Hard",
-                "skill_focus": "Concept",
-                "explanation": "The output of the command is not returned to the user.",
-                "options": [
-                    {"text": "Injecting commands without looking", "is_correct": False},
-                    {"text": "Command executes but no output is shown", "is_correct": True},
-                    {"text": "Command is encrypted", "is_correct": False},
-                    {"text": "Command runs in background", "is_correct": False}
-                ]
-            },
-            {
-                "text": "How can you detect blind command injection?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Hard",
-                "skill_focus": "Exploitation",
-                "explanation": "Using time-based commands like `sleep` or `ping` to cause a delay.",
-                "options": [
-                    {"text": "By reading the error logs", "is_correct": False},
-                    {"text": "Using time delays (sleep/ping)", "is_correct": True},
-                    {"text": "Guessing the password", "is_correct": False},
-                    {"text": "Checking the source code", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which function is safer to use in Python to avoid shell injection?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "`subprocess.run` with `shell=False` (default) treats arguments as data, not commands.",
-                "options": [
-                    {"text": "os.system()", "is_correct": False},
-                    {"text": "subprocess.run() with shell=False", "is_correct": True},
-                    {"text": "os.popen()", "is_correct": False},
-                    {"text": "exec()", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does `cat /etc/passwd` do in a Linux injection?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "It reads the file containing user account information.",
-                "options": [
-                    {"text": "Changes the password", "is_correct": False},
-                    {"text": "Reads user account list", "is_correct": True},
-                    {"text": "Deletes the password file", "is_correct": False},
-                    {"text": "Creates a new user", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the purpose of the `ping` command in injection testing?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Easy",
-                "skill_focus": "Exploitation",
-                "explanation": "It is often used to test for execution and network connectivity.",
-                "options": [
-                    {"text": "To crash the server", "is_correct": False},
-                    {"text": "To test connectivity/execution", "is_correct": True},
-                    {"text": "To play a game", "is_correct": False},
-                    {"text": "To encrypt data", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which character works as a command separator in both Linux and Windows?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "`|` (pipe) works in both to pipe output.",
-                "options": [
-                    {"text": ";", "is_correct": False},
-                    {"text": "|", "is_correct": True},
-                    {"text": "%", "is_correct": False},
-                    {"text": "/", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Argument Injection'?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Hard",
-                "skill_focus": "Concept",
-                "explanation": "Injecting arguments into a command rather than a new command (e.g. injecting flags to a binary).",
-                "options": [
-                    {"text": "Injecting into a function argument", "is_correct": False},
-                    {"text": "Injecting parameters/flags to an existing command", "is_correct": True},
-                    {"text": "Arguing with the server", "is_correct": False},
-                    {"text": "Injecting SQL into arguments", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Why is `eval()` dangerous?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Easy",
-                "skill_focus": "Concept",
-                "explanation": "`eval()` executes a string as code, leading to Code Injection (and potentially command execution).",
-                "options": [
-                    {"text": "It is slow", "is_correct": False},
-                    {"text": "It executes arbitrary code", "is_correct": True},
-                    {"text": "It returns wrong values", "is_correct": False},
-                    {"text": "It is deprecated", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which usage is vulnerable: `grep $pattern file.txt`?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "If `$pattern` is not quoted or sanitized, command injection is possible.",
-                "options": [
-                    {"text": "The one with hardcoded pattern", "is_correct": False},
-                    {"text": "The one taking unsanitized user input in shell", "is_correct": True},
-                    {"text": "Using grep inside a script", "is_correct": False},
-                    {"text": "Using grep recursively", "is_correct": False}
-                ]
-            },
-            {
-                "text": "How can you trigger a reverse shell via command injection?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Hard",
-                "skill_focus": "Exploitation",
-                "explanation": "Using tools like `nc` (netcat) or bash redirection to connect back to the attacker.",
-                "options": [
-                    {"text": "Using `ls`", "is_correct": False},
-                    {"text": "Using `nc -e /bin/sh <attacker-ip>`", "is_correct": True},
-                    {"text": "Using `cd`", "is_correct": False},
-                    {"text": "Using `cat`", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the best defense against OS Command Injection?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "Avoid calling OS commands directly; use language-specific APIs.",
-                "options": [
-                    {"text": "Sanitization", "is_correct": False},
-                    {"text": "Avoid calling OS commands; use libraries", "is_correct": True},
-                    {"text": "Running as root", "is_correct": False},
-                    {"text": "Obfuscation", "is_correct": False}
-                ]
-            },
-            {
-                "text": "If you must use OS commands, what should you do?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "Use whitelist validation and parameterized APIs (e.g. execve array w/o shell).",
-                "options": [
-                    {"text": "Use regex only", "is_correct": False},
-                    {"text": "Use parameterized APIs and whitelist validation", "is_correct": True},
-                    {"text": "Use blacklist validation", "is_correct": False},
-                    {"text": "Encode input to Base64", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does `$()` do in a shell command?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "Command substitution; it executes the command inside and replaces it with the output.",
-                "options": [
-                    {"text": "Calculates math", "is_correct": False},
-                    {"text": "Executes the command inside (Command Substitution)", "is_correct": True},
-                    {"text": "Comments the line", "is_correct": False},
-                    {"text": "Variables definition", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the specialized term for injecting commands into a serialized object?",
-                "type": "multiple_choice",
-                "topic": "Command Injection",
-                "difficulty": "Hard",
-                "skill_focus": "Concept",
-                "explanation": "Insecure Deserialization often leads to RCE (Remote Code/Command Execution).",
-                "options": [
-                    {"text": "Object Injection", "is_correct": False},
-                    {"text": "Insecure Deserialization (leading to RCE)", "is_correct": True},
-                    {"text": "Class Injection", "is_correct": False},
-                    {"text": "Method Injection", "is_correct": False}
-                ]
-            },
-
-            # 5. Broken Authentication (20 Questions)
-            {
-                "text": "Which practice is considered 'Broken Authentication'?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Allowing weak passwords or default credentials.",
-                "options": [
-                    {"text": "Enforcing 2FA", "is_correct": False},
-                    {"text": "Allowing default or weak passwords", "is_correct": True},
-                    {"text": "Using salted hashes", "is_correct": False},
-                    {"text": "Logging out inactive users", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Credential Stuffing'?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "Using automated injection of breached username/password pairs to gain access to user accounts.",
-                "options": [
-                    {"text": "Filling the database with credentials", "is_correct": False},
-                    {"text": "Trying breached credentials from other sites", "is_correct": True},
-                    {"text": "Creating fake accounts", "is_correct": False},
-                    {"text": "Stealing cookies", "is_correct": False}
-                ]
-            },
-            {
-                "text": "How should passwords be stored in a database?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Easy",
-                "skill_focus": "Prevention",
-                "explanation": "Passwords should be salted and hashed using a strong algorithm (e.g., Argon2, bcrypt).",
-                "options": [
-                    {"text": "Plain text", "is_correct": False},
-                    {"text": "Encrypted", "is_correct": False},
-                    {"text": "Salted and Hashed", "is_correct": True},
-                    {"text": "Base64 Encoded", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What prevents Brute Force attacks?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "Account lockout policies or rate limiting deter brute force attempts.",
-                "options": [
-                    {"text": "Shorter passwords", "is_correct": False},
-                    {"text": "Rate Limiting / Account Lockout", "is_correct": True},
-                    {"text": "Using HTTP", "is_correct": False},
-                    {"text": "Hiding the login page", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Session ID should be...?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Easy",
-                "skill_focus": "Prevention",
-                "explanation": "Session IDs must be long, random, and unpredictable.",
-                "options": [
-                    {"text": "Sequential", "is_correct": False},
-                    {"text": "Based on username", "is_correct": False},
-                    {"text": "Long, random, and unpredictable", "is_correct": True},
-                    {"text": "Short and easy to remember", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Session Fixation'?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "Attacker sets a user's session ID to one known to the attacker.",
-                "options": [
-                    {"text": "Fixing a broken session", "is_correct": False},
-                    {"text": "Attacker provides a session ID for victim to use", "is_correct": True},
-                    {"text": "Session timing out", "is_correct": False},
-                    {"text": "Session stored in URL", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Why is it important to invalidate session on logout?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Easy",
-                "skill_focus": "Prevention",
-                "explanation": "To prevent session reuse if the session ID is stolen later.",
-                "options": [
-                    {"text": "To clear browser history", "is_correct": False},
-                    {"text": "To prevent session reuse", "is_correct": True},
-                    {"text": "To save server memory", "is_correct": False},
-                    {"text": "To reset the password", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which is a weak method for 2FA?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Medium",
-                "skill_focus": "Knowledge",
-                "explanation": "SMS is considered weak due to SIM swapping attacks.",
-                "options": [
-                    {"text": "Authenticator App", "is_correct": False},
-                    {"text": "SMS", "is_correct": True},
-                    {"text": "Hardware Key (YubiKey)", "is_correct": False},
-                    {"text": "Push Notification", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the recommended maximum session idle timeout for high security apps?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Hard",
-                "skill_focus": "Best Practice",
-                "explanation": "Short timeouts (e.g. 15-30 mins) reduce the window of opportunity for attackers.",
-                "options": [
-                    {"text": "1 week", "is_correct": False},
-                    {"text": "15-30 minutes", "is_correct": True},
-                    {"text": "24 hours", "is_correct": False},
-                    {"text": "Never", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What allows attackers to enumerate valid usernames?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "Different error messages for 'User not found' vs 'Wrong password' allow enumeration.",
-                "options": [
-                    {"text": "Generic error messages", "is_correct": False},
-                    {"text": "Distinct error messages (e.g. 'User not found')", "is_correct": True},
-                    {"text": "Using CAPTCHA", "is_correct": False},
-                    {"text": "Rate limiting", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Where should session IDs NOT be stored?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "URLs are logged in history, proxy logs, and referer headers, leaking the ID.",
-                "options": [
-                    {"text": "Secure Cookies", "is_correct": False},
-                    {"text": "URL parameters", "is_correct": True},
-                    {"text": "Local Storage (controversial but better than URL)", "is_correct": False},
-                    {"text": "Memory", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the main risk of 'Default Credentials'?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "They are publicly known and easily exploited by attackers.",
-                "options": [
-                    {"text": "They are hard to memorize", "is_correct": False},
-                    {"text": "They are publicly known", "is_correct": True},
-                    {"text": "They are too long", "is_correct": False},
-                    {"text": "They expire quickly", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does MFA stand for?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Multi-Factor Authentication.",
-                "options": [
-                    {"text": "Multi-Form Access", "is_correct": False},
-                    {"text": "Multi-Factor Authentication", "is_correct": True},
-                    {"text": "Main File Authentication", "is_correct": False},
-                    {"text": "Multiple Folder Access", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which factor category does a fingerprint fall into?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Something you are (Biometrics).",
-                "options": [
-                    {"text": "Something you know", "is_correct": False},
-                    {"text": "Something you have", "is_correct": False},
-                    {"text": "Something you are", "is_correct": True},
-                    {"text": "Something you do", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Password Spraying'?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "Trying a few common passwords against many accounts to avoid lockout.",
-                "options": [
-                    {"text": "Guessing many passwords for one account", "is_correct": False},
-                    {"text": "Guessing a few passwords against many accounts", "is_correct": True},
-                    {"text": "Emailing passwords to users", "is_correct": False},
-                    {"text": "Resetting everyone's password", "is_correct": False}
-                ]
-            },
-            {
-                "text": "How long should a temporary password reset token be valid?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Medium",
-                "skill_focus": "Best Practice",
-                "explanation": "Short duration (e.g. 10-20 minutes) limits the attack window.",
-                "options": [
-                    {"text": "Forever", "is_correct": False},
-                    {"text": "24 hours", "is_correct": False},
-                    {"text": "Short duration (e.g. 20 minutes)", "is_correct": True},
-                    {"text": "1 minute", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What vulnerability involves the attacker waiting for a user to log in and using their valid session?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "Session Hijacking.",
-                "options": [
-                    {"text": "Phishing", "is_correct": False},
-                    {"text": "Session Hijacking", "is_correct": True},
-                    {"text": "SQL Injection", "is_correct": False},
-                    {"text": "XSS", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Is 'admin' a secure username?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Easy",
-                "skill_focus": "Best Practice",
-                "explanation": "It is the most common username guessed by attackers.",
-                "options": [
-                    {"text": "Yes", "is_correct": False},
-                    {"text": "No, it is too common/predictable", "is_correct": True},
-                    {"text": "Yes, if password is strong", "is_correct": False},
-                    {"text": "No, it is too short", "is_correct": False}
-                ]
-            },
-            {
-                "text": "When should the session ID be changed (rotated)?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "Upon successful login (and privilege change) to prevent session fixation.",
-                "options": [
-                    {"text": "On every page load", "is_correct": False},
-                    {"text": "After successful login", "is_correct": True},
-                    {"text": "Never", "is_correct": False},
-                    {"text": "When user clicks a button", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the risk of allowing concurrent logins?",
-                "type": "multiple_choice",
-                "topic": "Broken Authentication",
-                "difficulty": "Hard",
-                "skill_focus": "Policy",
-                "explanation": "It makes it harder to detect if an account is compromised (attacker logged in at same time as user).",
-                "options": [
-                    {"text": "Server overload", "is_correct": False},
-                    {"text": "Harder to detect compromise", "is_correct": True},
-                    {"text": "Database locks", "is_correct": False},
-                    {"text": "None", "is_correct": False}
-                ]
-            },
-
-            # 6. Security Misconfiguration (20 Questions)
-            {
-                "text": "What is a common Security Misconfiguration?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Leaving default accounts/passwords or unnecessary features enabled.",
-                "options": [
-                    {"text": "Complex passwords", "is_correct": False},
-                    {"text": "Default accounts and passwords", "is_correct": True},
-                    {"text": "Updated software", "is_correct": False},
-                    {"text": "Firewall enabled", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What information should error messages reveal to users?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Easy",
-                "skill_focus": "Best Practice",
-                "explanation": "Generic messages. Detailed errors (stack traces) leak info to attackers.",
-                "options": [
-                    {"text": "Full stack trace", "is_correct": False},
-                    {"text": "Database version", "is_correct": False},
-                    {"text": "Generic error message", "is_correct": True},
-                    {"text": "Server path", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Why is 'Directory Listing' dangerous enabled?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Easy",
-                "skill_focus": "Exploitation",
-                "explanation": "It allows attackers to see all files in a directory, potentially finding sensitive files.",
-                "options": [
-                    {"text": "It slows down the server", "is_correct": False},
-                    {"text": "It reveals file structure and sensitive files", "is_correct": True},
-                    {"text": "It deletes files", "is_correct": False},
-                    {"text": "It looks ugly", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Leaving debug features enabled in production is...?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Medium",
-                "skill_focus": "Best Practice",
-                "explanation": "A security misconfiguration leading to information leakage.",
-                "options": [
-                    {"text": "Helpful for users", "is_correct": False},
-                    {"text": "A Security Misconfiguration", "is_correct": True},
-                    {"text": "Required for performance", "is_correct": False},
-                    {"text": "Harmless", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the principle of 'Least Privilege'?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "Users and processes should only have the permissions necessary to perform their function.",
-                "options": [
-                    {"text": "Giving everyone admin rights", "is_correct": False},
-                    {"text": "Granting only necessary permissions", "is_correct": True},
-                    {"text": "Blocking all access", "is_correct": False},
-                    {"text": "Using guest accounts", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which HTTP header is often missing in misconfigured servers?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "Security headers like HSTS, CSP, X-Frame-Options are often missed.",
-                "options": [
-                    {"text": "Date", "is_correct": False},
-                    {"text": "Content-Type", "is_correct": False},
-                    {"text": "Strict-Transport-Security (HSTS)", "is_correct": True},
-                    {"text": "Host", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Use of outdated software components is associated with?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Using components with known vulnerabilities is a form of misconfiguration/maintenance failure.",
-                "options": [
-                    {"text": "Vulnerable and Outdated Components", "is_correct": True},
-                    {"text": "SQL Injection", "is_correct": False},
-                    {"text": "XSS", "is_correct": False},
-                    {"text": "Phishing", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What should be done with sample apps installed by default on web servers?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Easy",
-                "skill_focus": "Best Practice",
-                "explanation": "They should be removed as they contain known vulnerabilities and are not needed.",
-                "options": [
-                    {"text": "Keep them for reference", "is_correct": False},
-                    {"text": "Remove them", "is_correct": True},
-                    {"text": "Password protect them", "is_correct": False},
-                    {"text": "Rename them", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Why is it important to change default keys and passwords?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Easy",
-                "skill_focus": "Prevention",
-                "explanation": "Attackers check for default credentials first.",
-                "options": [
-                    {"text": "To confuse customization", "is_correct": False},
-                    {"text": "To prevent unauthorized access via known defaults", "is_correct": True},
-                    {"text": "It is not important", "is_correct": False},
-                    {"text": "To reset the warranty", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does CORS stands for?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Medium",
-                "skill_focus": "Knowledge",
-                "explanation": "Cross-Origin Resource Sharing.",
-                "options": [
-                    {"text": "Cross-Origin Resource Sharing", "is_correct": True},
-                    {"text": "Common Origin Request System", "is_correct": False},
-                    {"text": "Central Origin Router Service", "is_correct": False},
-                    {"text": "Cross Object Request Security", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which CORS header value is dangerous if used blindly?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "`Access-Control-Allow-Origin: *` allows any site to access resources (if credentials not included, but bad practice).",
-                "options": [
-                    {"text": "null", "is_correct": False},
-                    {"text": "* (Wildcard)", "is_correct": True},
-                    {"text": "The specific domain", "is_correct": False},
-                    {"text": "None", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Clickjacking'?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "Tricking a user into clicking something different from what they see, often via transparent iframes.",
-                "options": [
-                    {"text": "Hijacking the mouse cursor", "is_correct": False},
-                    {"text": "Overlaying invisible frames to trick clicks", "is_correct": True},
-                    {"text": "Stealing clicks for ads", "is_correct": False},
-                    {"text": "Breaking the mouse", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which header prevents Clickjacking?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "X-Frame-Options (or CSP frame-ancestors).",
-                "options": [
-                    {"text": "X-XSS-Protection", "is_correct": False},
-                    {"text": "X-Frame-Options", "is_correct": True},
-                    {"text": "X-Content-Type-Options", "is_correct": False},
-                    {"text": "Strict-Transport-Security", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does disabling unnecessary ports/services achieve?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Easy",
-                "skill_focus": "Prevention",
-                "explanation": "It reduces the attack surface.",
-                "options": [
-                    {"text": "Saves electricity", "is_correct": False},
-                    {"text": "Reduces attack surface", "is_correct": True},
-                    {"text": "Increases internet speed", "is_correct": False},
-                    {"text": "Makes server boot faster", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Using HTTP instead of HTTPS is a...",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Misconfiguration failing to protect data in transit.",
-                "options": [
-                    {"text": "Good practice", "is_correct": False},
-                    {"text": "Security Misconfiguration", "is_correct": True},
-                    {"text": "Faster option", "is_correct": False},
-                    {"text": "Cheaper option", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the risk of exposed '.git' folder?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "It allows attackers to download the entire source code and history.",
-                "options": [
-                    {"text": "Server crash", "is_correct": False},
-                    {"text": "Source code disclosure", "is_correct": True},
-                    {"text": "Git commit injection", "is_correct": False},
-                    {"text": "None", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which file is used to configure access to directories in Apache?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Medium",
-                "skill_focus": "Knowledge",
-                "explanation": ".htaccess",
-                "options": [
-                    {"text": "config.php", "is_correct": False},
-                    {"text": ".htaccess", "is_correct": True},
-                    {"text": "web.config", "is_correct": False},
-                    {"text": "nginx.conf", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Misconfigured permissions on AWS S3 buckets often lead to?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "Data leakage/breach where private data is public.",
-                "options": [
-                    {"text": "DDoS", "is_correct": False},
-                    {"text": "Data Leakage", "is_correct": True},
-                    {"text": "Ransomware", "is_correct": False},
-                    {"text": "Phishing", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Hardcoded Secrets'?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Storing API keys, passwords, etc. in the source code.",
-                "options": [
-                    {"text": "Secrets that are hard to guess", "is_correct": False},
-                    {"text": "Credentials stored in source code", "is_correct": True},
-                    {"text": "Encrypted secrets", "is_correct": False},
-                    {"text": "Secrets in hardware", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Automated scanning tools help find?",
-                "type": "multiple_choice",
-                "topic": "Security Misconfiguration",
-                "difficulty": "Easy",
-                "skill_focus": "Prevention",
-                "explanation": "They are efficient at finding common misconfigurations.",
-                "options": [
-                    {"text": "Logic flaws", "is_correct": False},
-                    {"text": "Common misconfigurations", "is_correct": True},
-                    {"text": "Zero-days", "is_correct": False},
-                    {"text": "Phishing emails", "is_correct": False}
-                ]
-            },
-            # 7. Insecure Storage (20 Questions)
-            {
-                "text": "What is the primary risk of Insecure Storage?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Sensitive data may be disclosed if not properly protected at rest.",
-                "options": [
-                    {"text": "Slow disk access", "is_correct": False},
-                    {"text": "Unauthorized disclosure of sensitive data", "is_correct": True},
-                    {"text": "Data being too large", "is_correct": False},
-                    {"text": "Disk failure", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Where should encryption keys be stored?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Medium",
-                "skill_focus": "Best Practice",
-                "explanation": "Keys should be stored securely, separate from the data they encrypt (e.g., in a KMS).",
-                "options": [
-                    {"text": "In the same database table", "is_correct": False},
-                    {"text": "In a secure Key Management System (KMS)", "is_correct": True},
-                    {"text": "In the application source code", "is_correct": False},
-                    {"text": "In a public Git repository", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which of these is a weak hashing algorithm for passwords?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "MD5 is fast and has known collisions, making it unsuitable for password hashing.",
-                "options": [
-                    {"text": "Argon2", "is_correct": False},
-                    {"text": "BCrypt", "is_correct": False},
-                    {"text": "MD5", "is_correct": True},
-                    {"text": "SCrypt", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Salting' in the context of password storage?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Easy",
-                "skill_focus": "Concept",
-                "explanation": "Adding unique random data to each password before hashing to defeat rainbow tables.",
-                "options": [
-                    {"text": "Enciphering the password", "is_correct": False},
-                    {"text": "Adding random data to the input", "is_correct": True},
-                    {"text": "Storing passwords in a salt shaker", "is_correct": False},
-                    {"text": "Compressing the password", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Storing sensitive data in browser LocalStorage is risky because...?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Medium",
-                "skill_focus": "Knowledge",
-                "explanation": "LocalStorage is accessible via JavaScript on the same origin, making it vulnerable to XSS.",
-                "options": [
-                    {"text": "It is too small", "is_correct": False},
-                    {"text": "It is accessible via JavaScript (vulnerable to XSS)", "is_correct": True},
-                    {"text": "It expires too quickly", "is_correct": False},
-                    {"text": "It requires a database", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Hardcoded' credentials?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Embedding passwords or API keys directly in the source code.",
-                "options": [
-                    {"text": "Strong passwords", "is_correct": False},
-                    {"text": "Passwords embedded in source code", "is_correct": True},
-                    {"text": "Encrypted passwords", "is_correct": False},
-                    {"text": "Passwords on a sticky note", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which flag should be used on sensitive cookies to prevent transmission over unencrypted channels?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Easy",
-                "skill_focus": "Prevention",
-                "explanation": "The 'Secure' flag ensures the cookie is only sent over HTTPS.",
-                "options": [
-                    {"text": "HttpOnly", "is_correct": False},
-                    {"text": "Secure", "is_correct": True},
-                    {"text": "SameSite", "is_correct": False},
-                    {"text": "Private", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the purpose of PII protection?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "To protect Personally Identifiable Information from unauthorized access.",
-                "options": [
-                    {"text": "To increase database speed", "is_correct": False},
-                    {"text": "To protect Personally Identifiable Information", "is_correct": True},
-                    {"text": "To compress files", "is_correct": False},
-                    {"text": "To hide images", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which of these is a secure way to store a secret key for a cloud application?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Medium",
-                "skill_focus": "Tools",
-                "explanation": "Environment variables or Secret Managers (like AWS Secrets Manager, HashiCorp Vault).",
-                "options": [
-                    {"text": "In a config file in Git", "is_correct": False},
-                    {"text": "Using a Secret Manager service", "is_correct": True},
-                    {"text": "In the README.md", "is_correct": False},
-                    {"text": "As a comment in HTML", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Data at Rest'?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Data stored on persistent storage (disks, tapes, etc.).",
-                "options": [
-                    {"text": "Data being sent over the network", "is_correct": False},
-                    {"text": "Data stored on disk", "is_correct": True},
-                    {"text": "Data in RAM", "is_correct": False},
-                    {"text": "Data that has been deleted", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Why should you NOT use Reversible Encryption for passwords?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Hard",
-                "skill_focus": "Concept",
-                "explanation": "If the key is compromised, all passwords can be decrypted. Hashing is one-way and safer.",
-                "options": [
-                    {"text": "It is too slow", "is_correct": False},
-                    {"text": "If the key leaks, all passwords are exposed", "is_correct": True},
-                    {"text": "It is not possible", "is_correct": False},
-                    {"text": "It uses too much space", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does a 'Rainbow Table' help an attacker with?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "It helps crack unsalted hashes by looking up pre-computed hash results.",
-                "options": [
-                    {"text": "Measuring internet speed", "is_correct": False},
-                    {"text": "Cracking unsalted hashes quickly", "is_correct": True},
-                    {"text": "Finding hidden directories", "is_correct": False},
-                    {"text": "DDoS attacks", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Side-Channel' leakage in storage?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Hard",
-                "skill_focus": "Concept",
-                "explanation": "Information leaked through indirect means like timing or error messages.",
-                "options": [
-                    {"text": "Data through a different port", "is_correct": False},
-                    {"text": "Information leakage via timing or side effects", "is_correct": True},
-                    {"text": "Data on a side disk", "is_correct": False},
-                    {"text": "A backup channel", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which mobile storage area is generally considered more secure on iOS?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Hard",
-                "skill_focus": "Knowledge",
-                "explanation": "Keychain and Secure Enclave are highly protected.",
-                "options": [
-                    {"text": "Documents folder", "is_correct": False},
-                    {"text": "Keychain", "is_correct": True},
-                    {"text": "Public Cache", "is_correct": False},
-                    {"text": "SD Card", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Excessive Data Exposure'?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "An API returning more data than the client needs, potentially leaking sensitive info.",
-                "options": [
-                    {"text": "Showing too many ads", "is_correct": False},
-                    {"text": "API returning sensitive data not needed by UI", "is_correct": True},
-                    {"text": "A large file download", "is_correct": False},
-                    {"text": "A public website", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does 'Tokenization' do?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Hard",
-                "skill_focus": "Concept",
-                "explanation": "Replaces sensitive data with a non-sensitive 'token' that has no intrinsic value.",
-                "options": [
-                    {"text": "Encrypting data with a token", "is_correct": False},
-                    {"text": "Replacing sensitive data with a surrogate value", "is_correct": True},
-                    {"text": "Counting words in a string", "is_correct": False},
-                    {"text": "Logging into a site", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which of these is a symptom of Insecure Storage in logs?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Credit card numbers or passwords appearing in application logs.",
-                "options": [
-                    {"text": "Error 404", "is_correct": False},
-                    {"text": "Passwords/PII appearing in plaintext in logs", "is_correct": True},
-                    {"text": "Log file being empty", "is_correct": False},
-                    {"text": "Fast login times", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the best way to handle Credit Card data?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Medium",
-                "skill_focus": "Best Practice",
-                "explanation": "Don't store it if possible; use payment processors and follow PCI-DSS.",
-                "options": [
-                    {"text": "Store in a text file", "is_correct": False},
-                    {"text": "Use a compliant processor and avoid direct storage", "is_correct": True},
-                    {"text": "Hash it", "is_correct": False},
-                    {"text": "Encode it to Base64", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Backup files are often a source of Insecure Storage because...?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "They may lack the protections (auth, encryption) applied to the main database.",
-                "options": [
-                    {"text": "They are too small", "is_correct": False},
-                    {"text": "They often have weaker access controls or no encryption", "is_correct": True},
-                    {"text": "They are deleted quickly", "is_correct": False},
-                    {"text": "They only contain images", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the risk of using weak random number generators for keys?",
-                "type": "multiple_choice",
-                "topic": "Insecure Storage",
-                "difficulty": "Hard",
-                "skill_focus": "Concept",
-                "explanation": "Keys become predictable, allowing attackers to guess them and decrypt data.",
-                "options": [
-                    {"text": "Slower encryption", "is_correct": False},
-                    {"text": "Predictable keys leading to compromise", "is_correct": True},
-                    {"text": "Keys being too short", "is_correct": False},
-                    {"text": "Random data taking too much space", "is_correct": False}
-                ]
-            },
-
-            # 8. Directory Traversal (20 Questions)
-            {
-                "text": "What is Directory Traversal?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "An attack where the user can access files outside intended directories.",
-                "options": [
-                    {"text": "Deleting files", "is_correct": False},
-                    {"text": "Accessing unauthorized files by manipulating paths", "is_correct": True},
-                    {"text": "Changing directories in Shell", "is_correct": False},
-                    {"text": "Listing directory contents", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which character sequence is used for 'Dot-Dot-Slash' attacks?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Easy",
-                "skill_focus": "Exploitation",
-                "explanation": "../ moves one directory level up.",
-                "options": [
-                    {"text": "./", "is_correct": False},
-                    {"text": "../", "is_correct": True},
-                    {"text": "//", "is_correct": False},
-                    {"text": "$\\", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is another name for Directory Traversal?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Medium",
-                "skill_focus": "Knowledge",
-                "explanation": "Path Traversal.",
-                "options": [
-                    {"text": "File Inclusion", "is_correct": False},
-                    {"text": "Path Traversal", "is_correct": True},
-                    {"text": "Route Hijacking", "is_correct": False},
-                    {"text": "URL Injection", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which file in Linux is a common target for traversal attacks?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Easy",
-                "skill_focus": "Exploitation",
-                "explanation": "/etc/passwd contains user account info and is globally readable.",
-                "options": [
-                    {"text": "/var/log/syslog", "is_correct": False},
-                    {"text": "/etc/passwd", "is_correct": True},
-                    {"text": "/home/user/desktop", "is_correct": False},
-                    {"text": "/tmp/test", "is_correct": False}
-                ]
-            },
-            {
-                "text": "How can you prevent Directory Traversal?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "Input validation (whitelisting) and using filesystem APIs that resolve paths.",
-                "options": [
-                    {"text": "Blocking the word 'slash'", "is_correct": False},
-                    {"text": "Validating and sanitizing path inputs", "is_correct": True},
-                    {"text": "Using more directories", "is_correct": False},
-                    {"text": "Disabling the internet", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does a 'Chroot Jail' do?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Hard",
-                "skill_focus": "Mitigation",
-                "explanation": "Restricts the process's view of the filesystem to a specific directory.",
-                "options": [
-                    {"text": "Deletes the process", "is_correct": False},
-                    {"text": "Restricts filesystem access to a sub-directory", "is_correct": True},
-                    {"text": "Encrypts the directory", "is_correct": False},
-                    {"text": "Speeds up disk access", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Can encoding be used to bypass traversal filters?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Medium",
-                "skill_focus": "Evasion",
-                "explanation": "Yes, URL encoding (%2E%2E%2F) can bypass simple string filters.",
-                "options": [
-                    {"text": "No", "is_correct": False},
-                    {"text": "Yes, e.g., using URL or Unicode encoding", "is_correct": True},
-                    {"text": "Only in Windows", "is_correct": False},
-                    {"text": "Only for images", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the result of `file.php?page=../../etc/passwd%00`?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Hard",
-                "skill_focus": "Exploitation",
-                "explanation": "%00 is a Null Byte, used to terminate strings in some languages (like older PHP/C).",
-                "options": [
-                    {"text": "A syntax error", "is_correct": False},
-                    {"text": "Null Byte injection to bypass file extension checks", "is_correct": True},
-                    {"text": "Deleting the file", "is_correct": False},
-                    {"text": "Nothing", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which PHP function is often involved in traversal/LFI vulnerabilities?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Medium",
-                "skill_focus": "Knowledge",
-                "explanation": "`include()`, `require()`, `file_get_contents()`.",
-                "options": [
-                    {"text": "echo()", "is_correct": False},
-                    {"text": "include()", "is_correct": True},
-                    {"text": "var_dump()", "is_correct": False},
-                    {"text": "explode()", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Local File Inclusion' (LFI)?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "The app includes and potentially executes files from the local server based on user input.",
-                "options": [
-                    {"text": "Uploading a file", "is_correct": False},
-                    {"text": "Including local server files in execution", "is_correct": True},
-                    {"text": "Deleting a file", "is_correct": False},
-                    {"text": "Sending a file over email", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Remote File Inclusion' (RFI)?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Hard",
-                "skill_focus": "Concept",
-                "explanation": "The app includes and executes files from a remote server/URL.",
-                "options": [
-                    {"text": "Downloading a file", "is_correct": False},
-                    {"text": "Including remote files in execution via URL", "is_correct": True},
-                    {"text": "Hacking a remote server", "is_correct": False},
-                    {"text": "Cloud storage", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does a successful LFI to RCE payload often use in Linux?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Hard",
-                "skill_focus": "Exploitation",
-                "explanation": "Log poisoning (injecting code into logs and then including those logs).",
-                "options": [
-                    {"text": "Deleting logs", "is_correct": False},
-                    {"text": "Log Poisoning", "is_correct": True},
-                    {"text": "Changing the theme", "is_correct": False},
-                    {"text": "Rebooting the server", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Where is the 'win.ini' file located in Windows?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "C:\\Windows\\win.ini",
-                "options": [
-                    {"text": "C:\\System32", "is_correct": False},
-                    {"text": "C:\\Windows\\win.ini", "is_correct": True},
-                    {"text": "C:\\Program Files", "is_correct": False},
-                    {"text": "D:\\Backup", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the best way to handle file downloads safely?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Hard",
-                "skill_focus": "Prevention",
-                "explanation": "Use an ID (index) in the URL and look up the path in a database.",
-                "options": [
-                    {"text": "Passing the full path in URL", "is_correct": False},
-                    {"text": "Using a database ID instead of filenames", "is_correct": True},
-                    {"text": "Allowing all files", "is_correct": False},
-                    {"text": "Using base64 names", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which character represents the Root directory in Linux?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "/",
-                "options": [
-                    {"text": "\\", "is_correct": False},
-                    {"text": "/", "is_correct": True},
-                    {"text": "~", "is_correct": False},
-                    {"text": "$", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What function in Node.js should be used cautiously on path strings?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "`path.join` vs `path.resolve`. `path.resolve` handles absolute paths more safely.",
-                "options": [
-                    {"text": "fs.readFile", "is_correct": False},
-                    {"text": "path.join / path.resolve", "is_correct": True},
-                    {"text": "http.get", "is_correct": False},
-                    {"text": "util.promisify", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Why is 'Base Directory' check important?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "To ensure the resolved path starts with the allowed root directory.",
-                "options": [
-                    {"text": "To find where files are", "is_correct": False},
-                    {"text": "To verify file is within the intended folder", "is_correct": True},
-                    {"text": "To delete old files", "is_correct": False},
-                    {"text": "To show breadcrumbs", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Can Directory Traversal happen in cookie values?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "Yes, if the cookie is used to determine a file path (e.g. `theme=standard`).",
-                "options": [
-                    {"text": "No", "is_correct": False},
-                    {"text": "Yes, if the value is used in filesystem calls", "is_correct": True},
-                    {"text": "Only in old browsers", "is_correct": False},
-                    {"text": "Only if cookies are not secure", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does a 'Double Encoding' attack look like?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Hard",
-                "skill_focus": "Evasion",
-                "explanation": "Encoding the % character itself (%252E instead of %2E).",
-                "options": [
-                    {"text": "Encoding twice with Base64", "is_correct": False},
-                    {"text": "Encoding the encoding (%25)", "is_correct": True},
-                    {"text": "Using two passwords", "is_correct": False},
-                    {"text": "Encrypted URL", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Is it safe to allow users to specify file extensions?",
-                "type": "multiple_choice",
-                "topic": "Directory Traversal",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "No, it should be hardcoded or restricted to a whitelist.",
-                "options": [
-                    {"text": "Yes", "is_correct": False},
-                    {"text": "No, should be hardcoded or whitelisted", "is_correct": True},
-                    {"text": "Only if they are '.txt'", "is_correct": False},
-                    {"text": "Only if files are small", "is_correct": False}
-                ]
-            },
-
-            # 9. XML External Entity (XXE) (20 Questions)
-            {
-                "text": "What does XXE stand for?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "XML External Entity.",
-                "options": [
-                    {"text": "XHTML External Extensions", "is_correct": False},
-                    {"text": "XML External Entity", "is_correct": True},
-                    {"text": "Extra XML Element", "is_correct": False},
-                    {"text": "X-linked XML Entry", "is_correct": False}
-                ]
-            },
-            {
-                "text": "How does an XXE attack occur?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "Weakly configured XML parser processes external entity references in an XML document.",
-                "options": [
-                    {"text": "Injecting SQL into XML", "is_correct": False},
-                    {"text": "Parser processes external references in XML", "is_correct": True},
-                    {"text": "Deleting XML files", "is_correct": False},
-                    {"text": "XSS via XML", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What can an attacker achieve with XXE?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Medium",
-                "skill_focus": "Knowledge",
-                "explanation": "Local file disclosure, SSRF, and potentially DoS.",
-                "options": [
-                    {"text": "Only change the font", "is_correct": False},
-                    {"text": "Disclose files, perform SSRF, or DoS", "is_correct": True},
-                    {"text": "Reset admin password", "is_correct": False},
-                    {"text": "Nothing", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which part of XML is exploited in XXE?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Hard",
-                "skill_focus": "Knowledge",
-                "explanation": "The Document Type Definition (DTD).",
-                "options": [
-                    {"text": "The root element", "is_correct": False},
-                    {"text": "The DTD (Document Type Definition)", "is_correct": True},
-                    {"text": "The comments", "is_correct": False},
-                    {"text": "The attribute values", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the best defense against XXE?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "Disable DTD and external entity processing in the XML parser.",
-                "options": [
-                    {"text": "Use JSON instead", "is_correct": False},
-                    {"text": "Disable DTD/External Entity processing", "is_correct": True},
-                    {"text": "Encode the XML", "is_correct": False},
-                    {"text": "Use a newer computer", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'Billion Laughs' attack?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "An XML Dos attack (exponential entity expansion) that crashes the parser.",
-                "options": [
-                    {"text": "A joke website", "is_correct": False},
-                    {"text": "An XML denial of service (DoS)", "is_correct": True},
-                    {"text": "A virus that plays laughter", "is_correct": False},
-                    {"text": "A SQL injection trick", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is OOB-XXE (Out-of-Band XXE)?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Hard",
-                "skill_focus": "Exploitation",
-                "explanation": "Exfiltrating data through an external network request when response is not shown.",
-                "options": [
-                    {"text": "XXE that happens later", "is_correct": False},
-                    {"text": "Exfiltrating data via external requests", "is_correct": True},
-                    {"text": "XXE on a different server", "is_correct": False},
-                    {"text": "A band aid for XXE", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which keyword is used to define an external entity in DTD?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Hard",
-                "skill_focus": "Knowledge",
-                "explanation": "SYSTEM.",
-                "options": [
-                    {"text": "EXTERNAL", "is_correct": False},
-                    {"text": "SYSTEM", "is_correct": True},
-                    {"text": "FILE", "is_correct": False},
-                    {"text": "GET", "is_correct": False}
-                ]
-            },
-            {
-                "text": "SSRF (Server-Side Request Forgery) can be achieved via XXE by...?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "Using a URL in the SYSTEM entity definition.",
-                "options": [
-                    {"text": "Injecting scripts", "is_correct": False},
-                    {"text": "Pointing SYSTEM entity to a URL", "is_correct": True},
-                    {"text": "Deleting the firewall", "is_correct": False},
-                    {"text": "Overloading the CPU", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Can XXE happen if I only use modern libraries?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Many modern libraries disable DTD by default, but you should still verify configuration.",
-                "options": [
-                    {"text": "No, it's impossible", "is_correct": False},
-                    {"text": "Yes, always verify if DTD is disabled", "is_correct": True},
-                    {"text": "Only if used on Linux", "is_correct": False},
-                    {"text": "Only in Java", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is more secure than XML for data exchange?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "JSON is simpler and less prone to exploitation like XXE.",
-                "options": [
-                    {"text": "Plain text", "is_correct": False},
-                    {"text": "JSON", "is_correct": True},
-                    {"text": "Binary", "is_correct": False},
-                    {"text": "HTML", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is a 'Parameter Entity' in XXE?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Hard",
-                "skill_focus": "Knowledge",
-                "explanation": "Entity starting with '%' used only within the DTD, often for OOB exfiltration.",
-                "options": [
-                    {"text": "An entity for functions", "is_correct": False},
-                    {"text": "A special entity used within DTDs", "is_correct": True},
-                    {"text": "An entity for parameters", "is_correct": False},
-                    {"text": "A hidden entity", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which format is often vulnerable to XXE during upload?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Medium",
-                "skill_focus": "Knowledge",
-                "explanation": "Formats based on XML, like DOCX, SVG, or PDF.",
-                "options": [
-                    {"text": "JPEG", "is_correct": False},
-                    {"text": "SVG or DOCX", "is_correct": True},
-                    {"text": "PNG", "is_correct": False},
-                    {"text": "TXT", "is_correct": False}
-                ]
-            },
-            {
-                "text": "How do you test for XXE?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Easy",
-                "skill_focus": "Exploitation",
-                "explanation": "Inject a simple entity and see if it's resolved or triggers an error/request.",
-                "options": [
-                    {"text": "Sending a long string", "is_correct": False},
-                    {"text": "Injecting an external entity reference", "is_correct": True},
-                    {"text": "Restarting the app", "is_correct": False},
-                    {"text": "Changing the port", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Blind XXE is when...?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "The output of the entity is not returned in the application response.",
-                "options": [
-                    {"text": "Attacker can't see the screen", "is_correct": False},
-                    {"text": "Response data doesn't include the entity's expansion", "is_correct": True},
-                    {"text": "XML is encrypted", "is_correct": False},
-                    {"text": "The server is offline", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which XML parser feature in Java is key to disabling XXE?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Hard",
-                "skill_focus": "Prevention",
-                "explanation": "Setting 'disallow-doctype-decl' to true.",
-                "options": [
-                    {"text": "setAllowExternal(false)", "is_correct": False},
-                    {"text": "setFeature('http://apache.org/xml/features/disallow-doctype-decl', true)", "is_correct": True},
-                    {"text": "xml.secure = true", "is_correct": False},
-                    {"text": "disableDTD()", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is 'XInclude' attack?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Hard",
-                "skill_focus": "Concept",
-                "explanation": "Similar to XXE but uses XInclude elements to include files/URLs.",
-                "options": [
-                    {"text": "Including XSS", "is_correct": False},
-                    {"text": "Using XInclude for file disclosure", "is_correct": True},
-                    {"text": "Cross site inclusion", "is_correct": False},
-                    {"text": "None", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Does XXE require the attacker to send a full XML document?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Medium",
-                "skill_focus": "Knowledge",
-                "explanation": "Sometimes just a snippet inside a multipart request or SVG can be sufficient.",
-                "options": [
-                    {"text": "Yes, always", "is_correct": False},
-                    {"text": "No, it depends on the parser and context", "is_correct": True},
-                    {"text": "Only on Windows", "is_correct": False},
-                    {"text": "Only for SOAP", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the result of disclosing '/proc/self/environ' on Linux via XXE?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Hard",
-                "skill_focus": "Exploitation",
-                "explanation": "Reveals environment variables, which may contain sensitive keys or config info.",
-                "options": [
-                    {"text": "Crashes the system", "is_correct": False},
-                    {"text": "Reveals environment variables", "is_correct": True},
-                    {"text": "Changes the time", "is_correct": False},
-                    {"text": "Nothing", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Why is XXE less common today?",
-                "type": "multiple_choice",
-                "topic": "XML External Entity (XXE)",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Modern parsers disable the dangerous features by default.",
-                "options": [
-                    {"text": "XML is no longer used", "is_correct": False},
-                    {"text": "Defaults have changed to secure-by-default in most libraries", "is_correct": True},
-                    {"text": "It was patched in the internet", "is_correct": False},
-                    {"text": "Attackers forgot about it", "is_correct": False}
-                ]
-            },
-
-            # 10. Unvalidated Redirect (20 Questions)
-            {
-                "text": "What is an Unvalidated Redirect?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "The app accepts a user-provided URL and redirects the user to it without validation.",
-                "options": [
-                    {"text": "A broken link", "is_correct": False},
-                    {"text": "Redirecting users to an untrusted external site", "is_correct": True},
-                    {"text": "Sending a user to home page", "is_correct": False},
-                    {"text": "Slow redirection", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is an 'Open Redirect'?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "Same as Unvalidated Redirect; any URL can be used for redirection.",
-                "options": [
-                    {"text": "A public redirect", "is_correct": False},
-                    {"text": "An unvalidated redirect", "is_correct": True},
-                    {"text": "A faster redirect", "is_correct": False},
-                    {"text": "A manual redirect", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the primary risk of Open Redirects?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Medium",
-                "skill_focus": "Knowledge",
-                "explanation": "Facilitating Phishing attacks by using a trusted domain to send users to a malicious site.",
-                "options": [
-                    {"text": "Stealing cookies", "is_correct": False},
-                    {"text": "Making Phishing attacks look more credible", "is_correct": True},
-                    {"text": "Deleting user data", "is_correct": False},
-                    {"text": "SQL Injection", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which parameter name is often seen in unvalidated redirects?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "`?url=`, `?redirect=`, `?next=`, `?dest=`.",
-                "options": [
-                    {"text": "id", "is_correct": False},
-                    {"text": "next / url / return", "is_correct": True},
-                    {"text": "user", "is_correct": False},
-                    {"text": "page", "is_correct": False}
-                ]
-            },
-            {
-                "text": "How can you prevent Unvalidated Redirects?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "Avoid user-provided input for redirects; use whitelists or relative URLs.",
-                "options": [
-                    {"text": "Blocking the word 'http'", "is_correct": False},
-                    {"text": "Using a whitelist of allowed domains or relative paths", "is_correct": True},
-                    {"text": "Hiding the URL", "is_correct": False},
-                    {"text": "Encrypted parameters", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is a 'Forward' in web applications?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Medium",
-                "skill_focus": "Concept",
-                "explanation": "Internal server-side transfer to another resource, also a risk if unvalidated.",
-                "options": [
-                    {"text": "Moving to the next page", "is_correct": False},
-                    {"text": "Internal server-side redirection (Transfer)", "is_correct": True},
-                    {"text": "Sending an email", "is_correct": False},
-                    {"text": "Linking to google", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which HTTP status code is used for temporary redirects?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "302 Found.",
-                "options": [
-                    {"text": "200", "is_correct": False},
-                    {"text": "302", "is_correct": True},
-                    {"text": "404", "is_correct": False},
-                    {"text": "500", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does a payload like `//google.com` achieve in some redirect filters?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Hard",
-                "skill_focus": "Evasion",
-                "explanation": "Protocol-relative URL, bypasses filters looking for 'http' but still redirects externally.",
-                "options": [
-                    {"text": "Nothing", "is_correct": False},
-                    {"text": "Bypassing 'http' filters (Protocol-relative URL)", "is_correct": True},
-                    {"text": "It is a comment", "is_correct": False},
-                    {"text": "Changes the domain", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Can Open Redirect be used to leak sensitive tokens?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Hard",
-                "skill_focus": "Chaining",
-                "explanation": "Yes, e.g., stealing OAuth tokens if they are in the URL fragment during redirect.",
-                "options": [
-                    {"text": "No", "is_correct": False},
-                    {"text": "Yes, especially in OAuth/Token flows", "is_correct": True},
-                    {"text": "Only in HTTPS", "is_correct": False},
-                    {"text": "Only for admins", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the risk of redirecting to `javascript:alert(1)`?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Hard",
-                "skill_focus": "Exploitation",
-                "explanation": "It could lead to XSS if the browser attempts to 'navigate' to the JS pseudo-protocol.",
-                "options": [
-                    {"text": "It is safe", "is_correct": False},
-                    {"text": "Potential XSS conversion", "is_correct": True},
-                    {"text": "Broken link", "is_correct": False},
-                    {"text": "Nothing", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What does 'Relative Path' redirection mean?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Easy",
-                "skill_focus": "Prevention",
-                "explanation": "Redirecting within the same site using paths like `/login` instead of full URLs.",
-                "options": [
-                    {"text": "Redirecting to a relative's site", "is_correct": False},
-                    {"text": "Redirecting within the same domain", "is_correct": True},
-                    {"text": "Slow redirect", "is_correct": False},
-                    {"text": "Redirecting to previous page", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which character should be avoided at the start of a user-controlled redirect path?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Hard",
-                "skill_focus": "Prevention",
-                "explanation": "Double slash `//` (protocol-relative) and backslashes `\\` (in some browsers).",
-                "options": [
-                    {"text": "/", "is_correct": False},
-                    {"text": "// or \\", "is_correct": True},
-                    {"text": "?", "is_correct": False},
-                    {"text": "#", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Is 'Open Redirect' considered a critical vulnerability on its own?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Medium",
-                "skill_focus": "Knowledge",
-                "explanation": "Usually Medium/Low, but high risk when chained (e.g., OAuth token leakage).",
-                "options": [
-                    {"text": "Yes, always", "is_correct": False},
-                    {"text": "Usually Low/Medium unless chained", "is_correct": True},
-                    {"text": "No, it is a feature", "is_correct": False},
-                    {"text": "Only if used on banking sites", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is a 'Malicious Redirect'?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Easy",
-                "skill_focus": "Concept",
-                "explanation": "A redirect that sends the user to a malware-serving or phishing site.",
-                "options": [
-                    {"text": "Slow redirect", "is_correct": False},
-                    {"text": "A redirect used for malicious purposes", "is_correct": True},
-                    {"text": "A redirect that crashes the browser", "is_correct": False},
-                    {"text": "An error message", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Why do attackers like using the victim's host in the redirect URL?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Medium",
-                "skill_focus": "Exploitation",
-                "explanation": "To make the malicious link look trustworthy (social engineering).",
-                "options": [
-                    {"text": "For performance", "is_correct": False},
-                    {"text": "To hide the destination and gain trust", "is_correct": True},
-                    {"text": "To bypass HTTPS", "is_correct": False},
-                    {"text": "They don't", "is_correct": False}
-                ]
-            },
-            {
-                "text": "How can you bypass a blacklist that blocks 'evil.com'?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Hard",
-                "skill_focus": "Evasion",
-                "explanation": "Using a sub-domain, IP address, or URL shortener.",
-                "options": [
-                    {"text": "You can't", "is_correct": False},
-                    {"text": "Using IP addresses or URL shorteners", "is_correct": True},
-                    {"text": "Capitalizing EVIL.COM", "is_correct": False},
-                    {"text": "Adding a space", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Does an 'Unvalidated Redirect' allow access to server files?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Easy",
-                "skill_focus": "Knowledge",
-                "explanation": "No, it's a client-side navigation issue, not server-side access.",
-                "options": [
-                    {"text": "Yes, if using file://", "is_correct": False},
-                    {"text": "Generally no, it targets the user's browser", "is_correct": True},
-                    {"text": "Only for admins", "is_correct": False},
-                    {"text": "Yes, it is like LFI", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Which of these is a secure alternative to generic redirects?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Medium",
-                "skill_focus": "Prevention",
-                "explanation": "Using a middle page ('You are leaving this site') to inform the user.",
-                "options": [
-                    {"text": "Using more redirects", "is_correct": False},
-                    {"text": "Using an intermediate warning page", "is_correct": True},
-                    {"text": "Hiding the destination", "is_correct": False},
-                    {"text": "Not using redirects", "is_correct": False}
-                ]
-            },
-            {
-                "text": "Redirects to `data:` URLs can be used for...?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Hard",
-                "skill_focus": "Exploitation",
-                "explanation": "Serving malicious HTML or scripts directly from the URL.",
-                "options": [
-                    {"text": "Downloading data", "is_correct": False},
-                    {"text": "Injecting malicious content/scripts", "is_correct": True},
-                    {"text": "Encrypting the browser", "is_correct": False},
-                    {"text": "None", "is_correct": False}
-                ]
-            },
-            {
-                "text": "What is the 'Referer' header's role in redirects?",
-                "type": "multiple_choice",
-                "topic": "Unvalidated Redirect",
-                "difficulty": "Hard",
-                "skill_focus": "Knowledge",
-                "explanation": "It tells the target site where the user came from, potentially leaking info if redirect is insecure.",
-                "options": [
-                    {"text": "Bypassing the redirect", "is_correct": False},
-                    {"text": "Tells the destination where the user originated", "is_correct": True},
-                    {"text": "Changes the URL", "is_correct": False},
-                    {"text": "Authenticates the user", "is_correct": False}
-                ]
-            },
-        ]
-
+        count_added = 0
         for q_data in questions_data:
+            # Check for duplicates to avoid constraint errors
+            exists = db.query(models.Question).filter(models.Question.text == q_data["text"]).first()
+            if exists:
+                continue
+                
             options_data = q_data.pop("options")
             question = models.Question(**q_data)
             db.add(question)
@@ -2877,8 +395,9 @@ def seed_data():
                 option = models.QuestionOption(**opt_data, question_id=question.id)
                 db.add(option)
             db.commit()
+            count_added += 1
             
-        logger.info(f"Successfully seeded {len(questions_data)} questions.")
+        logger.info(f"Successfully seeded {count_added} new questions.")
         
     except Exception as e:
         logger.error(f"Error seeding database: {e}")

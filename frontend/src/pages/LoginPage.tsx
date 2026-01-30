@@ -15,49 +15,35 @@ const LoginPage: React.FC = () => {
     setError('');
 
     try {
-      // NOTE: Backend Schema expects 'username', but we treat it as email.
-      // We must send the keys exactly as { username, password }
       const response = await axios.post('http://localhost:8000/api/auth/login', {
         username: email, 
         password: password
       });
 
-      console.log("Login Response:", response.data);
-
-      // --- CRITICAL FIX ---
-      // The Backend returns 'access_token', NOT 'token'.
-      const token = response.data.access_token;
+      const { access_token, role, user_id } = response.data;
       
-      if (token) {
-        // Save to storage
-        localStorage.setItem('token', token);
+      if (access_token) {
+        // --- FIX: USE SESSION STORAGE FOR TAB ISOLATION ---
+        sessionStorage.setItem('token', access_token);
+        sessionStorage.setItem('role', role);
+        sessionStorage.setItem('user_id', user_id);
         
-        // Optional: Save user info if your backend sends it
-        if (response.data.user_id) {
-            localStorage.setItem('user_id', response.data.user_id);
+        // Dynamic Redirection
+        if (role === 'admin') {
+          navigate('/admin/stats');
+        } else if (role === 'instructor') {
+          navigate('/instructor/dashboard');
+        } else {
+          navigate('/home');
         }
-        
-        // Redirect
-        navigate('/dashboard');
+
       } else {
-        setError('Login failed: No token received from server.');
+        setError('Login failed: No token received.');
       }
 
     } catch (err: any) {
-      console.error("Login Error:", err);
-      
-      // Prevent Crash on Error
       if (err.response) {
-        // Backend returned an error (401, 422, etc)
-        const detail = err.response.data.detail;
-        if (typeof detail === 'string') {
-            setError(detail);
-        } else if (Array.isArray(detail)) {
-            // Pydantic validation error array
-            setError(detail[0].msg);
-        } else {
-            setError('Invalid credentials');
-        }
+        setError(err.response.data.detail || 'Invalid credentials');
       } else if (err.request) {
         setError('Server not responding. Is Backend running?');
       } else {
@@ -82,11 +68,11 @@ const LoginPage: React.FC = () => {
             <label className="block mb-1 text-sm font-medium text-gray-300">Email Address</label>
             <input
               type="email"
-              className="w-full p-2.5 bg-gray-700 border border-gray-600 rounded text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              className="w-full p-2.5 bg-gray-700 border border-gray-600 rounded text-white focus:border-blue-500 outline-none"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder="admin@example.com"
+              placeholder="user@example.com"
             />
           </div>
 
@@ -94,7 +80,7 @@ const LoginPage: React.FC = () => {
             <label className="block mb-1 text-sm font-medium text-gray-300">Password</label>
             <input
               type={isPasswordVisible ? "text" : "password"}
-              className="w-full p-2.5 bg-gray-700 border border-gray-600 rounded text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none pr-10"
+              className="w-full p-2.5 bg-gray-700 border border-gray-600 rounded text-white focus:border-blue-500 outline-none pr-10"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required

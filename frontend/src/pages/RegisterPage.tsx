@@ -6,7 +6,7 @@ const RegisterPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState('user'); // Default role is 'user' (Student)
+  const [role, setRole] = useState('user'); 
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -14,87 +14,69 @@ const RegisterPage: React.FC = () => {
     e.preventDefault();
     setError('');
 
-    if (!email || !password || !confirmPassword) {
-      setError('Please fill in all fields.');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
+    if (!email || !password || !confirmPassword) return setError('Please fill in all fields.');
+    if (password !== confirmPassword) return setError('Passwords do not match.');
 
     try {
-      // --- THIS IS THE CHANGE ---
-      // We now send the selected 'role' to the backend
-      const response = await axios.post('http://localhost:8000/api/auth/register', {
-        email: email,
-        password: password,
-        role: role // Send the selected role
+      // Register
+      await axios.post('http://localhost:8000/api/auth/register', {
+        email, password, role
       });
-
-      if (response.status === 200) {
-        alert('Registration successful! Please login.');
-        navigate('/login');
+      
+      // Conditional Alert based on Role
+      if (role === 'instructor') {
+        alert('Registration successful! NOTE: Your account is PENDING approval. You cannot login until an Admin approves it.');
+      } else {
+        alert('Registration successful! You can login now.');
       }
+      navigate('/login');
+
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Registration failed.');
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <h2 className="text-2xl font-bold text-center mb-6">Create Account</h2>
-        {error && <p className="text-red-500 text-center mb-4">{error}</p>}
-        <form onSubmit={handleSubmit}>
-          {/* Email and Password fields are unchanged */}
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">Email</label>
-            <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700"
-              id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-            />
+    <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
+      <div className="bg-gray-800 p-8 rounded-lg shadow-lg border border-gray-700 w-full max-w-md">
+        <h2 className="text-3xl font-bold text-center mb-6 text-blue-400">Join SCALE</h2>
+        
+        {error && <div className="bg-red-900/50 border border-red-500 text-red-200 p-3 rounded mb-4 text-sm">{error}</div>}
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
+            <input className="w-full bg-gray-700 border border-gray-600 rounded p-2 focus:border-blue-500 outline-none" 
+              type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">Password</label>
-            <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700"
-              id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-            />
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Password</label>
+            <input className="w-full bg-gray-700 border border-gray-600 rounded p-2 focus:border-blue-500 outline-none" 
+              type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="confirm-password">Confirm Password</label>
-            <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700"
-              id="confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
-            />
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Confirm Password</label>
+            <input className="w-full bg-gray-700 border border-gray-600 rounded p-2 focus:border-blue-500 outline-none" 
+              type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
           </div>
 
-          {/* --- THIS IS THE NEW DROPDOWN --- */}
-          <div className="mb-6">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="role">
-              Register as
-            </label>
-            <select
-              id="role"
-              className="shadow border rounded w-full py-2 px-3 text-gray-700"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-            >
-              <option value="user">Student</option>
-              <option value="instructor">Instructor</option>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Register as</label>
+            <select className="w-full bg-gray-700 border border-gray-600 rounded p-2 focus:border-blue-500 outline-none"
+              value={role} onChange={(e) => setRole(e.target.value)}>
+              <option value="user">Student (Instant Access)</option>
+              <option value="instructor">Instructor (Requires Approval)</option>
             </select>
           </div>
 
-          <div className="flex items-center justify-between">
-            <button className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded" type="submit">
-              Register
-            </button>
-            <Link to="/login" className="inline-block font-bold text-sm text-blue-500 hover:text-blue-800">
-              Already have an account?
-            </Link>
-          </div>
+          <button className="w-full bg-blue-600 hover:bg-blue-700 font-bold py-2 rounded transition" type="submit">
+            Create Account
+          </button>
         </form>
+
+        <p className="text-center mt-4 text-gray-400 text-sm">
+          Already have an account? <Link to="/login" className="text-blue-400 hover:underline">Login</Link>
+        </p>
       </div>
     </div>
   );

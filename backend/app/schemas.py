@@ -12,9 +12,14 @@ class UserCreate(UserBase):
     password: str
     role: Optional[str] = 'user' 
 
+# Specialized schema for Admins creating other Admins (no role selection needed)
+class UserCreateAdmin(UserBase):
+    password: str
+
 class User(UserBase):
     id: int
     role: str
+    is_approved: bool
     class Config:
         from_attributes = True
 
@@ -27,6 +32,7 @@ class UserSearchResponse(BaseModel):
     id: int
     email: str
     role: str
+    is_approved: bool
     class Config:
         from_attributes = True
 
@@ -82,7 +88,6 @@ class QuestionBase(BaseModel):
 class QuestionCreate(QuestionBase):
     options: List[OptionCreate]
 
-# New: For Editing Questions
 class QuestionUpdate(BaseModel):
     text: Optional[str] = None
     topic: Optional[str] = None
@@ -97,7 +102,7 @@ class QuestionResponse(QuestionBase):
 
 # --- Quiz Interaction ---
 class QuizRequest(BaseModel):
-    topics: List[str]  # <--- CHANGED FROM 'topic: str'
+    topics: List[str]
     count: int
     difficulty: Optional[str] = None
     mode: str = "Practice" 
@@ -117,7 +122,7 @@ class AIGenerationRequest(BaseModel):
     difficulty: str
     skill_focus: str = "General"
 
-# --- ASSIGNMENTS (NEW) ---
+# --- ASSIGNMENTS ---
 class AssignmentCreate(BaseModel):
     title: str
     student_ids: List[int]

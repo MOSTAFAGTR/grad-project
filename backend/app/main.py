@@ -4,8 +4,9 @@ from sqlalchemy.exc import OperationalError
 import time
 import logging
 
-# Import the routers directly
-from .api import auth, quizzes, challenges
+# --- IMPORT ROUTERS ---
+# We added 'stats' to this import list
+from .api import auth, quizzes, challenges, stats
 from .db import database
 from . import models 
 
@@ -18,17 +19,18 @@ app = FastAPI()
 # --- CORS SETUP ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173"], # Allows Frontend to access Backend
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- REGISTER ROUTES (CRITICAL) ---
-# This connects the files to the URL
+# --- REGISTER ROUTES ---
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(quizzes.router, prefix="/api/quizzes", tags=["quizzes"])
 app.include_router(challenges.router, prefix="/api/challenges", tags=["challenges"])
+# NEW: Register the stats router so the Dashboards work
+app.include_router(stats.router, prefix="/api/stats", tags=["statistics"])
 
 # --- DATABASE CONNECTION RETRY ---
 @app.on_event("startup")
@@ -37,6 +39,7 @@ def startup_event():
     retries = 10
     while retries > 0:
         try:
+            # Create tables if they don't exist
             models.Base.metadata.create_all(bind=database.engine)
             logger.info("Database connected and tables created!")
             break
