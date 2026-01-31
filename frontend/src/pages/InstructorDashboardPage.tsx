@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis 
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
 import { FaUserGraduate, FaChalkboardTeacher, FaClipboardCheck, FaSearch, FaTimes, FaChartPie } from 'react-icons/fa';
 
@@ -9,7 +9,7 @@ const InstructorDashboardPage: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [stats, setStats] = useState<any>(null); // State for Real Stats
-  
+
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
 
   useEffect(() => {
@@ -18,7 +18,7 @@ const InstructorDashboardPage: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
 
       // 1. Fetch Students List
@@ -115,7 +115,7 @@ const InstructorDashboardPage: React.FC = () => {
           <h2 className="text-2xl font-bold">Student Directory</h2>
           <div className="relative">
             <FaSearch className="absolute left-3 top-3 text-gray-400" />
-            <input 
+            <input
               className="bg-gray-700 rounded-full py-2 pl-10 pr-4 text-white outline-none focus:ring-2 focus:ring-blue-500 w-64"
               placeholder="Search email..."
               value={searchTerm}
@@ -144,8 +144,8 @@ const InstructorDashboardPage: React.FC = () => {
                     <td className="px-6 py-4 font-medium text-white">{student.email}</td>
                     <td className="px-6 py-4"><span className="text-green-400 bg-green-900/30 px-2 py-1 rounded text-xs">Enrolled</span></td>
                     <td className="px-6 py-4">
-                      <button 
-                        onClick={() => handleViewAnalytics(student)} 
+                      <button
+                        onClick={() => handleViewAnalytics(student)}
                         className="text-blue-400 hover:text-white hover:underline text-sm font-bold"
                       >
                         View Analytics
@@ -163,7 +163,7 @@ const InstructorDashboardPage: React.FC = () => {
       {selectedStudent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-gray-800 w-full max-w-4xl rounded-xl border border-gray-600 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            
+
             {/* Modal Header */}
             <div className="p-6 border-b border-gray-700 flex justify-between items-center bg-gray-900">
               <div className="flex items-center gap-4">
@@ -180,7 +180,7 @@ const InstructorDashboardPage: React.FC = () => {
 
             {/* Modal Body */}
             <div className="p-8 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-8">
-              
+
               {/* Left Column: Stats */}
               <div className="space-y-6">
                 <div className="bg-gray-700/50 p-4 rounded-lg border border-gray-600">
@@ -225,7 +225,7 @@ const InstructorDashboardPage: React.FC = () => {
                   <h4 className="text-blue-400 font-bold mb-2">Status</h4>
                   <p className="text-sm">This student has been active recently. Their progress aligns with the class average.</p>
                 </div>
-                
+
                 <div className="mt-6 pt-6 border-t border-gray-700">
                   <h4 className="text-sm font-bold text-gray-400 mb-2">Instructor Actions</h4>
                   <div className="flex gap-2">

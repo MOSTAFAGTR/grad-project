@@ -3,21 +3,21 @@ import { Link } from 'react-router-dom';
 import { FaShieldAlt, FaBug, FaTrophy, FaArrowRight } from 'react-icons/fa';
 
 const DashboardHomePage: React.FC = () => {
-  const [progress, setProgress] = useState(0); 
+  const [progress, setProgress] = useState(0);
   const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
-    const role = localStorage.getItem('role') || 'Student';
-    setUserEmail(role); 
+    const role = sessionStorage.getItem('role') || 'Student';
+    setUserEmail(role);
     // Animate progress bar
-    setTimeout(() => setProgress(35), 500); 
+    setTimeout(() => setProgress(35), 500);
   }, []);
 
   return (
     <div className="relative min-h-screen text-white bg-gray-900 p-8">
       {/* Content Container */}
       <div className="max-w-6xl mx-auto">
-        
+
         {/* Welcome Header */}
         <div className="mb-12">
           <h1 className="text-5xl font-extrabold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
@@ -60,11 +60,11 @@ const DashboardHomePage: React.FC = () => {
 
         {/* Action Area */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          
+
           {/* Quick Continue */}
           <div className="bg-gray-800/50 p-8 rounded-xl border border-gray-700">
             <h2 className="text-2xl font-bold mb-6">Continue Learning</h2>
-            
+
             <div className="space-y-4">
               <div className="group relative bg-gray-800 p-4 rounded-lg hover:bg-gray-700 transition cursor-pointer border-l-4 border-blue-500">
                 <Link to="/challenges/1/tutorial" className="flex justify-between items-center">

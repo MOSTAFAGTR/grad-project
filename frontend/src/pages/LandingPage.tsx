@@ -1,8 +1,8 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
-  FaLaptopCode, FaWrench, FaGraduationCap, 
-  FaShieldAlt, FaVideo, FaClipboardList, FaTrophy 
+import {
+  FaLaptopCode, FaWrench, FaGraduationCap,
+  FaShieldAlt, FaVideo, FaClipboardList, FaTrophy
 } from 'react-icons/fa';
 
 const LandingPage: React.FC = () => {
@@ -10,7 +10,7 @@ const LandingPage: React.FC = () => {
 
   const handleStart = () => {
     // Check if user is logged in
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (token) {
       navigate('/home'); // Go to Dashboard if logged in
     } else {
@@ -21,7 +21,7 @@ const LandingPage: React.FC = () => {
   return (
     <div className="bg-gray-900 text-white min-h-screen">
       <div className="container mx-auto px-6 py-16 text-center">
-        
+
         {/* Header Section */}
         <h1 className="text-5xl md:text-7xl font-extrabold text-cyan-400 tracking-wider">
           SCALE
@@ -32,7 +32,7 @@ const LandingPage: React.FC = () => {
         <p className="text-lg md:text-xl mt-6 text-gray-400 max-w-2xl mx-auto">
           Master secure development by learning real-world vulnerabilities
         </p>
-        
+
         {/* Logic Update: Changed to button with onClick handler, Style kept identical */}
         <button
           onClick={handleStart}
@@ -91,7 +91,7 @@ const LandingPage: React.FC = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Footer Section */}
         <div className="mt-24 border-t border-gray-800 pt-8">
           <p className="text-2xl font-bold text-gray-300">

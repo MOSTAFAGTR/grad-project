@@ -25,7 +25,7 @@ const InstructorQuizPage: React.FC = () => {
     options: [{ text: '', is_correct: false }, { text: '', is_correct: false }]
   });
 
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   const headers = { headers: { Authorization: `Bearer ${token}` } };
 
   useEffect(() => {

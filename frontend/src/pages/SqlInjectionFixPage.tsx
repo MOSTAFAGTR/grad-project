@@ -44,7 +44,7 @@ const SqlInjectionFixPage: React.FC = () => {
   const handleSubmit = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) { alert("Please login."); setIsLoading(false); return; }
 
       const response = await axios.post(

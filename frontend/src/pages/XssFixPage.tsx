@@ -35,12 +35,12 @@ const XssFixPage: React.FC = () => {
   const handleSubmit = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) { alert("Please login."); setIsLoading(false); return; }
 
       const response = await axios.post(
-        'http://localhost:8000/api/challenges/submit-fix-xss', 
-        { code }, 
+        'http://localhost:8000/api/challenges/submit-fix-xss',
+        { code },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -65,7 +65,7 @@ const XssFixPage: React.FC = () => {
     <div className="text-white">
       <h1 className="text-3xl font-bold mb-4">XSS: Fix Challenge</h1>
       <p className="text-gray-400 mb-6">Fix this code by using <code>html.escape()</code>.</p>
-      
+
       <div className="h-96 mb-6 border-2 border-gray-700 rounded-lg overflow-hidden shadow-lg">
         <Editor height="100%" language="python" theme="vs-dark" value={code} onChange={(v) => setCode(v || '')} />
       </div>
@@ -75,11 +75,11 @@ const XssFixPage: React.FC = () => {
         {isLoading ? 'Running Tests...' : 'Submit Fix'}
       </button>
 
-      <ResultModal 
-        isOpen={modalState.isOpen} 
-        isSuccess={modalState.isSuccess} 
-        logs={modalState.logs} 
-        onClose={() => setModalState({ ...modalState, isOpen: false })} 
+      <ResultModal
+        isOpen={modalState.isOpen}
+        isSuccess={modalState.isSuccess}
+        logs={modalState.logs}
+        onClose={() => setModalState({ ...modalState, isOpen: false })}
       />
     </div>
   );

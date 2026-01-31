@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { 
-  FaUsers, FaBug, FaCheckCircle, FaServer, FaBell, 
-  FaTimes, FaUserPlus, FaCheck, FaTrash, FaEdit 
+import {
+  FaUsers, FaBug, FaCheckCircle, FaServer, FaBell,
+  FaTimes, FaUserPlus, FaCheck, FaTrash, FaEdit
 } from 'react-icons/fa';
 
 const AdminDashboardPage: React.FC = () => {
   // Data State
   const [users, setUsers] = useState<any[]>([]);
   const [pendingUsers, setPendingUsers] = useState<any[]>([]);
-  
+
   // UI State
   const [showRequests, setShowRequests] = useState(false);
   const [showAddAdmin, setShowAddAdmin] = useState(false);
@@ -20,7 +20,7 @@ const AdminDashboardPage: React.FC = () => {
   const [newAdminPass, setNewAdminPass] = useState('');
   const [editRole, setEditRole] = useState('user');
 
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   const headers = { headers: { Authorization: `Bearer ${token}` } };
   const API_URL = 'http://localhost:8000/api';
 
@@ -88,13 +88,13 @@ const AdminDashboardPage: React.FC = () => {
 
   return (
     <div className="text-white space-y-6 relative min-h-screen">
-      
+
       {/* HEADER */}
       <div className="flex justify-between items-center border-b border-gray-700 pb-4">
         <h1 className="text-3xl font-bold">System Administration</h1>
         <div className="flex gap-3">
           {/* Add Admin Button */}
-          <button 
+          <button
             onClick={() => setShowAddAdmin(true)}
             className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded flex items-center gap-2 font-bold"
           >
@@ -102,7 +102,7 @@ const AdminDashboardPage: React.FC = () => {
           </button>
 
           {/* Requests Button */}
-          <button 
+          <button
             onClick={() => setShowRequests(true)}
             className="relative bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded flex items-center gap-2 font-bold"
           >
@@ -168,11 +168,10 @@ const AdminDashboardPage: React.FC = () => {
                   <td className="px-6 py-4">{u.id}</td>
                   <td className="px-6 py-4 font-medium text-white">{u.email}</td>
                   <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
-                      u.role === 'admin' ? 'bg-red-900 text-red-200' :
+                    <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${u.role === 'admin' ? 'bg-red-900 text-red-200' :
                       u.role === 'instructor' ? 'bg-purple-900 text-purple-200' :
-                      'bg-blue-900 text-blue-200'
-                    }`}>
+                        'bg-blue-900 text-blue-200'
+                      }`}>
                       {u.role}
                     </span>
                   </td>
@@ -181,10 +180,10 @@ const AdminDashboardPage: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 flex gap-3">
                     <button onClick={() => openEditModal(u)} className="text-blue-400 hover:text-white transition" title="Edit Role">
-                        <FaEdit />
+                      <FaEdit />
                     </button>
                     <button onClick={() => handleBan(u.id)} className="text-red-400 hover:text-white transition" title="Ban User">
-                        <FaTrash />
+                      <FaTrash />
                     </button>
                   </td>
                 </tr>
@@ -220,9 +219,9 @@ const AdminDashboardPage: React.FC = () => {
             <h2 className="text-xl font-bold mb-4">Edit User: {editingUser.email}</h2>
             <label className="block mb-2 text-sm text-gray-400">Change Role:</label>
             <select value={editRole} onChange={e => setEditRole(e.target.value)} className="w-full bg-gray-700 p-2 rounded text-white mb-6">
-                <option value="user">Student</option>
-                <option value="instructor">Instructor</option>
-                <option value="admin">Admin</option>
+              <option value="user">Student</option>
+              <option value="instructor">Instructor</option>
+              <option value="admin">Admin</option>
             </select>
             <div className="flex justify-end gap-2">
               <button onClick={() => setEditingUser(null)} className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600">Cancel</button>

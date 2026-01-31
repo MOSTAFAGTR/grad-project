@@ -3,6 +3,8 @@ version: '3.8'
 # Define a shared network for all containers to talk to each other
 networks:
   scale_net:
+    name: scale_net  # <--- This forces the name to always be 'scale_net_fixed'
+    driver: bridge
 
 services:
   # ====================================================
