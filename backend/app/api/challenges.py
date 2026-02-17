@@ -36,14 +36,19 @@ class CommentResponse(BaseModel):
 # --- SQL Injection Endpoints ---
 
 @router.post("/vulnerable-login")
-def execute_vulnerable_login(attempt: LoginAttempt, db: Session = Depends(get_db)):
-    # Vulnerable to SQL Injection - DO NOT DO THIS IN PRODUCTION!
-    query = f"SELECT * FROM challenge_users WHERE username = '{attempt.username}' OR password = '{attempt.password}'"
-    result = db.execute(text(query)).fetchone()
-    if result:
-        return {"message": "Login successful!"}
-    else:
-        raise HTTPException(status_code=401, detail="Invalid credentials") 
+def execute_vulnerable_login(attempt: LoginAttempt):
+    db = SessionLocalChallenge()
+    query_str = f'SELECT * FROM users WHERE username ="' + attempt.username + '" AND password ="' + attempt.password + '"'
+    print(f"SQL Exec: {query_str}")
+    try:
+        result = db.execute(text(query_str)).mappings().first()
+        if result: return {"message": "Login successful!", "user": dict(result)}
+        else: raise HTTPException(401, "Invalid credentials")
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        raise HTTPException(400, "Database Error (SQL Syntax)")
+    finally:
+        db.close()
 
 @router.post("/submit-fix")
 def submit_fix_sql(submission: CodeSubmission):

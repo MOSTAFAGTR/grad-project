@@ -31,10 +31,7 @@ def login():
     cursor = conn.cursor()
 
     # !!! VULNERABLE CODE !!!
-    # The query is built by concatenating user-provided strings directly.
-    # An attacker can manipulate the username to change the query's logic.
-    # For example, a username of "admin' OR '1'='1" would bypass the password check.
-    query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'"
+    query = f'SELECT * FROM users WHERE username ="' + username + '" AND password ="' + password + '"'
 
     try:
         cursor.execute(query)
