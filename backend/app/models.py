@@ -40,6 +40,7 @@ class Challenge(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255))
     description = Column(String(255))
+    
 
 # --- QUIZ BANK MODELS ---
 class Question(Base):
@@ -86,3 +87,11 @@ class QuizAssignment(Base):
     question_ids = Column(Text)
     
     created_at = Column(DateTime, default=datetime.utcnow)
+
+# --- CSRF CHALLENGE MODEL (NEW) ---
+class CSRFAccount(Base):
+    __tablename__ = "csrf_accounts"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(100), unique=True, index=True)
+    balance = Column(Integer, default=100)

@@ -20,6 +20,8 @@ import XssFixPage from './pages/XssFixPage';
 import XssTutorialPage from './pages/XssTutorialPage';
 import InstructorQuizPage from './pages/InstructorQuizPage';
 import StudentQuizPage from './pages/StudentQuizPage';
+import CsrfAttackPage from './pages/CsrfAttackPage';
+import CsrfFixPage from './pages/CsrfFixPage';
 
 // Components
 import MainLayout from './components/MainLayout';
@@ -47,6 +49,10 @@ const App: React.FC = () => {
             <Route path="/challenges/2/tutorial" element={<XssTutorialPage />} />
             <Route path="/challenges/2/attack" element={<XssAttackPage />} />
             <Route path="/challenges/2/fix" element={<XssFixPage />} />
+
+            <Route path="/challenges/3/attack" element={<CsrfAttackPage />} />
+            <Route path="/challenges/3/fix" element={<CsrfFixPage />} />
+            
             
             <Route path="/challenges/attack-success" element={<AttackSuccessPage />} />
             <Route path="/quiz" element={<StudentQuizPage />} />

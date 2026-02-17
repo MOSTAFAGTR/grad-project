@@ -1,56 +1,45 @@
 version: '3.8'
 
-# Define a shared network for all containers to talk to each other
 networks:
   scale_net:
-    name: scale_net  # <--- This forces the name to always be 'scale_net_fixed'
+    name: scale_net
     driver: bridge
 
 services:
-  # ====================================================
-  # 1. SANDBOX BASE IMAGE BUILDER (New Performance Fix)
-  # ====================================================
-  # This service builds the Python image with libraries pre-installed.
-  # It exits immediately after building. The Backend uses this image.
+  # 1. SANDBOX BUILDER
   sandbox_base:
     build: 
       context: ./backend/sandbox_base
     image: scale-sandbox-base
     container_name: scale_sandbox_builder
-    # Dummy command because we only need the image built, not running
     command: ["echo", "Sandbox Base Image Built Successfully"]
     networks:
       - scale_net
 
-  # ====================================================
   # 2. MAIN BACKEND API
-  # ====================================================
   backend:
     build: ./backend
     container_name: scale_application-backend-1
-    # Restart if DB isn't ready yet
     restart: on-failure 
     ports:
       - "8000:8000"
     volumes:
-      # Access to Docker Socket to spawn sandbox containers
       - /var/run/docker.sock:/var/run/docker.sock
-      # Mount source code for live reloading
       - ./backend:/app
-      # Mount Challenge folders so the runner can copy them
+      # --- MOUNT CHALLENGE FOLDERS ---
       - ./challenge-sql-injection:/app/challenge-sql-injection
       - ./challenge-xss:/app/challenge-xss
+      - ./challenge-csrf:/app/challenge-csrf  # <--- NEW MAPPING
     networks:
       - scale_net
     depends_on:
       - main_db
-      - sandbox_base # Wait for base image to be ready
-    # Command to run FastAPI server
+      - challenge_db_sqli
+      - challenge_db_csrf # Wait for CSRF DB
+      - sandbox_base
     command: ["sh", "-c", "python seed_db.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
 
-  # ====================================================
-  # 3. FRONTEND (React + Vite)
-  # ====================================================
+  # 3. FRONTEND
   frontend:
     build: ./frontend
     container_name: scale_application-frontend-1
@@ -58,7 +47,6 @@ services:
       - "5173:5173"
     volumes:
       - ./frontend:/app
-      # CRITICAL: Prevent local empty node_modules from overriding container
       - /app/node_modules
     networks:
       - scale_net
@@ -66,9 +54,7 @@ services:
     environment:
       - VITE_API_URL=http://localhost:8000
 
-  # ====================================================
-  # 4. AI MICROSERVICE
-  # ====================================================
+  # 4. AI SERVICE
   ai_service:
     build: ./ai_service
     container_name: scale_application-ai_service-1
@@ -80,9 +66,7 @@ services:
       - scale_net
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
 
-  # ====================================================
-  # 5. MAIN DATABASE (Users, Auth, Quizzes)
-  # ====================================================
+  # 5. MAIN DATABASE (App Data)
   main_db:
     image: mysql:8.0
     container_name: main_db
@@ -99,9 +83,7 @@ services:
     ports:
       - "3306:3306"
 
-  # ====================================================
-  # 6. CHALLENGE DATABASE (Vulnerable SQLi Target)
-  # ====================================================
+  # 6. SQL INJECTION DATABASE
   challenge_db_sqli:
     image: mysql:8.0
     container_name: challenge_db_sqli
@@ -117,6 +99,22 @@ services:
     networks:
       - scale_net
 
-# Persist the main database data
+  # 7. CSRF CHALLENGE DATABASE (NEW EXTERNAL DB)
+  challenge_db_csrf:
+    image: mysql:8.0
+    container_name: challenge_db_csrf
+    environment:
+      - MYSQL_DATABASE=csrfdb
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_ROOT_PASSWORD=rootpassword
+    volumes:
+      # Mount the new SQL file here
+      - ./challenge-csrf/csrf.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3308:3306"
+    networks:
+      - scale_net
+
 volumes:
   scale_db_data:

@@ -34,7 +34,15 @@ const challenges = [
       { text: 'Tutorial', url: '/challenges/2/tutorial' }
     ] 
     },
-  { id: 3, title: 'CSRF Scenario', icon: <FaUserSecret />, color: 'orange', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  {
+     id: 3,
+      title: 'CSRF Scenario',
+       icon: <FaUserSecret />, 
+       color: 'orange',
+        buttons: [{ text: 'Simulate', url: '/challenges/3/attack' },
+           { text: 'Fix', url: '/challenges/3/fix' },
+            { text: 'Tutorial', url: '/under-construction' }] 
+          },
   { id: 4, title: 'Command Injection', icon: <FaTerminal />, color: 'purple', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
   { id: 5, title: 'Broken Authentication', icon: <FaUserShield />, color: 'red', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
   { id: 6, title: 'Security Misconfiguration', icon: <FaTools />, color: 'green', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },

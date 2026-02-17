@@ -58,6 +58,18 @@ class ProgressResponse(BaseModel):
     completed_at: datetime
     class Config:
         from_attributes = True
+        # ===========================
+# CSRF SCHEMAS
+# ===========================
+class TransferRequest(BaseModel):
+    to_user: str
+    amount: int
+
+class CSRFAccountResponse(BaseModel):
+    username: str
+    balance: int
+    class Config:
+        from_attributes = True
 
 # ===========================
 # QUIZ & ASSIGNMENT SCHEMAS

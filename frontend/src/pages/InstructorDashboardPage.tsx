@@ -230,7 +230,7 @@ const InstructorDashboardPage: React.FC = () => {
                   <h4 className="text-sm font-bold text-gray-400 mb-2">Instructor Actions</h4>
                   <div className="flex gap-2">
                     <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-bold">Message Student</button>
-                    <button className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm font-bold">Reset Password</button>
+                    <button className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm font-bold">Reset Progress</button>
                   </div>
                 </div>
               </div>

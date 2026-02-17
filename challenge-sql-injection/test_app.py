@@ -5,7 +5,7 @@ import subprocess
 
 class TestVulnerability(unittest.TestCase):
     BASE_URL = "http://localhost:5000"
-    process = None
+    process = None 
 
     @classmethod
     def setUpClass(cls):
