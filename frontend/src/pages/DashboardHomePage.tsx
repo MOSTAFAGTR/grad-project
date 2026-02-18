@@ -1,17 +1,54 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FaShieldAlt, FaBug, FaTrophy, FaArrowRight } from 'react-icons/fa';
+import axios from 'axios';
+import { FaShieldAlt, FaBug, FaTrophy, FaArrowRight, FaClipboardList } from 'react-icons/fa';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+interface ProgressItem {
+  challenge_id: string;
+}
+
+interface QuizAttempt {
+  id: number;
+  title: string;
+  score: number;
+  total: number;
+  time_seconds: number;
+  completed_at: string;
+}
 
 const DashboardHomePage: React.FC = () => {
   const [progress, setProgress] = useState(0);
   const [userEmail, setUserEmail] = useState('');
+  const [progressCount, setProgressCount] = useState(0);
+  const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([]);
 
   useEffect(() => {
-    const role = sessionStorage.getItem('role') || 'Student';
-    setUserEmail(role);
-    // Animate progress bar
-    setTimeout(() => setProgress(35), 500);
+    const email = sessionStorage.getItem('user_email') || sessionStorage.getItem('role') || 'Student';
+    setUserEmail(email);
+    const token = sessionStorage.getItem('token');
+    if (token) {
+      axios.get(`${API_URL}/api/challenges/progress`, { headers: { Authorization: `Bearer ${token}` } })
+        .then((res) => {
+          const items = res.data as ProgressItem[];
+          setProgressCount(items.length);
+          setProgress(Math.min(100, Math.round((items.length / 10) * 100)));
+        })
+        .catch(() => {});
+      axios.get(`${API_URL}/api/quizzes/attempts`, { headers: { Authorization: `Bearer ${token}` } })
+        .then((res) => setQuizAttempts(res.data as QuizAttempt[]))
+        .catch(() => {});
+    } else {
+      setTimeout(() => setProgress(35), 500);
+    }
   }, []);
+
+  const latestQuiz = quizAttempts[0];
+  const avgTimeSeconds = quizAttempts.length > 0
+    ? Math.round(quizAttempts.reduce((s, a) => s + a.time_seconds, 0) / quizAttempts.length)
+    : 0;
+  const formatTime = (s: number) => (s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`);
 
   return (
     <div className="relative min-h-screen text-white bg-gray-900 p-8">
@@ -29,13 +66,13 @@ const DashboardHomePage: React.FC = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl hover:border-blue-500 transition duration-300">
             <div className="flex items-center gap-4 mb-2">
               <div className="p-3 bg-blue-900/50 rounded-lg text-blue-400"><FaShieldAlt size={24} /></div>
               <h3 className="text-xl font-bold">Defense Level</h3>
             </div>
-            <p className="text-3xl font-bold">Novice</p>
+            <p className="text-3xl font-bold">{progressCount < 2 ? 'Novice' : progressCount < 5 ? 'Apprentice' : progressCount < 10 ? 'Expert' : 'Master'}</p>
             <p className="text-sm text-gray-400 mt-1">Keep fixing to rank up</p>
           </div>
 
@@ -44,7 +81,7 @@ const DashboardHomePage: React.FC = () => {
               <div className="p-3 bg-purple-900/50 rounded-lg text-purple-400"><FaBug size={24} /></div>
               <h3 className="text-xl font-bold">Vulnerabilities</h3>
             </div>
-            <p className="text-3xl font-bold">2/20</p>
+            <p className="text-3xl font-bold">{progressCount}/20</p>
             <p className="text-sm text-gray-400 mt-1">Patched successfully</p>
           </div>
 
@@ -53,8 +90,21 @@ const DashboardHomePage: React.FC = () => {
               <div className="p-3 bg-yellow-900/50 rounded-lg text-yellow-400"><FaTrophy size={24} /></div>
               <h3 className="text-xl font-bold">Current Score</h3>
             </div>
-            <p className="text-3xl font-bold">1,250 XP</p>
-            <p className="text-sm text-gray-400 mt-1">Top 15% of class</p>
+            <p className="text-3xl font-bold">{progressCount * 100 + (quizAttempts.length ? Math.round(quizAttempts.reduce((s, a) => s + (a.score / a.total) * 100, 0) / quizAttempts.length) : 0)} XP</p>
+            <p className="text-sm text-gray-400 mt-1">Challenges + quiz scores</p>
+          </div>
+
+          <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl hover:border-teal-500 transition duration-300">
+            <div className="flex items-center gap-4 mb-2">
+              <div className="p-3 bg-teal-900/50 rounded-lg text-teal-400"><FaClipboardList size={24} /></div>
+              <h3 className="text-xl font-bold">Quiz Results</h3>
+            </div>
+            <p className="text-3xl font-bold">
+              {latestQuiz ? `${Math.round((latestQuiz.score / latestQuiz.total) * 100)}%` : '—'}
+            </p>
+            <p className="text-sm text-gray-400 mt-1">
+              {quizAttempts.length > 0 ? `Latest quiz · Avg time: ${formatTime(avgTimeSeconds)}` : 'No quizzes yet'}
+            </p>
           </div>
         </div>
 
@@ -111,6 +161,27 @@ const DashboardHomePage: React.FC = () => {
             <p className="text-gray-400 text-sm mt-4">
               You are mastering the OWASP Top 10. Complete the XSS module to unlock "Broken Access Control".
             </p>
+          </div>
+
+          {/* Recent Quiz Attempts - same template as stat cards */}
+          <div className="lg:col-span-2 bg-gray-800/50 p-8 rounded-xl border border-gray-700">
+            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+              <FaClipboardList className="text-teal-400" />
+              Recent Quiz Attempts
+            </h2>
+            {quizAttempts.length === 0 ? (
+              <p className="text-gray-500">No quiz attempts yet. <Link to="/quiz" className="text-teal-400 hover:underline">Take a quiz</Link> to get started.</p>
+            ) : (
+              <div className="space-y-3">
+                {quizAttempts.slice(0, 5).map((a) => (
+                  <div key={a.id} className="bg-gray-800 p-4 rounded-lg border border-gray-700 flex justify-between items-center">
+                    <span className="font-medium truncate flex-1 mr-4">{a.title}</span>
+                    <span className="text-teal-400 font-bold shrink-0">{Math.round((a.score / a.total) * 100)}%</span>
+                    <span className="text-gray-500 text-sm shrink-0 ml-2">{formatTime(a.time_seconds)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
         </div>

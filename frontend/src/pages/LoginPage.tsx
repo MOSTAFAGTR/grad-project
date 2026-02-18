@@ -1,7 +1,24 @@
-import React, { useState } from 'react';
+import * as React from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+function getApiErrorMessage(err: unknown): string {
+  if (err && typeof err === 'object' && 'response' in err) {
+    const res = (err as { response?: { data?: { detail?: unknown } } }).response;
+    const detail = res?.data?.detail;
+    if (Array.isArray(detail)) {
+      return detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join(' ');
+    }
+    if (typeof detail === 'string') return detail;
+    if (detail != null) return String(detail);
+  }
+  if (err && typeof err === 'object' && 'request' in err) return 'Server not responding. Is the backend running on ' + API_URL + '?';
+  return 'An unexpected error occurred.';
+}
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -15,40 +32,26 @@ const LoginPage: React.FC = () => {
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:8000/api/auth/login', {
-        username: email, 
-        password: password
+      const res = await axios.post<{ access_token: string; role?: string; user_id?: number; email?: string }>(`${API_URL}/api/auth/login`, {
+        username: email.trim(),
+        password
       });
 
-      const { access_token, role, user_id } = response.data;
-      
-      if (access_token) {
-        // --- FIX: USE SESSION STORAGE FOR TAB ISOLATION ---
-        sessionStorage.setItem('token', access_token);
-        sessionStorage.setItem('role', role);
-        sessionStorage.setItem('user_id', user_id);
-        
-        // Dynamic Redirection
-        if (role === 'admin') {
-          navigate('/admin/stats');
-        } else if (role === 'instructor') {
-          navigate('/instructor/dashboard');
-        } else {
-          navigate('/home');
-        }
+      const { access_token, role, user_id, email: resEmail } = res.data;
 
+      if (access_token) {
+        sessionStorage.setItem('token', access_token);
+        sessionStorage.setItem('role', role ?? 'user');
+        sessionStorage.setItem('user_id', String(user_id ?? ''));
+        if (resEmail) sessionStorage.setItem('user_email', resEmail);
+        if (role === 'admin') navigate('/admin/stats');
+        else if (role === 'instructor') navigate('/instructor/dashboard');
+        else navigate('/home');
       } else {
         setError('Login failed: No token received.');
       }
-
-    } catch (err: any) {
-      if (err.response) {
-        setError(err.response.data.detail || 'Invalid credentials');
-      } else if (err.request) {
-        setError('Server not responding. Is Backend running?');
-      } else {
-        setError('An unexpected error occurred.');
-      }
+    } catch (err) {
+      setError(getApiErrorMessage(err));
     }
   };
 

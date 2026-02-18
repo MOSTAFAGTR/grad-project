@@ -42,6 +42,11 @@ class UserSearchResponse(BaseModel):
 class CodeSubmission(BaseModel):
     code: str
 
+
+class PingRequest(BaseModel):
+    """Request body for command-injection vulnerable ping endpoint."""
+    host: str
+
 class CommentCreate(BaseModel):
     author: str
     content: str
@@ -145,5 +150,25 @@ class AssignmentResponse(BaseModel):
     title: str
     instructor_id: int
     created_at: datetime
+    class Config:
+        from_attributes = True
+
+
+# --- QUIZ ATTEMPTS ---
+class QuizAttemptSubmit(BaseModel):
+    assignment_id: Optional[int] = None
+    title: str
+    score: int
+    total: int
+    time_seconds: int
+
+
+class QuizAttemptResponse(BaseModel):
+    id: int
+    title: str
+    score: int
+    total: int
+    time_seconds: int
+    completed_at: datetime
     class Config:
         from_attributes = True

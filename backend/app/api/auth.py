@@ -66,7 +66,7 @@ def login(user: schemas.LoginAttempt, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail="Account pending approval.")
 
     token = create_access_token(data={"sub": db_user.email, "role": db_user.role})
-    return {"access_token": token, "token_type": "bearer", "user_id": db_user.id, "role": db_user.role}
+    return {"access_token": token, "token_type": "bearer", "user_id": db_user.id, "role": db_user.role, "email": db_user.email}
 
 @router.get("/users", response_model=List[schemas.UserSearchResponse])
 def search_users(query: str = "", db: Session = Depends(get_db)):

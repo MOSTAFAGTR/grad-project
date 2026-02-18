@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import * as React from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 
 const SqlInjectionAttackPage: React.FC = () => {
@@ -24,7 +27,11 @@ const SqlInjectionAttackPage: React.FC = () => {
       console.log("Response:", response);
 
       if (response.status === 200) {
-        navigate('/challenges/attack-success');
+        const token = sessionStorage.getItem('token');
+        if (token) {
+          axios.post(`${API_URL}/api/challenges/mark-attack-complete?challenge_type=sql-injection`, {}, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+        }
+        navigate('/challenges/attack-success?type=sql-injection');
       }
     } catch (err: any) {
       console.error("Full Error Object:", err);

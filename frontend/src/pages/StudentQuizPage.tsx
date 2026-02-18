@@ -1,42 +1,59 @@
-import React, { useState, useEffect } from 'react';
+import * as React from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const StudentQuizPage: React.FC = () => {
   const [step, setStep] = useState<'setup' | 'quiz' | 'result'>('setup');
   const [loading, setLoading] = useState(false);
 
   // Setup State
-  const [topic, setTopic] = useState('SQL Injection'); // Single select for simplicity in old UI
+  const [topic, setTopic] = useState('SQL Injection');
   const [mode, setMode] = useState('Adaptive');
-  const [count, setCount] = useState(5);
+  const [count] = useState(5);
   const [assignments, setAssignments] = useState<any[]>([]);
+  const [quizTitle, setQuizTitle] = useState('');
+  const [assignmentId, setAssignmentId] = useState<number | null>(null);
 
   // Quiz State
   const [questions, setQuestions] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [lastResult, setLastResult] = useState<any>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const navigate = useNavigate();
   const token = sessionStorage.getItem('token');
 
   // Load Assignments
   useEffect(() => {
     if (token) {
-      axios.get('http://localhost:8000/api/quizzes/assignments/student', {
+      axios.get(`${API_URL}/api/quizzes/assignments/student`, {
         headers: { Authorization: `Bearer ${token}` }
       }).then(res => setAssignments(res.data))
         .catch(err => console.error(err));
     }
   }, [token]);
 
+  // Timer: start when quiz starts, stop when quiz ends
+  useEffect(() => {
+    if (step === 'quiz' && questions.length > 0) {
+      setElapsedSeconds(0);
+      timerRef.current = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
+    };
+  }, [step, questions.length]);
+
   const handleStartPractice = async () => {
     setLoading(true);
     try {
       // FIX: Send 'topics' as an ARRAY, not a string
       const res = await axios.post(
-        'http://localhost:8000/api/quizzes/take',
+        `${API_URL}/api/quizzes/take`,
         { topics: [topic], count, mode },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -45,6 +62,8 @@ const StudentQuizPage: React.FC = () => {
         alert("No questions found. Ask instructor to add some!");
       } else {
         setQuestions(res.data);
+        setQuizTitle(`Practice: ${topic}`);
+        setAssignmentId(null);
         setStep('quiz');
         setCurrentIndex(0);
         setScore(0);
@@ -53,12 +72,14 @@ const StudentQuizPage: React.FC = () => {
     setLoading(false);
   };
 
-  const handleStartAssignment = async (id: number) => {
+  const handleStartAssignment = async (id: number, title: string) => {
     try {
-      const res = await axios.get(`http://localhost:8000/api/quizzes/assignments/${id}/take`, {
+      const res = await axios.get(`${API_URL}/api/quizzes/assignments/${id}/take`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setQuestions(res.data);
+      setQuizTitle(title);
+      setAssignmentId(id);
       setStep('quiz');
       setCurrentIndex(0);
       setScore(0);
@@ -66,7 +87,7 @@ const StudentQuizPage: React.FC = () => {
   };
 
   const handleAnswer = async (optId: number) => {
-    const res = await axios.post('http://localhost:8000/api/quizzes/submit-answer',
+    const res = await axios.post(`${API_URL}/api/quizzes/submit-answer`,
       { question_id: questions[currentIndex].id, selected_option_id: optId },
       { headers: { Authorization: `Bearer ${token}` } }
     );
@@ -77,7 +98,26 @@ const StudentQuizPage: React.FC = () => {
   const handleNext = () => {
     setLastResult(null);
     if (currentIndex + 1 < questions.length) setCurrentIndex(currentIndex + 1);
-    else setStep('result');
+    else {
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
+      setStep('result');
+      if (token && questions.length > 0) {
+        axios.post(`${API_URL}/api/quizzes/submit-attempt`, {
+          assignment_id: assignmentId,
+          title: quizTitle || 'Quiz',
+          score,
+          total: questions.length,
+          time_seconds: elapsedSeconds + 1,
+        }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+      }
+    }
+  };
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
   };
 
   return (
@@ -115,7 +155,7 @@ const StudentQuizPage: React.FC = () => {
                 {assignments.map(a => (
                   <div key={a.id} className="bg-gray-700 p-4 rounded flex justify-between items-center">
                     <span className="font-bold">{a.title}</span>
-                    <button onClick={() => handleStartAssignment(a.id)} className="bg-purple-600 px-3 py-1 rounded text-sm hover:bg-purple-700 font-bold">Start</button>
+                    <button onClick={() => handleStartAssignment(a.id, a.title)} className="bg-purple-600 px-3 py-1 rounded text-sm hover:bg-purple-700 font-bold">Start</button>
                   </div>
                 ))}
               </div>
@@ -127,9 +167,12 @@ const StudentQuizPage: React.FC = () => {
       {/* QUIZ VIEW */}
       {step === 'quiz' && questions.length > 0 && (
         <div className="bg-gray-800 p-8 rounded-xl border border-gray-700 max-w-2xl w-full shadow-2xl">
-          <div className="flex justify-between mb-6 text-gray-400">
+          <div className="flex justify-between items-center mb-6 text-gray-400">
             <span>Q {currentIndex + 1} / {questions.length}</span>
-            <span className="bg-gray-700 px-2 rounded text-xs py-1">{questions[currentIndex].difficulty}</span>
+            <div className="flex gap-3 items-center">
+              <span className="bg-amber-900/50 text-amber-300 px-3 py-1 rounded text-sm font-mono">{formatTime(elapsedSeconds)}</span>
+              <span className="bg-gray-700 px-2 rounded text-xs py-1">{questions[currentIndex].difficulty}</span>
+            </div>
           </div>
           <h2 className="text-2xl font-bold mb-8">{questions[currentIndex].text}</h2>
           <div className="space-y-3">
@@ -151,10 +194,11 @@ const StudentQuizPage: React.FC = () => {
       )}
 
       {/* RESULT VIEW */}
-      {step === 'result' && (
+      {step === 'result' && questions.length > 0 && (
         <div className="bg-gray-800 p-10 rounded-xl text-center shadow-2xl">
           <h2 className="text-4xl font-bold text-white mb-4">Quiz Finished</h2>
-          <div className="text-6xl font-extrabold text-blue-500 mb-6">{Math.round((score / questions.length) * 100)}%</div>
+          <div className="text-6xl font-extrabold text-blue-500 mb-2">{Math.round((score / questions.length) * 100)}%</div>
+          <p className="text-gray-400 mb-6">Score: {score}/{questions.length} — Time: {formatTime(elapsedSeconds + 1)}</p>
           <button onClick={() => setStep('setup')} className="bg-gray-700 px-8 py-3 rounded font-bold hover:bg-gray-600">Back to Dashboard</button>
         </div>
       )}

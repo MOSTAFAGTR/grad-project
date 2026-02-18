@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 interface Comment {
   id: number;
   author: string;
@@ -52,7 +54,10 @@ const XssAttackPage: React.FC = () => {
       const isAttack = xssPatterns.some(pattern => newComment.toLowerCase().includes(pattern));
 
       if (isAttack) {
-        // Redirect to Success Page with TYPE=XSS
+        const token = sessionStorage.getItem('token');
+        if (token) {
+          axios.post(`${API_URL}/api/challenges/mark-attack-complete?challenge_type=xss`, {}, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+        }
         navigate('/challenges/attack-success?type=xss');
         return;
       }

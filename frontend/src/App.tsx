@@ -22,6 +22,8 @@ import InstructorQuizPage from './pages/InstructorQuizPage';
 import StudentQuizPage from './pages/StudentQuizPage';
 import CsrfAttackPage from './pages/CsrfAttackPage';
 import CsrfFixPage from './pages/CsrfFixPage';
+import RedirectChallengePage from './pages/RedirectChallengePage';
+import CommandChallengePage from './pages/CommandChallengePage';
 
 // Components
 import MainLayout from './components/MainLayout';
@@ -52,8 +54,13 @@ const App: React.FC = () => {
 
             <Route path="/challenges/3/attack" element={<CsrfAttackPage />} />
             <Route path="/challenges/3/fix" element={<CsrfFixPage />} />
-            
-            
+
+            {/* Command Injection (challenge 4) */}
+            <Route path="/challenges/4/:tab" element={<CommandChallengePage />} />
+
+            {/* Unvalidated Redirect (challenge 10): /challenges/10/attack | fix | tutorial */}
+            <Route path="/challenges/10/:tab" element={<RedirectChallengePage />} />
+
             <Route path="/challenges/attack-success" element={<AttackSuccessPage />} />
             <Route path="/quiz" element={<StudentQuizPage />} />
             <Route path="/under-construction" element={<UnderConstructionPage />} />

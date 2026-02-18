@@ -5,8 +5,8 @@ import requests
 import random
 
 from ..db.database import get_db
-from ..models import Question, QuestionOption, UserAnswer, User, QuizAssignment
-from ..schemas import QuestionCreate, QuestionResponse, QuestionUpdate, QuizRequest, AnswerSubmit, AnswerResponse, AIGenerationRequest, AssignmentCreate, AssignmentResponse
+from ..models import Question, QuestionOption, UserAnswer, User, QuizAssignment, QuizAttempt
+from ..schemas import QuestionCreate, QuestionResponse, QuestionUpdate, QuizRequest, AnswerSubmit, AnswerResponse, AIGenerationRequest, AssignmentCreate, AssignmentResponse, QuizAttemptSubmit, QuizAttemptResponse
 from .auth import get_current_user
 
 router = APIRouter()
@@ -111,3 +111,26 @@ def submit_answer(sub: AnswerSubmit, db: Session = Depends(get_db), user: User =
     db.add(UserAnswer(user_id=user.id, question_id=sub.question_id, selected_option_id=sub.selected_option_id, is_correct=opt.is_correct))
     db.commit()
     return {"correct": opt.is_correct, "explanation": q.explanation}
+
+
+@router.post("/submit-attempt", response_model=QuizAttemptResponse)
+def submit_quiz_attempt(d: QuizAttemptSubmit, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Record a completed quiz attempt with score and time."""
+    att = QuizAttempt(
+        user_id=user.id,
+        assignment_id=d.assignment_id,
+        title=d.title,
+        score=d.score,
+        total=d.total,
+        time_seconds=d.time_seconds,
+    )
+    db.add(att)
+    db.commit()
+    db.refresh(att)
+    return att
+
+
+@router.get("/attempts", response_model=List[QuizAttemptResponse])
+def get_my_quiz_attempts(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Get current user's quiz attempts, newest first."""
+    return db.query(QuizAttempt).filter(QuizAttempt.user_id == user.id).order_by(QuizAttempt.completed_at.desc()).all()

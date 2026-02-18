@@ -1,12 +1,29 @@
-import React, { useState } from 'react';
+import * as React from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+function getApiErrorMessage(err: unknown): string {
+  if (err && typeof err === 'object' && 'response' in err) {
+    const res = (err as { response?: { data?: { detail?: unknown } } }).response;
+    const detail = res?.data?.detail;
+    if (Array.isArray(detail)) {
+      return detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join(' ');
+    }
+    if (typeof detail === 'string') return detail;
+    if (detail != null) return String(detail);
+  }
+  if (err && typeof err === 'object' && 'request' in err) return 'Server not responding. Is the backend running on ' + API_URL + '?';
+  return 'Registration failed.';
+}
 
 const RegisterPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState('user'); 
+  const [role, setRole] = useState('user');
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -14,25 +31,23 @@ const RegisterPage: React.FC = () => {
     e.preventDefault();
     setError('');
 
-    if (!email || !password || !confirmPassword) return setError('Please fill in all fields.');
+    if (!email?.trim() || !password || !confirmPassword) return setError('Please fill in all fields.');
     if (password !== confirmPassword) return setError('Passwords do not match.');
 
     try {
-      // Register
-      await axios.post('http://localhost:8000/api/auth/register', {
-        email, password, role
+      await axios.post(`${API_URL}/api/auth/register`, {
+        email: email.trim(),
+        password,
+        role
       });
-      
-      // Conditional Alert based on Role
       if (role === 'instructor') {
-        alert('Registration successful! NOTE: Your account is PENDING approval. You cannot login until an Admin approves it.');
+        alert('Registration successful! Your account is PENDING approval. You cannot log in until an Admin approves it.');
       } else {
-        alert('Registration successful! You can login now.');
+        alert('Registration successful! You can log in now.');
       }
       navigate('/login');
-
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Registration failed.');
+    } catch (err) {
+      setError(getApiErrorMessage(err));
     }
   };
 

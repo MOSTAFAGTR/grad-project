@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 interface Account {
   username: string;
   balance: number;
@@ -47,6 +49,10 @@ const CsrfAttackPage: React.FC = () => {
       // VERY BASIC DETECTION: did Alice lose money?
       const alice = accounts.find(a => a.username === 'Alice');
       if (alice && alice.balance < 1000) {
+        const token = sessionStorage.getItem('token');
+        if (token) {
+          axios.post(`${API_URL}/api/challenges/mark-attack-complete?challenge_type=csrf`, {}, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+        }
         navigate('/challenges/attack-success?type=csrf');
       } else {
         setMessage('Exploit did not work. Try again.');

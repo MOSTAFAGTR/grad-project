@@ -18,6 +18,7 @@ class User(Base):
 
     answers = relationship("UserAnswer", back_populates="user")
     progress = relationship("UserProgress", back_populates="user")
+    quiz_attempts = relationship("QuizAttempt", back_populates="user")
 
 # --- PROGRESS MODEL ---
 class UserProgress(Base):  # <--- FIXED: Inherits from Base now
@@ -87,6 +88,21 @@ class QuizAssignment(Base):
     question_ids = Column(Text)
     
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class QuizAttempt(Base):
+    """Stores completed quiz attempts with score and time taken."""
+    __tablename__ = "quiz_attempts"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    assignment_id = Column(Integer, ForeignKey("quiz_assignments.id"), nullable=True)
+    title = Column(String(255))  # e.g. "Practice: SQL Injection" or assignment title
+    score = Column(Integer)  # number correct
+    total = Column(Integer)
+    time_seconds = Column(Integer)  # elapsed time in seconds
+    completed_at = Column(DateTime, default=datetime.utcnow)
+    user = relationship("User", back_populates="quiz_attempts")
+
 
 # --- CSRF CHALLENGE MODEL (NEW) ---
 class CSRFAccount(Base):

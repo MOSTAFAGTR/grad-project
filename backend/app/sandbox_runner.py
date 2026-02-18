@@ -36,21 +36,26 @@ def run_in_sandbox(student_code: str, challenge_dir: str):
             student_code_path.write_text(student_code)
             
             # 3. Define the Dockerfile with WINDOWS FIX
+            # Command-injection challenge needs 'ping' (not in python:3.9-slim)
+            ping_install = ""
+            if challenge_dir == "challenge-command-injection":
+                ping_install = "RUN apt-get update && apt-get install -y --no-install-recommends iputils-ping && rm -rf /var/lib/apt/lists/*\n            "
+
             dockerfile_content = f"""
             FROM python:3.9-slim
             WORKDIR /app
-            
+
+            {ping_install}
             # Install dependencies
             COPY requirements.txt .
             RUN pip install --no-cache-dir -r requirements.txt
-            
+
             # Copy challenge files
             COPY . .
-            
+
             # --- CRITICAL FIX FOR WINDOWS USERS ---
-            # Remove carriage returns (\\r) from the shell script before running it
             RUN sed -i 's/\\r$//' run_tests.sh
-            
+
             # Run the tests
             CMD ["sh", "run_tests.sh"]
             """

@@ -114,7 +114,7 @@ const AdminStatsPage: React.FC = () => {
                   dataKey="value"
                   label
                 >
-                  {stats.user_distribution.map((entry: any, index: number) => (
+                  {stats.user_distribution.map((_entry: unknown, index: number) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>

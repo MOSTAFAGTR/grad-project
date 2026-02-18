@@ -1,14 +1,27 @@
-import React from 'react';
+import * as React from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 import {
   FaSyringe, FaBug, FaUserSecret, FaTerminal, FaUserShield, FaTools, FaLock, FaFolderOpen, FaFileCode, FaExternalLinkAlt
 } from 'react-icons/fa';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 // This map is used for the border, text, and shadow colors
 const colorMap: Record<string, string> = {
   cyan: '#06b6d4', pink: '#d946ef', orange: '#fb923c', purple: '#8b5cf6',
   red: '#ef4444', green: '#10b981', yellow: '#facc15', blue: '#3b82f6',
   indigo: '#6366f1', teal: '#14b8a6'
+};
+
+// Maps challenge id to attack-success ?type= value
+const successTypeMap: Record<number, string> = {
+  1: 'sql-injection',
+  2: 'xss',
+  3: 'csrf',
+  4: 'command-injection',
+  10: 'redirect',
 };
 
 const challenges = [
@@ -43,16 +56,63 @@ const challenges = [
            { text: 'Fix', url: '/challenges/3/fix' },
             { text: 'Tutorial', url: '/under-construction' }] 
           },
-  { id: 4, title: 'Command Injection', icon: <FaTerminal />, color: 'purple', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  {
+    id: 4,
+    title: 'Command Injection',
+    icon: <FaTerminal />,
+    color: 'purple',
+    buttons: [
+      { text: 'Simulate', url: '/challenges/4/attack' },
+      { text: 'Fix', url: '/challenges/4/fix' },
+      { text: 'Tutorial', url: '/challenges/4/tutorial' },
+    ],
+  },
   { id: 5, title: 'Broken Authentication', icon: <FaUserShield />, color: 'red', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
   { id: 6, title: 'Security Misconfiguration', icon: <FaTools />, color: 'green', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
   { id: 7, title: 'Insecure Storage', icon: <FaLock />, color: 'yellow', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
   { id: 8, title: 'Directory Traversal', icon: <FaFolderOpen />, color: 'blue', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
   { id: 9, title: 'XML External Entity (XXE)', icon: <FaFileCode />, color: 'indigo', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
-  { id: 10, title: 'Unvalidated Redirect', icon: <FaExternalLinkAlt />, color: 'teal', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] }
+  {
+    id: 10,
+    title: 'Unvalidated Redirect',
+    icon: <FaExternalLinkAlt />,
+    color: 'teal',
+    buttons: [
+      { text: 'Simulate', url: '/challenges/10/attack' },
+      { text: 'Fix', url: '/challenges/10/fix' },
+      { text: 'Tutorial', url: '/challenges/10/tutorial' },
+    ],
+  },
 ];
 
+// Maps frontend challenge id -> backend challenge_id (for progress lookup)
+const idToChallengeId: Record<number, string> = {
+  1: 'sql-injection',
+  2: 'xss',
+  3: 'csrf',
+  4: 'command-injection',
+  10: 'redirect',
+};
+
+interface ProgressItem {
+  challenge_id: string;
+  completed_at: string;
+}
+
 const ChallengesListPage: React.FC = () => {
+  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const token = sessionStorage.getItem('token');
+    if (!token) return;
+    axios
+      .get<ProgressItem[]>(`${API_URL}/api/challenges/progress`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      .then((res) => setCompletedIds(new Set(res.data.map((p) => p.challenge_id))))
+      .catch(() => {});
+  }, []);
+
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-8">
@@ -83,6 +143,14 @@ const ChallengesListPage: React.FC = () => {
                   {btn.text}
                 </Link>
               ))}
+              {successTypeMap[ch.id] && completedIds.has(idToChallengeId[ch.id]) && (
+                <Link
+                  to={`/challenges/attack-success?type=${successTypeMap[ch.id]}`}
+                  className="bg-green-900/50 text-green-400 text-sm font-semibold py-2 px-5 rounded-full hover:bg-green-800/50 hover:text-green-300 transition-colors border border-green-600/50"
+                >
+                  Success
+                </Link>
+              )}
             </div>
           </div>
         ))}

@@ -29,7 +29,9 @@ services:
       # --- MOUNT CHALLENGE FOLDERS ---
       - ./challenge-sql-injection:/app/challenge-sql-injection
       - ./challenge-xss:/app/challenge-xss
-      - ./challenge-csrf:/app/challenge-csrf  # <--- NEW MAPPING
+      - ./challenge-csrf:/app/challenge-csrf
+      - ./challenge-redirect:/app/challenge-redirect
+      - ./challenge-command-injection:/app/challenge-command-injection
     networks:
       - scale_net
     depends_on:
