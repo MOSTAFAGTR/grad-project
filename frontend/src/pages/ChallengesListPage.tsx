@@ -67,8 +67,24 @@ const challenges = [
       { text: 'Tutorial', url: '/challenges/4/tutorial' },
     ],
   },
-  { id: 5, title: 'Broken Authentication', icon: <FaUserShield />, color: 'red', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
-  { id: 6, title: 'Security Misconfiguration', icon: <FaTools />, color: 'green', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { 
+    id: 5,
+     title: 'Broken Authentication',
+      icon: <FaUserShield />,
+       color: 'red', 
+       buttons: [{ text: 'Simulate', url: '/challenges/5/attack' },
+         { text: 'Fix', url: '/challenges/5/fix' }, 
+         { text: 'Tutorial', url: '/under-construction' }]
+         },
+  { 
+    id: 6,
+     title: 'Security Misconfiguration',
+      icon: <FaTools />,
+       color: 'green',
+        buttons: [{ text: 'Simulate', url: '/challenges/6/attack' },
+           { text: 'Fix', url: '/challenges/6/fix' },
+            { text: 'Tutorial', url: '/under-construction' }]
+           },
   { id: 7, title: 'Insecure Storage', icon: <FaLock />, color: 'yellow', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
   { id: 8, title: 'Directory Traversal', icon: <FaFolderOpen />, color: 'blue', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
   { id: 9, title: 'XML External Entity (XXE)', icon: <FaFileCode />, color: 'indigo', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },

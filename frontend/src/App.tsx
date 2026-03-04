@@ -24,6 +24,10 @@ import CsrfAttackPage from './pages/CsrfAttackPage';
 import CsrfFixPage from './pages/CsrfFixPage';
 import RedirectChallengePage from './pages/RedirectChallengePage';
 import CommandChallengePage from './pages/CommandChallengePage';
+import BrokenAuthAttackPage from './pages/BrokenAuthAttackPage';
+import BrokenAuthFixPage from './pages/BrokenAuthFixPage';
+import SecurityMiscAttackPage from './pages/SecurityMiscAttackPage';
+import SecurityMiscFixPage from './pages/SecurityMiscFixPage';
 
 // Components
 import MainLayout from './components/MainLayout';
@@ -57,6 +61,13 @@ const App: React.FC = () => {
 
             {/* Command Injection (challenge 4) */}
             <Route path="/challenges/4/:tab" element={<CommandChallengePage />} />
+
+            <Route path="/challenges/5/attack" element={<BrokenAuthAttackPage />} />
+            <Route path="/challenges/5/fix" element={<BrokenAuthFixPage />} />
+
+            <Route path="/challenges/6/attack" element={<SecurityMiscAttackPage />} />
+            <Route path="/challenges/6/fix" element={<SecurityMiscFixPage />} />
+            
 
             {/* Unvalidated Redirect (challenge 10): /challenges/10/attack | fix | tutorial */}
             <Route path="/challenges/10/:tab" element={<RedirectChallengePage />} />

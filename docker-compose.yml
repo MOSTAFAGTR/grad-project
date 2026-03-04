@@ -32,6 +32,8 @@ services:
       - ./challenge-csrf:/app/challenge-csrf
       - ./challenge-redirect:/app/challenge-redirect
       - ./challenge-command-injection:/app/challenge-command-injection
+      - ./challenge-broken-auth:/app/challenge-broken-auth
+      - ./challenge-security-misc:/app/challenge-security-misc
     networks:
       - scale_net
     depends_on:
