@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 
 // Import Pages
@@ -12,6 +12,7 @@ import SqlInjectionFixPage from './pages/SqlInjectionFixPage';
 import SqlInjectionTutorialPage from './pages/SqlInjectionTutorialPage';
 import AttackSuccessPage from './pages/AttackSuccessPage';
 import UnderConstructionPage from './pages/UnderConstructionPage';
+import MessagesPage from './pages/MessagesPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminStatsPage from './pages/AdminStatsPage'; // NEW
 import InstructorDashboardPage from './pages/InstructorDashboardPage'; // NEW
@@ -28,6 +29,7 @@ import BrokenAuthAttackPage from './pages/BrokenAuthAttackPage';
 import BrokenAuthFixPage from './pages/BrokenAuthFixPage';
 import SecurityMiscAttackPage from './pages/SecurityMiscAttackPage';
 import SecurityMiscFixPage from './pages/SecurityMiscFixPage';
+import Scanner from './pages/Scanner';
 
 // Components
 import MainLayout from './components/MainLayout';
@@ -47,6 +49,8 @@ const App: React.FC = () => {
           <Route element={<MainLayout />}>
             <Route path="/home" element={<DashboardHomePage />} />
             <Route path="/challenges" element={<ChallengesListPage />} />
+            <Route path="/messages" element={<MessagesPage />} />
+            <Route path="/scanner" element={<Scanner />} />
             
             <Route path="/challenges/1/tutorial" element={<SqlInjectionTutorialPage />} />
             <Route path="/challenges/1/attack" element={<SqlInjectionAttackPage />} />

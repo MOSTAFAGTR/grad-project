@@ -45,6 +45,12 @@ const DashboardHomePage: React.FC = () => {
   }, []);
 
   const latestQuiz = quizAttempts[0];
+  const avgScorePercent = quizAttempts.length > 0
+    ? Math.round(
+        quizAttempts.reduce((sum, attempt) => sum + (attempt.score / attempt.total) * 100, 0) /
+        quizAttempts.length
+      )
+    : 0;
   const avgTimeSeconds = quizAttempts.length > 0
     ? Math.round(quizAttempts.reduce((s, a) => s + a.time_seconds, 0) / quizAttempts.length)
     : 0;
@@ -76,14 +82,17 @@ const DashboardHomePage: React.FC = () => {
             <p className="text-sm text-gray-400 mt-1">Keep fixing to rank up</p>
           </div>
 
-          <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl hover:border-purple-500 transition duration-300">
+          <Link
+            to="/challenges"
+            className="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl hover:border-purple-500 transition duration-300 cursor-pointer block"
+          >
             <div className="flex items-center gap-4 mb-2">
               <div className="p-3 bg-purple-900/50 rounded-lg text-purple-400"><FaBug size={24} /></div>
               <h3 className="text-xl font-bold">Vulnerabilities</h3>
             </div>
             <p className="text-3xl font-bold">{progressCount}/20</p>
-            <p className="text-sm text-gray-400 mt-1">Patched successfully</p>
-          </div>
+            <p className="text-sm text-gray-400 mt-1">Patched successfully · Click to view Labs &amp; Attacks</p>
+          </Link>
 
           <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl hover:border-yellow-500 transition duration-300">
             <div className="flex items-center gap-4 mb-2">
@@ -103,7 +112,9 @@ const DashboardHomePage: React.FC = () => {
               {latestQuiz ? `${Math.round((latestQuiz.score / latestQuiz.total) * 100)}%` : '—'}
             </p>
             <p className="text-sm text-gray-400 mt-1">
-              {quizAttempts.length > 0 ? `Latest quiz · Avg time: ${formatTime(avgTimeSeconds)}` : 'No quizzes yet'}
+              {quizAttempts.length > 0
+                ? `Overall average: ${avgScorePercent}% · Avg time: ${formatTime(avgTimeSeconds)}`
+                : 'No quizzes yet'}
             </p>
           </div>
         </div>

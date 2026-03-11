@@ -5,8 +5,8 @@ import time
 import logging
 
 # --- IMPORT ROUTERS ---
-# We added 'stats' to this import list
-from .api import auth, quizzes, challenges, stats
+# We added 'stats', 'projects', and 'game_challenge' to this import list
+from .api import auth, quizzes, challenges, stats, messages, projects, game_challenge
 from .db import database
 from . import models 
 
@@ -36,6 +36,12 @@ app.include_router(quizzes.router, prefix="/api/quizzes", tags=["quizzes"])
 app.include_router(challenges.router, prefix="/api/challenges", tags=["challenges"])
 # NEW: Register the stats router so the Dashboards work
 app.include_router(stats.router, prefix="/api/stats", tags=["statistics"])
+# NEW: Messaging routes
+app.include_router(messages.router, prefix="/api/messages", tags=["messages"])
+# NEW: Project upload routes
+app.include_router(projects.router, prefix="/api", tags=["projects"])
+# NEW: Red vs Blue challenge routes (singular /challenge prefix)
+app.include_router(game_challenge.router, prefix="/api/challenge", tags=["game_challenge"])
 
 # --- DATABASE CONNECTION RETRY ---
 @app.on_event("startup")

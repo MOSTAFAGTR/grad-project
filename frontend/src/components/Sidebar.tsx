@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   FaHome, FaShieldAlt, FaQuestionCircle, FaSignOutAlt, 
-  FaBars, FaTimes, FaChalkboardTeacher, FaUserCog, FaLock 
+  FaBars, FaTimes, FaChalkboardTeacher, FaUserCog, FaLock, FaEnvelope 
 } from 'react-icons/fa';
+import axios from 'axios';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -16,6 +17,26 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
 
   // --- FIX: READ FROM SESSION STORAGE ---
   const role = sessionStorage.getItem('role') || 'user'; 
+  const token = sessionStorage.getItem('token');
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!token) return;
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+    const fetchUnread = () => {
+      axios
+        .get(`${API_URL}/api/messages/unread-count`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        .then((res) => setUnreadCount(res.data.unread || 0))
+        .catch(() => {});
+    };
+
+    fetchUnread();
+    const id = setInterval(fetchUnread, 15000);
+    return () => clearInterval(id);
+  }, [token]);
 
   const handleLogout = () => {
     sessionStorage.clear(); // Clears only this tab
@@ -61,6 +82,19 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
                 <FaShieldAlt className="text-lg" />
                 {!collapsed && <span className="font-medium">Labs & Attacks</span>}
               </NavLink>
+              <NavLink to="/scanner" style={({ isActive }) => (isActive ? activeLinkStyle : undefined)} className={linkStyle}>
+                <FaShieldAlt className="text-lg" />
+                {!collapsed && <span className="font-medium">Security Scanner</span>}
+              </NavLink>
+              <NavLink to="/messages" style={({ isActive }) => (isActive ? activeLinkStyle : undefined)} className={linkStyle}>
+                <div className="relative flex items-center gap-3">
+                  <FaEnvelope className="text-lg" />
+                  {!collapsed && <span className="font-medium">Messages</span>}
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-2 h-3 w-3 rounded-full bg-red-500"></span>
+                  )}
+                </div>
+              </NavLink>
               <NavLink to="/quiz" style={({ isActive }) => (isActive ? activeLinkStyle : undefined)} className={linkStyle}>
                 <FaQuestionCircle className="text-lg" />
                 {!collapsed && <span className="font-medium">My Quizzes</span>}
@@ -73,7 +107,28 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
             <>
               <div className="my-4 border-t border-gray-700"></div>
               {!collapsed && <p className="text-xs text-gray-500 font-bold mb-2 uppercase">Instructor Zone</p>}
-              
+
+              {/* Security Scanner visible for instructors and admins */}
+              <NavLink
+                to="/scanner"
+                style={({ isActive }) => (isActive ? activeLinkStyle : undefined)}
+                className={linkStyle}
+              >
+                <FaShieldAlt className="text-lg" />
+                {!collapsed && <span className="font-medium">Security Scanner</span>}
+              </NavLink>
+
+              {role === 'instructor' && (
+                <NavLink to="/messages" style={({ isActive }) => (isActive ? activeLinkStyle : undefined)} className={linkStyle}>
+                  <div className="relative flex items-center gap-3">
+                    <FaEnvelope className="text-lg" />
+                    {!collapsed && <span className="font-medium">Messages</span>}
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-2 h-3 w-3 rounded-full bg-red-500"></span>
+                    )}
+                  </div>
+                </NavLink>
+              )}
               <NavLink to="/instructor/quiz" style={({ isActive }) => (isActive ? activeLinkStyle : undefined)} className={linkStyle}>
                 <FaChalkboardTeacher className="text-lg" />
                 {!collapsed && <span className="font-medium">Quiz Manager</span>}
@@ -86,7 +141,15 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
             <>
               <div className="my-4 border-t border-gray-700"></div>
               {!collapsed && <p className="text-xs text-gray-500 font-bold mb-2 uppercase">System Admin</p>}
-
+              <NavLink to="/messages" style={({ isActive }) => (isActive ? activeLinkStyle : undefined)} className={linkStyle}>
+                <div className="relative flex items-center gap-3">
+                  <FaEnvelope className="text-lg" />
+                  {!collapsed && <span className="font-medium">Messages</span>}
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-2 h-3 w-3 rounded-full bg-red-500"></span>
+                  )}
+                </div>
+              </NavLink>
               <NavLink to="/admin/dashboard" style={({ isActive }) => (isActive ? activeLinkStyle : undefined)} className={linkStyle}>
                 <FaUserCog className="text-lg" />
                 {!collapsed && <span className="font-medium">Admin Panel</span>}
