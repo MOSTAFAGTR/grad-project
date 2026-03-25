@@ -172,3 +172,40 @@ class QuizAttemptResponse(BaseModel):
     completed_at: datetime
     class Config:
         from_attributes = True
+
+
+# ===========================
+# CHALLENGE STATE & HINTS
+# ===========================
+
+class ChallengeStateResponse(BaseModel):
+    challenge_id: str
+    current_stage: str
+    attempt_count: int
+    time_spent_seconds: int
+    hints_used: int
+    created_at: datetime
+    last_updated: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ChallengeStateUpdate(BaseModel):
+    challenge_id: str
+    # Use Optional[str] instead of PEP 604 union (Python 3.9 compatibility)
+    current_stage: Optional[str] = None
+    # Optional deltas; if not provided, treated as 0
+    attempt_delta: int = 0
+    time_spent_delta: int = 0
+
+
+class HintEntry(BaseModel):
+    id: int
+    text: str
+    unlocked: bool
+
+
+class HintUseRequest(BaseModel):
+    challenge_id: str
+    hint_id: int

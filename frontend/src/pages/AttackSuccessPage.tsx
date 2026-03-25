@@ -2,31 +2,65 @@ import type { FC } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { FaCheckCircle } from 'react-icons/fa';
 
-const typeConfig: Record<string, { title: string; subtitle: string; color: string }> = {
+const typeConfig: Record<
+  string,
+  { title: string; subtitle: string; color: string; xp: number; explanation: string }
+> = {
   'sql-injection': {
     title: 'Login successful',
     subtitle: 'The SQL injection attack was successful! You bypassed authentication.',
     color: 'cyan',
+    xp: 150,
+    explanation:
+      'The application built SQL queries by concatenating user input directly, allowing your payload to change the WHERE clause and bypass authentication. Use parameterized queries and avoid string concatenation to fix this.',
   },
   xss: {
     title: 'XSS attack successful',
     subtitle: 'The cross-site scripting payload was executed. The page reflected or stored your input.',
     color: 'pink',
+    xp: 120,
+    explanation:
+      'The page rendered untrusted input without proper output encoding, allowing your script to run in the victim’s browser. To fix this, perform context-aware output encoding and avoid using dangerous sinks like innerHTML.',
   },
   csrf: {
     title: 'Transfer completed',
     subtitle: 'The CSRF attack was successful! The request was accepted without a valid token.',
     color: 'orange',
+    xp: 130,
+    explanation:
+      'The bank endpoint changed state (money transfer) solely based on cookies, without requiring any CSRF token or same-site cookie protection. Always use anti-CSRF tokens and SameSite cookies for state-changing endpoints.',
   },
   redirect: {
     title: 'Redirect successful',
     subtitle: 'The unvalidated redirect attack worked. The victim was sent to your chosen URL.',
     color: 'teal',
+    xp: 110,
+    explanation:
+      'The application redirected to a URL taken directly from user input without validation, enabling open redirects. Restrict redirects to an allowlist of relative paths and reject external URLs.',
   },
   'command-injection': {
     title: 'Command executed',
     subtitle: 'The command injection was successful! Your payload ran on the server.',
     color: 'purple',
+    xp: 160,
+    explanation:
+      'The server passed your input directly to a shell command, letting you inject extra commands. Use high-level APIs (no shell), avoid shell=True, and validate or whitelist input.',
+  },
+  'broken-auth': {
+    title: 'Admin access obtained',
+    subtitle: 'You bypassed the login controls and gained an administrator session.',
+    color: 'red',
+    xp: 140,
+    explanation:
+      'The login logic trusted crafted input to short-circuit authentication and grant admin access. Authentication must never rely on user-controlled SQL fragments or shortcut conditions; always validate credentials strictly.',
+  },
+  'security-misc': {
+    title: 'Configuration exposed',
+    subtitle: 'You discovered an exposed admin/config endpoint leaking sensitive settings.',
+    color: 'yellow',
+    xp: 140,
+    explanation:
+      'The service was deployed with sensitive admin/debug endpoints exposed in production, leaking secrets and internal configuration. Disable debug mode, protect admin interfaces, and never expose configuration or environment data.',
   },
 };
 
@@ -36,6 +70,8 @@ const colorMap: Record<string, string> = {
   orange: '#fb923c',
   purple: '#8b5cf6',
   teal: '#14b8a6',
+  red: '#f97373',
+  yellow: '#facc15',
 };
 
 const AttackSuccessPage: FC = () => {
@@ -58,6 +94,17 @@ const AttackSuccessPage: FC = () => {
       <p className="text-gray-400 max-w-lg mb-8">
         {config.subtitle}
       </p>
+      <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 max-w-2xl text-left mb-6">
+        <h2 className="text-lg font-semibold mb-2" style={{ color: accent }}>
+          Challenge Summary
+        </h2>
+        <p className="text-sm text-gray-300 mb-2">
+          <span className="font-semibold">XP gained:</span> <span style={{ color: accent }}>{config.xp}</span>
+        </p>
+        <p className="text-sm text-gray-300">
+          {config.explanation}
+        </p>
+      </div>
       <div className="flex gap-4">
         <Link
           to="/challenges"

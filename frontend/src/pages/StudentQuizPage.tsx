@@ -11,7 +11,7 @@ const StudentQuizPage: React.FC = () => {
   // Setup State
   const [topic, setTopic] = useState('SQL Injection');
   const [mode, setMode] = useState('Adaptive');
-  const [count] = useState(5);
+  const [count, setCount] = useState(5);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [quizTitle, setQuizTitle] = useState('');
   const [assignmentId, setAssignmentId] = useState<number | null>(null);
@@ -141,6 +141,21 @@ const StudentQuizPage: React.FC = () => {
                 <button onClick={() => setMode('Adaptive')} className={`flex-1 py-2 rounded border ${mode === 'Adaptive' ? 'bg-purple-600 border-purple-600' : 'bg-gray-700 border-gray-600'}`}>Adaptive (AI)</button>
                 <button onClick={() => setMode('Practice')} className={`flex-1 py-2 rounded border ${mode === 'Practice' ? 'bg-blue-600 border-blue-600' : 'bg-gray-700 border-gray-600'}`}>Standard</button>
               </div>
+            </div>
+            <div className="mb-6">
+              <label className="block text-gray-300 mb-2">Number of Questions</label>
+              <select
+                className="w-full bg-gray-700 p-2 rounded text-white"
+                value={count}
+                onChange={e => setCount(parseInt(e.target.value, 10))}
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={15}>15</option>
+                <option value={20}>20</option>
+                <option value={25}>25</option>
+                <option value={30}>30</option>
+              </select>
             </div>
             <button onClick={handleStartPractice} disabled={loading} className="w-full bg-blue-600 py-3 rounded font-bold hover:bg-blue-700 transition">
               {loading ? "Loading..." : "Start Practice"}

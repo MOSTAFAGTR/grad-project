@@ -57,8 +57,37 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     return crud.create_user(db=db, user=user, role=user.role)
 
 @router.post("/login")
-def login(user: schemas.LoginAttempt, db: Session = Depends(get_db)):
-    db_user = crud.get_user_by_email(db, email=user.username) 
+def login(
+    user: schemas.LoginAttempt,
+    db: Session = Depends(get_db),
+    # Optional challenge flag: when set to "broken-auth" we simulate a vulnerable login
+    challenge: Optional[str] = None,
+):
+    db_user = crud.get_user_by_email(db, email=user.username)
+
+    # --- Broken-auth challenge mode: intentionally vulnerable branch ---
+    # This preserves normal authentication while allowing a special mode
+    # for the Broken Authentication mini-game.
+    if challenge == "broken-auth":
+        # Simple SQLi-style bypass: if password contains a classic payload,
+        # treat the user as admin without verifying the real password.
+        if "' OR '1'='1" in user.password or '" OR "1"="1' in user.password:
+            # Prefer the seeded admin user if it exists
+            admin_user = crud.get_user_by_email(db, email="admin@scale.edu") or db_user
+            if not admin_user:
+                raise HTTPException(status_code=401, detail="No admin user available")
+            token = create_access_token(data={"sub": admin_user.email, "role": "admin"})
+            return {
+                "access_token": token,
+                "token_type": "bearer",
+                "user_id": admin_user.id,
+                "role": "admin",
+                "email": admin_user.email,
+                "broken_auth": True,
+                "message": "Welcome Admin (challenge bypass)",
+            }
+        # If payload is not correct, fall through to normal checks (will likely fail)
+
     if not db_user or not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     
@@ -66,7 +95,13 @@ def login(user: schemas.LoginAttempt, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail="Account pending approval.")
 
     token = create_access_token(data={"sub": db_user.email, "role": db_user.role})
-    return {"access_token": token, "token_type": "bearer", "user_id": db_user.id, "role": db_user.role, "email": db_user.email}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_id": db_user.id,
+        "role": db_user.role,
+        "email": db_user.email,
+    }
 
 @router.get("/users", response_model=List[schemas.UserSearchResponse])
 def search_users(query: str = "", db: Session = Depends(get_db)):

@@ -233,3 +233,26 @@ class BlueTeamFix(Base):
     vulnerability_id = Column(Integer, ForeignKey("challenge_vulnerabilities.id"), nullable=False)
     fixed = Column(Boolean, default=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
+
+
+# --- PER-CHALLENGE STATE TRACKING ---
+class ChallengeState(Base):
+    """
+    Tracks per-user state for each interactive challenge mini-game.
+    Used for analytics, hint usage, and game-like progress.
+    """
+    __tablename__ = "challenge_state"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # e.g. 'csrf', 'broken-auth', 'security-misc', 'redirect', etc.
+    challenge_id = Column(String(50), nullable=False)
+
+    # Optional high-level stage label controlled by the challenge UIs
+    current_stage = Column(String(100), default="started")
+    attempt_count = Column(Integer, default=0)
+    time_spent_seconds = Column(Integer, default=0)
+    hints_used = Column(Integer, default=0)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_updated = Column(DateTime, default=datetime.utcnow)

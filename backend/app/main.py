@@ -5,8 +5,8 @@ import time
 import logging
 
 # --- IMPORT ROUTERS ---
-# We added 'stats', 'projects', and 'game_challenge' to this import list
-from .api import auth, quizzes, challenges, stats, messages, projects, game_challenge
+# We added 'stats', 'projects', 'game_challenge', and 'misconfig' to this import list
+from .api import auth, quizzes, challenges, stats, messages, projects, game_challenge, misconfig
 from .db import database
 from . import models 
 
@@ -42,6 +42,8 @@ app.include_router(messages.router, prefix="/api/messages", tags=["messages"])
 app.include_router(projects.router, prefix="/api", tags=["projects"])
 # NEW: Red vs Blue challenge routes (singular /challenge prefix)
 app.include_router(game_challenge.router, prefix="/api/challenge", tags=["game_challenge"])
+# NEW: Security misconfiguration mini-app routes
+app.include_router(misconfig.router, prefix="/api", tags=["misconfig"])
 
 # --- DATABASE CONNECTION RETRY ---
 @app.on_event("startup")

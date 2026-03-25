@@ -2,159 +2,273 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+interface HintEntry {
+  id: number;
+  text: string;
+  unlocked: boolean;
+}
+
 const SecurityMiscAttackPage: React.FC = () => {
-  const [payload, setPayload] = useState('');
-  const [leakedData, setLeakedData] = useState<any>(null);
-  const [showErrorPage, setShowErrorPage] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [principal, setPrincipal] = useState('5000');
+  const [rate, setRate] = useState('5');
+  const [years, setYears] = useState('2');
+  const [calculated, setCalculated] = useState<number | null>(null);
+
+  const [path, setPath] = useState('/admin/config');
+  const [responseBody, setResponseBody] = useState<any>(null);
+  const [responseStatus, setResponseStatus] = useState<number | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [isSending, setIsSending] = useState(false);
+  const [hints, setHints] = useState<HintEntry[]>([]);
 
   const navigate = useNavigate();
 
-  const handleExploit = async () => {
-    setIsLoading(true);
-    setErrorMessage('');
-    try {
-      const res = await axios.get(
-        'http://localhost:8000/api/challenges/debug-leak',
-        { params: { input: payload } }
-      );
+  const appendLog = (line: string) => setLogs(prev => [...prev, line]);
 
-      // If backend leaks env/config → exploit success
-      if (res.data && res.data.leak) {
-        setLeakedData(res.data.leak);
-        setShowErrorPage(true);
-      } else {
-        setErrorMessage('Server responded safely. Try a different payload.');
-      }
-    } catch (err: any) {
-      if (err.response?.data?.detail?.leak) {
-        setLeakedData(err.response.data.detail.leak);
-        setShowErrorPage(true);
-      } else {
-        setErrorMessage('No sensitive data leaked. Try again.');
-      }
-    } finally {
-      setIsLoading(false);
+  const loadHints = async () => {
+    try {
+      const token = sessionStorage.getItem('token');
+      if (!token) return;
+      const res = await axios.get<HintEntry[]>(`${API_URL}/api/challenges/hints`, {
+        params: { challenge_id: 'security-misc' },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setHints(res.data);
+    } catch {
+      // ignore
     }
   };
 
-  const handleFinishAttack = async () => {
+  React.useEffect(() => {
+    loadHints();
+  }, []);
+
+  const handleUseHint = async () => {
     try {
       const token = sessionStorage.getItem('token');
+      if (!token) return;
+      const locked = hints.find(h => !h.unlocked);
+      const target = locked ?? hints[hints.length - 1];
+      if (!target) return;
       await axios.post(
-        'http://localhost:8000/api/challenges/mark-attack-complete?challenge_type=security-misc',
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
+        `${API_URL}/api/challenges/hints/use`,
+        { challenge_id: 'security-misc', hint_id: target.id },
+        { headers: { Authorization: `Bearer ${token}` } },
       );
-    } catch {}
-    navigate('/challenges/attack-success');
+      loadHints();
+    } catch {
+      // ignore
+    }
   };
 
-  if (showErrorPage) {
-    return (
-      <div className="bg-[#f0f0f0] text-[#333] min-h-screen font-sans p-8 overflow-auto">
-        <div className="max-w-5xl mx-auto border-t-8 border-red-600 bg-white shadow-xl p-8 rounded">
-          <h1 className="text-4xl font-bold text-red-700 mb-2">ZeroDivisionError</h1>
-          <p className="text-xl text-gray-700 mb-6 italic">division by zero</p>
+  const handleCalc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const token = sessionStorage.getItem('token');
+      if (!token) return;
+      const form = new FormData();
+      form.append('principal', principal);
+      form.append('interestRate', rate);
+      form.append('years', years);
+      const res = await axios.post<{ amount: number }>(`${API_URL}/api/calc/interest`, form, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      setCalculated(res.data.amount);
+    } catch (err: any) {
+      appendLog(`Interest calc error: ${err.response?.data?.detail || 'Unknown error'}`);
+    }
+  };
 
-          <div className="bg-gray-100 p-4 border border-gray-300 rounded font-mono text-sm mb-8">
-            <p className="font-bold text-blue-800">Traceback (most recent call last):</p>
-            <p className="ml-4">File "/usr/local/lib/python3.9/site-packages/flask/app.py", line 2213, in __call__</p>
-            <p className="ml-4 text-red-700 font-bold bg-yellow-100 underline">File "/app/app.py", line 42, in trigger_error</p>
-            <p className="ml-8 text-red-700">return 1 / 0</p>
+  const handleSendRequest = async () => {
+    setIsSending(true);
+    setResponseBody(null);
+    setResponseStatus(null);
+    const token = sessionStorage.getItem('token');
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    // Always route through the API prefix for this mini-app
+    const targetPath = cleanPath.startsWith('/api') ? cleanPath : `/api${cleanPath}`;
+    const url = `${API_URL}${targetPath}`;
+    appendLog(`Sending GET ${targetPath} ...`);
+    try {
+      const res = await axios.get(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      setResponseStatus(res.status);
+      setResponseBody(res.data);
+      appendLog(`Response ${res.status}.`);
+
+      // If we hit the exposed admin config, mark challenge complete
+      if (targetPath === '/admin/config') {
+        appendLog('Exposed admin configuration discovered. Challenge complete.');
+        if (token) {
+          try {
+            await axios.post(
+              `${API_URL}/api/challenges/mark-attack-complete`,
+              {},
+              {
+                params: { challenge_type: 'security-misc' },
+                headers: { Authorization: `Bearer ${token}` },
+              },
+            );
+            await axios.post(
+              `${API_URL}/api/challenges/state/update`,
+              {
+                challenge_id: 'security-misc',
+                current_stage: 'admin-config-exposed',
+                attempt_delta: 1,
+              },
+              { headers: { Authorization: `Bearer ${token}` } },
+            );
+          } catch {
+            // ignore
+          }
+        }
+        setTimeout(() => navigate('/challenges/attack-success?type=security-misc'), 1500);
+      }
+    } catch (err: any) {
+      const status = err.response?.status ?? 0;
+      setResponseStatus(status);
+      setResponseBody(err.response?.data ?? err.message);
+      appendLog(`Request failed with status ${status}.`);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  return (
+    <div className="text-white p-6 max-w-6xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-3xl font-bold">Security Misconfiguration Challenge</h1>
+          <p className="text-gray-400">
+            Use a harmless-looking Bank Interest Calculator to discover exposed admin configuration endpoints.
+          </p>
+        </div>
+        <Link to="/challenges" className="bg-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-600">
+          Back
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Bank Interest Calculator */}
+        <div className="bg-gray-900 border border-gray-700 rounded-lg p-4">
+          <h2 className="text-xl font-bold text-blue-400 mb-4">Bank Interest Calculator</h2>
+          <form onSubmit={handleCalc} className="space-y-3">
+            <div>
+              <label className="block text-sm mb-1">Principal</label>
+              <input
+                type="number"
+                value={principal}
+                onChange={e => setPrincipal(e.target.value)}
+                className="w-full p-2 bg-gray-800 rounded border border-gray-600"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm mb-1">Interest Rate (%)</label>
+                <input
+                  type="number"
+                  value={rate}
+                  onChange={e => setRate(e.target.value)}
+                  className="w-full p-2 bg-gray-800 rounded border border-gray-600"
+                />
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Years</label>
+                <input
+                  type="number"
+                  value={years}
+                  onChange={e => setYears(e.target.value)}
+                  className="w-full p-2 bg-gray-800 rounded border border-gray-600"
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              className="w-full bg-blue-600 hover:bg-blue-700 p-2 rounded font-bold"
+            >
+              Calculate Interest
+            </button>
+          </form>
+
+          {calculated !== null && (
+            <div className="mt-4 bg-gray-800 p-3 rounded text-sm">
+              <span className="font-semibold">Future value:</span>{' '}
+              <span className="text-green-400">${calculated}</span>
+            </div>
+          )}
+
+          {/* Hints */}
+          <div className="mt-6 bg-gray-800 border border-gray-700 rounded p-3">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-sm font-bold text-blue-300">Hints</h3>
+              <button
+                onClick={handleUseHint}
+                className="text-xs px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 font-semibold"
+              >
+                Unlock next hint
+              </button>
+            </div>
+            {hints.length === 0 && <p className="text-xs text-gray-500">No hints available.</p>}
+            <ul className="text-xs list-disc list-inside space-y-1">
+              {hints.map(h => (
+                <li key={h.id} className={h.unlocked ? 'text-gray-200' : 'text-gray-500 italic'}>
+                  {h.text}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        {/* Network explorer */}
+        <div className="bg-gray-900 border border-red-700 rounded-lg p-4 flex flex-col">
+          <h2 className="text-xl font-bold text-red-400 mb-3">Internal Admin API Explorer</h2>
+          <p className="text-xs text-gray-400 mb-3">
+            The calculator service is deployed with debug and admin endpoints still exposed. Try probing for hidden URLs like{' '}
+            <code>/admin/config</code>, <code>/debug</code>, or <code>/.env</code>.
+          </p>
+          <div className="flex mb-3">
+            <span className="px-2 py-1 bg-gray-800 border border-gray-700 rounded-l text-xs text-gray-400 font-mono">
+              GET
+            </span>
+            <input
+              type="text"
+              value={path}
+              onChange={e => setPath(e.target.value)}
+              className="flex-1 p-2 bg-gray-800 border-t border-b border-gray-700 text-sm font-mono"
+            />
+            <button
+              onClick={handleSendRequest}
+              disabled={isSending}
+              className="px-4 bg-red-600 hover:bg-red-700 border border-red-700 rounded-r text-sm font-bold"
+            >
+              {isSending ? 'SENDING...' : 'SEND'}
+            </button>
           </div>
 
-          <h2 className="text-2xl font-bold border-b-2 border-gray-200 pb-2 mb-4">Environment Variables (Leaked)</h2>
-          <div className="grid grid-cols-1 gap-2 mb-8">
-            {leakedData && Object.entries(leakedData).map(([key, value]) => (
-              <div key={key} className="flex border-b border-gray-100 py-1">
-                <span className="font-mono font-bold w-64 text-green-700">{key}:</span>
-                <span className="font-mono text-gray-600 truncate">
-                  {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                </span>
+          <div className="flex-1 bg-black border border-gray-800 rounded p-3 font-mono text-xs overflow-y-auto mb-3">
+            <div className="text-gray-500 mb-1">Response status: {responseStatus ?? '—'}</div>
+            <pre className="text-green-300 whitespace-pre-wrap">
+              {responseBody ? JSON.stringify(responseBody, null, 2) : '// No response yet.'}
+            </pre>
+          </div>
+
+          <div className="bg-black border border-green-800 rounded p-3 font-mono text-xs h-32 overflow-y-auto">
+            <div className="text-green-500 mb-1 border-b border-green-800 pb-1">
+              Attack Logs — Security Misconfiguration
+            </div>
+            {logs.length === 0 && <div className="text-gray-600">No probes sent yet.</div>}
+            {logs.map((line, idx) => (
+              <div key={idx} className="text-green-400">
+                {line}
               </div>
             ))}
           </div>
-
-          <div className="flex gap-4">
-            <button
-              onClick={handleFinishAttack}
-              className="bg-red-600 text-white px-6 py-3 rounded font-bold hover:bg-red-700 transition shadow-lg"
-            >
-              Collect Sensitive Info & End Attack
-            </button>
-            <button
-              onClick={() => setShowErrorPage(false)}
-              className="bg-gray-200 text-gray-700 px-6 py-3 rounded font-bold hover:bg-gray-300 transition"
-            >
-              Go Back
-            </button>
-          </div>
         </div>
-
-        <p className="text-center mt-6 text-gray-500 italic text-sm">
-          Powered by Flask Debugger (Insecure Configuration Detected)
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="text-white p-6 max-w-5xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Security Misconfiguration</h1>
-          <p className="text-gray-400">Trigger a server error to leak sensitive debug data.</p>
-        </div>
-        <Link to="/challenges" className="bg-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-600">Back</Link>
-      </div>
-
-      <div className="bg-gray-900 border border-gray-700 rounded-lg overflow-hidden mb-8">
-        <div className="bg-gray-800 px-4 py-2 border-b border-gray-700 flex gap-2 items-center">
-          <div className="w-3 h-3 rounded-full bg-red-500"></div>
-          <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-          <div className="w-3 h-3 rounded-full bg-green-500"></div>
-          <span className="ml-4 font-mono text-xs text-gray-400 italic">
-            http://admin-panel.internal/debug
-          </span>
-        </div>
-
-        <div className="p-12 text-center">
-          <h2 className="text-2xl font-bold mb-4">Production Management Console</h2>
-          <p className="text-gray-500 mb-6 max-w-md mx-auto">
-            Enter malformed input to test error handling. If debug mode is enabled,
-            sensitive info will be exposed.
-          </p>
-
-          <input
-            type="text"
-            value={payload}
-            onChange={(e) => setPayload(e.target.value)}
-            placeholder="Try: 1/0"
-            className="bg-gray-700 border border-gray-600 text-white rounded w-full max-w-md p-3 mb-4 font-mono"
-          />
-
-          <button
-            onClick={handleExploit}
-            disabled={isLoading}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded shadow-xl transition transform hover:scale-105 active:scale-95 disabled:opacity-50"
-          >
-            {isLoading ? 'SENDING...' : 'SEND PAYLOAD'}
-          </button>
-
-          {errorMessage && (
-            <p className="mt-4 text-red-400 font-bold">{errorMessage}</p>
-          )}
-        </div>
-      </div>
-
-      <div className="bg-blue-900/10 border border-blue-800/50 p-6 rounded-lg text-blue-200">
-        <h3 className="font-bold mb-2 text-blue-400">Attack Strategy</h3>
-        <p className="text-sm">
-          Servers running in <b>debug mode</b> reveal stack traces and environment variables.
-          Triggering an exception can expose secrets like <code>SECRET_KEY</code> or <code>DB_PASSWORD</code>.
-        </p>
       </div>
     </div>
   );

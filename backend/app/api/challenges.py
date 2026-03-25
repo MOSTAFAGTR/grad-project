@@ -7,12 +7,13 @@ from typing import List
 
 from ..db.database import get_db
 from .. import sandbox_runner 
-from ..models import XSSComment, UserProgress, User
+from ..models import XSSComment, UserProgress, User, ChallengeState
 from .auth import get_current_user
 from ..schemas import (
     LoginAttempt, CodeSubmission, CommentCreate,
     CommentResponse, ProgressResponse, CSRFAccountResponse,
     PingRequest,
+    ChallengeStateResponse, ChallengeStateUpdate, HintEntry, HintUseRequest,
 )
 
 router = APIRouter()
@@ -206,3 +207,104 @@ def mark_attack_complete(
         raise HTTPException(400, f"Invalid challenge type. Must be one of: {allowed}")
     mark_challenge_complete(db, current_user.id, challenge_type)
     return {"ok": True}
+
+
+# ==========================================
+# CHALLENGE STATE & HINTS (GAME LAYER)
+# ==========================================
+
+def _get_or_create_state(db: Session, user_id: int, challenge_id: str) -> ChallengeState:
+    state = (
+        db.query(ChallengeState)
+        .filter(ChallengeState.user_id == user_id, ChallengeState.challenge_id == challenge_id)
+        .first()
+    )
+    if not state:
+        state = ChallengeState(user_id=user_id, challenge_id=challenge_id)
+        db.add(state)
+        db.commit()
+        db.refresh(state)
+    return state
+
+
+@router.get("/state", response_model=ChallengeStateResponse)
+def get_challenge_state(
+    challenge_id: str = Query(..., description="Challenge id, e.g. csrf, broken-auth, redirect"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    state = _get_or_create_state(db, current_user.id, challenge_id)
+    return state
+
+
+@router.post("/state/update", response_model=ChallengeStateResponse)
+def update_challenge_state(
+    update: ChallengeStateUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    state = _get_or_create_state(db, current_user.id, update.challenge_id)
+    if update.current_stage:
+        state.current_stage = update.current_stage
+    if update.attempt_delta:
+        state.attempt_count = (state.attempt_count or 0) + update.attempt_delta
+    if update.time_spent_delta:
+        state.time_spent_seconds = (state.time_spent_seconds or 0) + update.time_spent_delta
+    from datetime import datetime as _dt
+    state.last_updated = _dt.utcnow()
+    db.commit()
+    db.refresh(state)
+    return state
+
+
+_HINTS: dict[str, list[str]] = {
+    "csrf": [
+        "Look for an action that changes server state without validation.",
+        "Think about how a victim's browser might send a request without them clicking a bank button.",
+        "Consider abusing an auto-submitting mechanism in HTML that can talk to the vulnerable transfer endpoint.",
+    ],
+    "broken-auth": [
+        "Can you log in without knowing the real password?",
+        "Try manipulating the login input so that the server's check always evaluates as 'true'.",
+        "Think about classic injection techniques against authentication queries, but work the exact payload out yourself.",
+    ],
+    "security-misc": [
+        "Real apps sometimes expose debug or admin endpoints.",
+        "Try calling endpoints that are not linked from the UI or that sound internal/administrative.",
+        "Hunt for a configuration or debug endpoint that should never be reachable in production.",
+    ],
+}
+
+
+@router.get("/hints", response_model=list[HintEntry])
+def get_hints(
+    challenge_id: str = Query(..., description="Challenge id, e.g. csrf, broken-auth, security-misc"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    hints = _HINTS.get(challenge_id, [])
+    state = _get_or_create_state(db, current_user.id, challenge_id)
+    # Unlock up to hints_used + 1 (progressive reveal)
+    unlock_count = min(len(hints), (state.hints_used or 0) + 1)
+    return [
+        HintEntry(id=i, text=text if i < unlock_count else "Locked hint", unlocked=i < unlock_count)
+        for i, text in enumerate(hints, start=1)
+    ]
+
+
+@router.post("/hints/use", response_model=ChallengeStateResponse)
+def use_hint(
+    req: HintUseRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    hints = _HINTS.get(req.challenge_id, [])
+    if req.hint_id < 1 or req.hint_id > len(hints):
+        raise HTTPException(400, "Invalid hint id for this challenge")
+    state = _get_or_create_state(db, current_user.id, req.challenge_id)
+    state.hints_used = (state.hints_used or 0) + 1
+    from datetime import datetime as _dt
+    state.last_updated = _dt.utcnow()
+    db.commit()
+    db.refresh(state)
+    return state
