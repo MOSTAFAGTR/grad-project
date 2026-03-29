@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
+import ChallengeHintPanel from '../components/ChallengeHintPanel';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
@@ -16,15 +17,10 @@ const SqlInjectionAttackPage: React.FC = () => {
   const handleLogin = async () => {
     setError('');
     try {
-      // DEBUG: Log what we are sending
-      console.log("Sending Login:", { username, password });
-
-      const response = await axios.post('http://localhost:8000/api/challenges/vulnerable-login', { 
+      const response = await axios.post(`${API_URL}/api/challenges/vulnerable-login`, { 
         username, 
         password 
       });
-      
-      console.log("Response:", response);
 
       if (response.status === 200) {
         const token = sessionStorage.getItem('token');
@@ -34,8 +30,6 @@ const SqlInjectionAttackPage: React.FC = () => {
         navigate('/challenges/attack-success?type=sql-injection');
       }
     } catch (err: any) {
-      console.error("Full Error Object:", err);
-      
       // --- ROBUST ERROR HANDLING ---
       if (err.response) {
         // The server returned a specific error (400, 401, 500)
@@ -103,6 +97,9 @@ const SqlInjectionAttackPage: React.FC = () => {
             Cancel
           </Link>
         </div>
+      </div>
+      <div className="w-full max-w-sm mt-4">
+        <ChallengeHintPanel challengeId="sql-injection" />
       </div>
     </div>
   );

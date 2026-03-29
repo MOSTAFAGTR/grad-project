@@ -5,13 +5,15 @@ import zipfile
 import os
 import json
 from datetime import datetime
+import logging
+from typing import Optional
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from ..scanner.detector import scan_file_for_vulnerabilities
+from ..scanner.detector import scan_file_for_vulnerabilities_detailed
 from ..scanner.scorer import calculate_risk
 from ..scanner.fixer import attach_fixes
 from ..scanner.report_generator import generate_security_report, generate_pdf_report
@@ -19,14 +21,48 @@ from ..ai.mentor import generate_ai_security_feedback
 from ..db.database import get_db
 from .. import models
 from .auth import get_current_user, get_current_admin
+from ..security.security_logger import SecurityEventType, SecuritySeverity, log_security_event
+from ..security.learning_tracker import recalculate_learning_progress
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
-# Base directories for storing uploaded and extracted projects (relative to repo root).
-PROJECTS_UPLOAD_DIR = Path(__file__).resolve().parents[3] / "uploads" / "projects"
-EXTRACTED_PROJECTS_DIR = Path(__file__).resolve().parents[3] / "uploads" / "extracted_projects"
-REPORTS_DIR = Path(__file__).resolve().parents[3] / "reports"
+def _resolve_storage_root() -> Path:
+    configured_root = os.getenv("PROJECT_STORAGE_ROOT", "").strip()
+    if configured_root:
+        return Path(configured_root).resolve()
+
+    here = Path(__file__).resolve()
+    for candidate in [here.parent, *here.parents]:
+        if (candidate / "backend").exists() and (candidate / "frontend").exists():
+            return candidate.resolve()
+
+    app_root = Path("/app")
+    if app_root.exists():
+        return app_root.resolve()
+
+    return Path.cwd().resolve()
+
+
+STORAGE_ROOT = _resolve_storage_root()
+PROJECTS_UPLOAD_DIR = STORAGE_ROOT / "uploads" / "projects"
+EXTRACTED_PROJECTS_DIR = STORAGE_ROOT / "uploads" / "extracted_projects"
+REPORTS_DIR = STORAGE_ROOT / "reports"
+
+
+def _assert_project_access(
+    db: Session,
+    project_id: str,
+    current_user: models.User,
+) -> None:
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        return
+    if current_user.role == "admin":
+        return
+    if project.owner_id and project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized for this project")
 
 
 def extract_zip(zip_path: Path, extract_to: Path) -> None:
@@ -40,12 +76,19 @@ def extract_zip(zip_path: Path, extract_to: Path) -> None:
     This function is the hook where later vulnerability scanners will be
     plugged in to walk the extracted tree and analyze code.
     """
-    allowed_exts = {".php", ".js", ".py", ".java", ".html", ".css"}
+    allowed_exts = {
+        ".php", ".js", ".jsx", ".ts", ".tsx",
+        ".py", ".java", ".go", ".rb", ".cs", ".kt", ".swift",
+        ".html", ".htm", ".css", ".vue", ".svelte",
+        ".sql", ".xml", ".json", ".yml", ".yaml", ".env", ".ini", ".cfg",
+        ".c", ".cpp", ".h", ".hpp", ".sh", ".dart",
+    }
 
     # Ensure target directory exists
     extract_to.mkdir(parents=True, exist_ok=True)
     base = extract_to.resolve()
 
+    extracted_count = 0
     with zipfile.ZipFile(zip_path, "r") as zf:
         for member in zf.infolist():
             name = member.filename
@@ -76,6 +119,37 @@ def extract_zip(zip_path: Path, extract_to: Path) -> None:
             target_path.parent.mkdir(parents=True, exist_ok=True)
             with zf.open(member, "r") as src, open(target_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
+            extracted_count += 1
+
+    # Mandatory extraction diagnostics for pipeline verification.
+    print("=== EXTRACTION DEBUG START ===")
+    for root, dirs, files in os.walk(extract_to):
+        for f in files:
+            print("EXTRACTED FILE:", os.path.join(root, f))
+    print("=== EXTRACTION DEBUG END ===")
+    print("TOTAL EXTRACTED FILES:", extracted_count)
+    if extracted_count == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Scanner found 0 files — extraction or traversal failure",
+        )
+
+
+def normalize_project_root(path: Path) -> Path:
+    """
+    Handle nested archive structures like project/project/files...
+    We keep descending while there is exactly one directory entry.
+    """
+    current = path
+    while True:
+        try:
+            contents = [p for p in current.iterdir()]
+        except FileNotFoundError:
+            return current
+        if len(contents) == 1 and contents[0].is_dir():
+            current = contents[0]
+            continue
+        return current
 
 
 def scan_project_files(project_folder: Path):
@@ -97,11 +171,35 @@ def scan_project_files(project_folder: Path):
     ext_to_lang = {
         ".php": "php",
         ".js": "javascript",
+        ".jsx": "javascript",
+        ".ts": "typescript",
+        ".tsx": "typescript",
         ".py": "python",
         ".java": "java",
+        ".go": "go",
+        ".rb": "ruby",
+        ".cs": "csharp",
+        ".kt": "kotlin",
+        ".swift": "swift",
         ".html": "html",
         ".htm": "html",
         ".css": "css",
+        ".vue": "vue",
+        ".svelte": "svelte",
+        ".sql": "sql",
+        ".xml": "xml",
+        ".json": "json",
+        ".yml": "yaml",
+        ".yaml": "yaml",
+        ".env": "env",
+        ".ini": "config",
+        ".cfg": "config",
+        ".c": "c",
+        ".cpp": "cpp",
+        ".h": "c_header",
+        ".hpp": "cpp_header",
+        ".sh": "shell",
+        ".dart": "dart",
     }
 
     files_info = []
@@ -112,15 +210,11 @@ def scan_project_files(project_folder: Path):
         dirs[:] = [d for d in dirs if d not in skip_dirs]
 
         for fname in files:
-            ext = Path(fname).suffix.lower()
-            language = ext_to_lang.get(ext)
-            if not language:
-                # Skip non-code / unsupported extensions
-                continue
-
             full_path = Path(root) / fname
             rel_path = full_path.relative_to(base)
-
+            ext = Path(fname).suffix.lower()
+            language = ext_to_lang.get(ext, "unknown")
+            print("SCANNING FILE:", str(full_path))
             files_info.append(
                 {
                     "file": str(rel_path).replace("\\", "/"),
@@ -128,10 +222,17 @@ def scan_project_files(project_folder: Path):
                 }
             )
 
+    print("TOTAL FILES FOUND:", len(files_info))
+    if len(files_info) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Scanner found 0 files — extraction or traversal failure",
+        )
+
     return files_info
 
 
-def scan_project_for_vulnerabilities(project_folder: Path):
+def scan_project_for_vulnerabilities(project_folder: Path, extraction_root: Optional[Path] = None):
     """
     Run the rule-based detector over all discovered source files in a project.
 
@@ -141,11 +242,24 @@ def scan_project_for_vulnerabilities(project_folder: Path):
     files = scan_project_files(project_folder)
     all_findings = []
     summary: dict[str, int] = {}
+    file_debug = []
+    file_errors = []
 
     for entry in files:
         rel_path = entry["file"]
         full_path = project_folder / rel_path
-        file_findings = scan_file_for_vulnerabilities(full_path)
+        detailed = scan_file_for_vulnerabilities_detailed(full_path)
+        file_findings = detailed["findings"]
+        if detailed.get("error"):
+            file_errors.append({"file": rel_path, "error": detailed["error"]})
+        file_debug.append(
+            {
+                "file": rel_path,
+                "matches": len(file_findings),
+                "lines_scanned": detailed.get("lines_scanned", 0),
+            }
+        )
+        logger.info("scanner: file=%s matches=%s", rel_path, len(file_findings))
 
         for f in file_findings:
             f_with_file = {
@@ -158,16 +272,46 @@ def scan_project_for_vulnerabilities(project_folder: Path):
 
     # Attach secure-coding recommendations to each finding before returning.
     enhanced_findings = attach_fixes(all_findings)
+    files_with_matches = sum(1 for d in file_debug if d["matches"] > 0)
+    logger.info(
+        "scanner: files_scanned=%s files_with_matches=%s findings=%s",
+        len(files),
+        files_with_matches,
+        len(enhanced_findings),
+    )
+
+    message = (
+        "No vulnerabilities detected OR not supported by current scanner depth"
+        if len(enhanced_findings) == 0
+        else "Vulnerabilities detected"
+    )
+
+    debug_payload = {
+        "files_scanned": len(files),
+        "files_with_matches": files_with_matches,
+        "file_details": file_debug,
+        "file_errors": file_errors,
+        "root_used_for_scan": str(project_folder.resolve()),
+    }
+    if extraction_root is not None:
+        debug_payload["extracted_file_count"] = sum(1 for p in extraction_root.rglob("*") if p.is_file())
 
     return {
         "total_vulnerabilities": len(enhanced_findings),
         "findings": enhanced_findings,
         "summary": summary,
+        "message": message,
+        "debug": debug_payload,
     }
 
 
 @router.post("/project/upload")
-async def upload_project(file: UploadFile = File(...)):
+async def upload_project(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    request: Request = None,
+):
     """
     Accept a compressed project (.zip), save it, and extract safe files for later scanning.
 
@@ -204,11 +348,34 @@ async def upload_project(file: UploadFile = File(...)):
         project_extract_dir = EXTRACTED_PROJECTS_DIR / project_id
         extract_zip(dest_path, project_extract_dir)
 
+        # Persist uploaded project so scanner can restore ownership/history.
+        project = db.query(models.Project).filter(models.Project.id == project_id).first()
+        if not project:
+            project = models.Project(
+                id=project_id,
+                name=filename,
+                owner_id=current_user.id,
+                created_at=datetime.utcnow(),
+            )
+            db.add(project)
+            db.commit()
+
         relative_folder = f"uploads/extracted_projects/{project_id}/"
+        log_security_event(
+            db=db,
+            event_type=SecurityEventType.FILE_UPLOAD,
+            severity=SecuritySeverity.LOW,
+            payload={"filename": filename, "size_bytes": len(content), "project_id": project_id},
+            request=request,
+            user_id=current_user.id,
+            metadata={"status": "success"},
+        )
         return {
             "message": "Upload and extraction successful",
+            "project_id": project_id,
             "project_folder": relative_folder,
         }
+        
     except HTTPException:
         # Bubble up known HTTP errors unchanged.
         raise
@@ -218,7 +385,11 @@ async def upload_project(file: UploadFile = File(...)):
 
 
 @router.get("/project/files")
-def list_project_files(project_id: str = Query(..., description="ID of extracted project folder")):
+def list_project_files(
+    project_id: str = Query(..., description="ID of extracted project folder"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """
     List all source-code files for a previously extracted project, with
     a simple language label per file based on extension.
@@ -226,11 +397,18 @@ def list_project_files(project_id: str = Query(..., description="ID of extracted
     This endpoint does *not* perform any vulnerability analysis; it only
     enumerates code files so a later step can run scanners on them.
     """
+    _assert_project_access(db, project_id, current_user)
     project_dir = EXTRACTED_PROJECTS_DIR / project_id
-    files_info = scan_project_files(project_dir)
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project folder does not exist")
+    if len(list(project_dir.rglob("*"))) == 0:
+        raise HTTPException(status_code=400, detail="Project folder is EMPTY after extraction")
+    scan_root = normalize_project_root(project_dir)
+    files_info = scan_project_files(scan_root)
 
     return {
         "project_id": project_id,
+        "root_used_for_scan": str(scan_root),
         "total_files": len(files_info),
         "files": files_info,
     }
@@ -240,6 +418,8 @@ def list_project_files(project_id: str = Query(..., description="ID of extracted
 def scan_project(
     project_id: str = Query(..., description="ID of extracted project folder"),
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+    request: Request = None,
 ):
     """
     Run Phase 1, rule-based static analysis over an extracted project.
@@ -248,8 +428,14 @@ def scan_project(
     It is limited: it cannot model taint flow, sanitization, or framework
     behavior, but it provides a starting point for highlighting risky spots.
     """
+    _assert_project_access(db, project_id, current_user)
     project_dir = EXTRACTED_PROJECTS_DIR / project_id
-    result = scan_project_for_vulnerabilities(project_dir)
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project folder does not exist")
+    if len(list(project_dir.rglob("*"))) == 0:
+        raise HTTPException(status_code=400, detail="Project folder is EMPTY after extraction")
+    scan_root = normalize_project_root(project_dir)
+    result = scan_project_for_vulnerabilities(scan_root, extraction_root=project_dir)
     risk = calculate_risk(result["findings"])
 
     # Persist scan results for multi-project analytics and trend tracking.
@@ -260,11 +446,13 @@ def scan_project(
         project = models.Project(
             id=project_id,
             name=f"Project {project_id}",
-            owner_id=None,
+            owner_id=current_user.id,
             created_at=datetime.utcnow(),
         )
         db.add(project)
         db.flush()
+    elif not project.owner_id:
+        project.owner_id = current_user.id
 
     project.last_scan_date = datetime.utcnow()
     project.latest_risk_score = risk["total_score"]
@@ -280,6 +468,21 @@ def scan_project(
     )
     db.add(history)
     db.commit()
+    recalculate_learning_progress(db, current_user.id)
+
+    log_security_event(
+        db=db,
+        event_type=SecurityEventType.PROJECT_SCAN,
+        severity=SecuritySeverity.LOW,
+        payload={"project_id": project_id},
+        request=request,
+        user_id=current_user.id,
+        metadata={
+            "total_vulnerabilities": result["total_vulnerabilities"],
+            "risk_level": risk["risk_level"],
+            "risk_score": risk["total_score"],
+        },
+    )
 
     return {
         "project_id": project_id,
@@ -287,20 +490,32 @@ def scan_project(
         "findings": result["findings"],
         "summary": result["summary"],
         "risk": risk,
+        "message": result.get("message"),
+        "debug": result.get("debug", {}),
     }
 
 
 @router.get("/project/report")
-def get_project_report(project_id: str = Query(..., description="ID of extracted project folder")):
+def get_project_report(
+    project_id: str = Query(..., description="ID of extracted project folder"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """
     Generate a structured security report JSON for a project.
 
     This is the reporting layer: it takes raw detection + scoring results
     and shapes them into something suitable for stakeholders and tooling.
     """
+    _assert_project_access(db, project_id, current_user)
     project_dir = EXTRACTED_PROJECTS_DIR / project_id
-    files = scan_project_files(project_dir)
-    scan_result = scan_project_for_vulnerabilities(project_dir)
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project folder does not exist")
+    if len(list(project_dir.rglob("*"))) == 0:
+        raise HTTPException(status_code=400, detail="Project folder is EMPTY after extraction")
+    scan_root = normalize_project_root(project_dir)
+    files = scan_project_files(scan_root)
+    scan_result = scan_project_for_vulnerabilities(scan_root, extraction_root=project_dir)
     risk = calculate_risk(scan_result["findings"])
 
     report = generate_security_report(
@@ -314,16 +529,26 @@ def get_project_report(project_id: str = Query(..., description="ID of extracted
 
 
 @router.get("/project/report/pdf")
-def get_project_report_pdf(project_id: str = Query(..., description="ID of extracted project folder")):
+def get_project_report_pdf(
+    project_id: str = Query(..., description="ID of extracted project folder"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """
     Generate and download a PDF version of the security report.
 
     Detection and scoring happen first; this step is purely about formatting
     and export so that results can be shared with non-technical stakeholders.
     """
+    _assert_project_access(db, project_id, current_user)
     project_dir = EXTRACTED_PROJECTS_DIR / project_id
-    files = scan_project_files(project_dir)
-    scan_result = scan_project_for_vulnerabilities(project_dir)
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project folder does not exist")
+    if len(list(project_dir.rglob("*"))) == 0:
+        raise HTTPException(status_code=400, detail="Project folder is EMPTY after extraction")
+    scan_root = normalize_project_root(project_dir)
+    files = scan_project_files(scan_root)
+    scan_result = scan_project_for_vulnerabilities(scan_root, extraction_root=project_dir)
     risk = calculate_risk(scan_result["findings"])
 
     report = generate_security_report(
@@ -345,7 +570,11 @@ def get_project_report_pdf(project_id: str = Query(..., description="ID of extra
 
 
 @router.post("/project/scan/ai")
-def scan_project_with_ai(project_id: str = Query(..., description="ID of extracted project folder")):
+def scan_project_with_ai(
+    project_id: str = Query(..., description="ID of extracted project folder"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """
     Run the normal rule-based scan, then enrich up to N findings with AI mentoring.
 
@@ -355,8 +584,14 @@ def scan_project_with_ai(project_id: str = Query(..., description="ID of extract
     - and suggests secure refactorings.
     Detection and scoring logic remain rule-based and deterministic.
     """
+    _assert_project_access(db, project_id, current_user)
     project_dir = EXTRACTED_PROJECTS_DIR / project_id
-    scan_result = scan_project_for_vulnerabilities(project_dir)
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project folder does not exist")
+    if len(list(project_dir.rglob("*"))) == 0:
+        raise HTTPException(status_code=400, detail="Project folder is EMPTY after extraction")
+    scan_root = normalize_project_root(project_dir)
+    scan_result = scan_project_for_vulnerabilities(scan_root, extraction_root=project_dir)
 
     findings = scan_result["findings"]
     enhanced = []
@@ -436,10 +671,12 @@ def list_user_projects(
 def project_analytics(
     project_id: str = Query(..., description="ID of project"),
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     """
     Return risk and vulnerability trends over time for a single project.
     """
+    _assert_project_access(db, project_id, current_user)
     history = (
         db.query(models.ScanHistory)
         .filter(models.ScanHistory.project_id == project_id)
@@ -458,6 +695,42 @@ def project_analytics(
         "project_id": project_id,
         "risk_trend": risk_trend,
         "vulnerability_trend": vulnerability_trend,
+    }
+
+
+@router.get("/project/{project_id}")
+def get_project_by_id(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _assert_project_access(db, project_id, current_user)
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project_dir = EXTRACTED_PROJECTS_DIR / project_id
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project files not found")
+
+    latest_scan = (
+        db.query(models.ScanHistory)
+        .filter(models.ScanHistory.project_id == project_id)
+        .order_by(models.ScanHistory.scan_date.desc())
+        .first()
+    )
+
+    return {
+        "project_id": project.id,
+        "name": project.name,
+        "owner_id": project.owner_id,
+        "created_at": project.created_at,
+        "last_scan_date": project.last_scan_date,
+        "latest_risk_score": project.latest_risk_score,
+        "latest_risk_level": project.latest_risk_level,
+        "total_scans": project.total_scans or 0,
+        "last_scan_summary": json.loads(latest_scan.vuln_summary) if latest_scan and latest_scan.vuln_summary else {},
+        "project_path_exists": True,
     }
 
 

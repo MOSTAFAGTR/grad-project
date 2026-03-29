@@ -150,12 +150,24 @@ def list_contacts(
         q = q.filter(models.User.id != current_user.id)
 
     users = q.order_by(models.User.email.asc()).all()
-    return [
-        {
-            "id": u.id,
-            "email": u.email,
-            "role": u.role,
-        }
-        for u in users
-    ]
+    result = []
+    for u in users:
+        unread_count = (
+            db.query(models.Message)
+            .filter(
+                models.Message.sender_id == u.id,
+                models.Message.receiver_id == current_user.id,
+                models.Message.is_read == False,  # noqa: E712
+            )
+            .count()
+        )
+        result.append(
+            {
+                "id": u.id,
+                "email": u.email,
+                "role": u.role,
+                "unread_count": unread_count,
+            }
+        )
+    return result
 

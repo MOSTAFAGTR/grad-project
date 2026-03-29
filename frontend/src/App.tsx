@@ -23,6 +23,7 @@ import InstructorQuizPage from './pages/InstructorQuizPage';
 import StudentQuizPage from './pages/StudentQuizPage';
 import CsrfAttackPage from './pages/CsrfAttackPage';
 import CsrfFixPage from './pages/CsrfFixPage';
+import CsrfTutorialPage from './pages/CsrfTutorialPage';
 import RedirectChallengePage from './pages/RedirectChallengePage';
 import CommandChallengePage from './pages/CommandChallengePage';
 import BrokenAuthAttackPage from './pages/BrokenAuthAttackPage';
@@ -30,6 +31,11 @@ import BrokenAuthFixPage from './pages/BrokenAuthFixPage';
 import SecurityMiscAttackPage from './pages/SecurityMiscAttackPage';
 import SecurityMiscFixPage from './pages/SecurityMiscFixPage';
 import Scanner from './pages/Scanner';
+import AttackLab from './pages/AttackLab';
+import SecurityLogsPage from './pages/SecurityLogsPage';
+import InsecureStorageChallengePage from './pages/InsecureStorageChallengePage';
+import DirectoryTraversalChallengePage from './pages/DirectoryTraversalChallengePage';
+import XxeChallengePage from './pages/XxeChallengePage';
 
 // Components
 import MainLayout from './components/MainLayout';
@@ -51,6 +57,7 @@ const App: React.FC = () => {
             <Route path="/challenges" element={<ChallengesListPage />} />
             <Route path="/messages" element={<MessagesPage />} />
             <Route path="/scanner" element={<Scanner />} />
+            <Route path="/attack-lab" element={<AttackLab />} />
             
             <Route path="/challenges/1/tutorial" element={<SqlInjectionTutorialPage />} />
             <Route path="/challenges/1/attack" element={<SqlInjectionAttackPage />} />
@@ -62,6 +69,7 @@ const App: React.FC = () => {
 
             <Route path="/challenges/3/attack" element={<CsrfAttackPage />} />
             <Route path="/challenges/3/fix" element={<CsrfFixPage />} />
+            <Route path="/challenges/3/tutorial" element={<CsrfTutorialPage />} />
 
             {/* Command Injection (challenge 4) */}
             <Route path="/challenges/4/:tab" element={<CommandChallengePage />} />
@@ -71,13 +79,18 @@ const App: React.FC = () => {
 
             <Route path="/challenges/6/attack" element={<SecurityMiscAttackPage />} />
             <Route path="/challenges/6/fix" element={<SecurityMiscFixPage />} />
+            <Route path="/challenges/7/:tab" element={<InsecureStorageChallengePage />} />
+            <Route path="/challenges/8/:tab" element={<DirectoryTraversalChallengePage />} />
+            <Route path="/challenges/9/:tab" element={<XxeChallengePage />} />
             
 
             {/* Unvalidated Redirect (challenge 10): /challenges/10/attack | fix | tutorial */}
             <Route path="/challenges/10/:tab" element={<RedirectChallengePage />} />
 
             <Route path="/challenges/attack-success" element={<AttackSuccessPage />} />
-            <Route path="/quiz" element={<StudentQuizPage />} />
+            <Route element={<ProtectedRoute allowedRoles={['user']} />}>
+              <Route path="/quiz" element={<StudentQuizPage />} />
+            </Route>
             <Route path="/under-construction" element={<UnderConstructionPage />} />
           </Route>
         </Route>
@@ -95,7 +108,7 @@ const App: React.FC = () => {
           <Route element={<MainLayout />}>
             <Route path="/admin/stats" element={<AdminStatsPage />} /> {/* NEW VISUAL DASHBOARD */}
             <Route path="/admin/dashboard" element={<AdminDashboardPage />} /> {/* USER MANAGEMENT */}
-            <Route path="/admin/logs" element={<UnderConstructionPage />} />
+            <Route path="/admin/logs" element={<SecurityLogsPage />} />
           </Route>
         </Route>
 

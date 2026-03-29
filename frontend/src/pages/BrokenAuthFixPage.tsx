@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import ResultModal from '../components/ResultModal';
+import { API_BASE_URL } from '../lib/api';
 
 const VULNERABLE_CODE = `from flask import Flask, request, jsonify
 import time
@@ -44,7 +45,7 @@ const BrokenAuthFixPage: React.FC = () => {
     try {
       const token = sessionStorage.getItem('token');
       const response = await axios.post(
-        'http://localhost:8000/api/challenges/submit-fix-auth', 
+        `${API_BASE_URL}/api/challenges/submit-fix-auth`,
         { code }, 
         { headers: { Authorization: `Bearer ${token}` } }
       );

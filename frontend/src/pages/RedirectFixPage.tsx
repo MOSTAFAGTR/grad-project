@@ -4,6 +4,7 @@ import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import ResultModal from '../components/ResultModal';
 import { Link } from 'react-router-dom';
+import { API_BASE_URL } from '../lib/api';
 
 const VULNERABLE_CODE = `from flask import Flask, request, redirect
 
@@ -44,7 +45,7 @@ const RedirectFixPage: React.FC = () => {
       }
 
       const response = await axios.post(
-        'http://localhost:8000/api/challenges/submit-fix-redirect',
+        `${API_BASE_URL}/api/challenges/submit-fix-redirect`,
         { code },
         { headers: { Authorization: `Bearer ${token}` } }
       );

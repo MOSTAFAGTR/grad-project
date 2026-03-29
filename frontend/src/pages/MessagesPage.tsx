@@ -7,6 +7,7 @@ interface Contact {
   id: number;
   email: string;
   role: string;
+  unread_count?: number;
 }
 
 interface Message {
@@ -28,7 +29,7 @@ const MessagesPage: React.FC = () => {
   const token = sessionStorage.getItem('token');
   const currentUserId = Number(sessionStorage.getItem('user_id'));
 
-  useEffect(() => {
+  const loadContacts = () => {
     if (!token) return;
     axios
       .get(`${API_URL}/api/messages/contacts`, {
@@ -36,6 +37,10 @@ const MessagesPage: React.FC = () => {
       })
       .then((res) => setContacts(res.data as Contact[]))
       .catch(() => {});
+  };
+
+  useEffect(() => {
+    loadContacts();
   }, [token]);
 
   const loadConversation = (contact: Contact) => {
@@ -46,7 +51,10 @@ const MessagesPage: React.FC = () => {
       .get(`${API_URL}/api/messages/with/${contact.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      .then((res) => setMessages(res.data as Message[]))
+      .then((res) => {
+        setMessages(res.data as Message[]);
+        loadContacts();
+      })
       .catch(() => {})
       .finally(() => setLoadingMessages(false));
   };
@@ -64,6 +72,7 @@ const MessagesPage: React.FC = () => {
       .then((res) => {
         setMessages((prev) => [...prev, res.data as Message]);
         setNewMessage('');
+        loadContacts();
       })
       .catch((err) => {
         alert(err.response?.data?.detail || 'Failed to send message');
@@ -87,7 +96,15 @@ const MessagesPage: React.FC = () => {
                 selectedContact?.id === c.id ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'
               }`}
             >
-              <div className="font-semibold truncate">{c.email}</div>
+              <div className="font-semibold truncate flex items-center gap-2">
+                <span className="truncate">{c.email}</span>
+                {Number(c.unread_count || 0) > 0 && (
+                  <>
+                    <span className="ml-auto inline-block w-[10px] h-[10px] rounded-full bg-red-500" />
+                    <span className="text-[10px] text-red-300">({c.unread_count})</span>
+                  </>
+                )}
+              </div>
               <div className="text-xs text-gray-300 capitalize">{c.role}</div>
             </button>
           ))}

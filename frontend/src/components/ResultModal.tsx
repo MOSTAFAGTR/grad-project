@@ -5,10 +5,15 @@ interface ResultModalProps {
   isOpen: boolean;
   isSuccess: boolean;
   logs: string;
+  verification?: {
+    before_vulnerabilities?: number;
+    after_vulnerabilities?: number;
+    improvement_score?: number;
+  } | null;
   onClose: () => void;
 }
 
-const ResultModal: React.FC<ResultModalProps> = ({ isOpen, isSuccess, logs, onClose }) => {
+const ResultModal: React.FC<ResultModalProps> = ({ isOpen, isSuccess, logs, verification, onClose }) => {
   if (!isOpen) return null;
 
   return (
@@ -35,6 +40,15 @@ const ResultModal: React.FC<ResultModalProps> = ({ isOpen, isSuccess, logs, onCl
         </div>
 
         {/* 2. Dropdown for Logs */}
+        {verification && (
+          <div className="mb-4 bg-gray-900 border border-gray-700 rounded p-3 text-sm">
+            <div className="text-gray-200 font-semibold mb-2">Before vs After</div>
+            <div className="text-gray-300">Before vulnerabilities: <span className="text-red-300">{verification.before_vulnerabilities ?? '-'}</span></div>
+            <div className="text-gray-300">After vulnerabilities: <span className="text-green-300">{verification.after_vulnerabilities ?? '-'}</span></div>
+            <div className="text-gray-300">Improvement score: <span className="text-blue-300">{verification.improvement_score ?? 0}%</span></div>
+          </div>
+        )}
+
         <div className="bg-gray-900/80 rounded-lg overflow-hidden border border-gray-700 mb-6">
           <details className="group">
             <summary className="cursor-pointer p-3 font-semibold text-blue-400 hover:text-blue-300 hover:bg-gray-800 flex justify-between items-center transition select-none">

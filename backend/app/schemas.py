@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Literal
 from datetime import datetime
 
 # ===========================
@@ -209,3 +209,46 @@ class HintEntry(BaseModel):
 class HintUseRequest(BaseModel):
     challenge_id: str
     hint_id: int
+
+
+# ===========================
+# AI MENTOR SCHEMAS
+# ===========================
+class AICodeAnalyzeRequest(BaseModel):
+    code: str
+    language: str
+    vulnerability_type: str
+    severity: str
+    file: str
+    line: int
+
+
+class AICodeAnalyzeResponse(BaseModel):
+    explanation: str
+    attack_scenario: str
+    payload_example: str
+    technical_breakdown: str
+    fix_recommendation: str
+    secure_code_example: str
+    critique: str
+    confidence: Literal["Low", "Medium", "High"]
+
+
+# ===========================
+# ATTACK SIMULATOR SCHEMAS
+# ===========================
+class AttackSimulateRequest(BaseModel):
+    vulnerability_type: str
+    code: str
+    payload: str
+
+
+class AttackSimulateResponse(BaseModel):
+    original_state: str
+    payload: str
+    injected_state: str
+    execution_flow: str
+    result: str
+    data_exposed: str
+    impact: str
+    timeline: List[str]

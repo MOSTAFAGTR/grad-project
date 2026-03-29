@@ -4,7 +4,7 @@ import {
   FaHome, FaShieldAlt, FaQuestionCircle, FaSignOutAlt, 
   FaBars, FaTimes, FaChalkboardTeacher, FaUserCog, FaLock, FaEnvelope 
 } from 'react-icons/fa';
-import axios from 'axios';
+import { api } from '../lib/api';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -22,25 +22,34 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
 
   useEffect(() => {
     if (!token) return;
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
     const fetchUnread = () => {
-      axios
-        .get(`${API_URL}/api/messages/unread-count`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
+      if (document.visibilityState !== 'visible') return;
+      api
+        .get('/api/messages/unread-count')
         .then((res) => setUnreadCount(res.data.unread || 0))
         .catch(() => {});
     };
 
     fetchUnread();
-    const id = setInterval(fetchUnread, 15000);
-    return () => clearInterval(id);
+    const id = setInterval(fetchUnread, 30000);
+    const onVisible = () => fetchUnread();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [token]);
 
-  const handleLogout = () => {
-    sessionStorage.clear(); // Clears only this tab
-    navigate('/login');
+  const handleLogout = async () => {
+    try {
+      await api.post('/api/auth/logout');
+    } catch {
+      // ignore logout transport errors and clear local session anyway
+    } finally {
+      sessionStorage.clear(); // Clears only this tab
+      navigate('/login');
+    }
   };
 
   const getHomeLink = () => {

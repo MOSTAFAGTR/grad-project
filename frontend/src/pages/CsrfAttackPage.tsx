@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
+import ChallengeHintPanel from '../components/ChallengeHintPanel';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -10,19 +11,12 @@ interface Account {
   balance: number;
 }
 
-interface HintEntry {
-  id: number;
-  text: string;
-  unlocked: boolean;
-}
-
 const CsrfAttackPage: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [payload, setPayload] = useState('');
   const [logs, setLogs] = useState<string[]>([]);
   const [message, setMessage] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
-  const [hints, setHints] = useState<HintEntry[]>([]);
   const navigate = useNavigate();
 
   const fetchAccounts = async () => {
@@ -34,23 +28,8 @@ const CsrfAttackPage: React.FC = () => {
     }
   };
 
-  const loadHints = async () => {
-    try {
-      const token = sessionStorage.getItem('token');
-      if (!token) return;
-      const res = await axios.get<HintEntry[]>(`${API_URL}/api/challenges/hints`, {
-        params: { challenge_id: 'csrf' },
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setHints(res.data);
-    } catch {
-      // ignore
-    }
-  };
-
   useEffect(() => {
     axios.post(`${API_URL}/api/challenges/csrf/reset`).then(fetchAccounts);
-    loadHints();
   }, []);
 
   const appendLog = (line: string) => {
@@ -131,25 +110,6 @@ const CsrfAttackPage: React.FC = () => {
         document.body.removeChild(iframe);
       }
     }, 1500);
-  };
-
-  const handleUseHint = async () => {
-    try {
-      const token = sessionStorage.getItem('token');
-      if (!token) return;
-      // Use next locked hint (or last)
-      const locked = hints.find(h => !h.unlocked);
-      const target = locked ?? hints[hints.length - 1];
-      if (!target) return;
-      await axios.post(
-        `${API_URL}/api/challenges/hints/use`,
-        { challenge_id: 'csrf', hint_id: target.id },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      loadHints();
-    } catch {
-      // ignore
-    }
   };
 
   const alice = accounts.find(a => a.username === 'Alice');
@@ -243,26 +203,7 @@ const CsrfAttackPage: React.FC = () => {
             />
           </div>
 
-          {/* Hints */}
-          <div className="mt-3 bg-gray-800 border border-gray-700 rounded p-3">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="text-sm font-bold text-blue-300">Hints</h3>
-              <button
-                onClick={handleUseHint}
-                className="text-xs px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 font-semibold"
-              >
-                Unlock next hint
-              </button>
-            </div>
-            {hints.length === 0 && <p className="text-xs text-gray-500">No hints available.</p>}
-            <ul className="text-xs list-disc list-inside space-y-1">
-              {hints.map(h => (
-                <li key={h.id} className={h.unlocked ? 'text-gray-200' : 'text-gray-500 italic'}>
-                  {h.text}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <ChallengeHintPanel challengeId="csrf" />
         </div>
       </div>
 

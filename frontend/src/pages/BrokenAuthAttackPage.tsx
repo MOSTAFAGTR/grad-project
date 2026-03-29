@@ -1,82 +1,43 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import ChallengeHintPanel from '../components/ChallengeHintPanel';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
-interface HintEntry {
-  id: number;
-  text: string;
-  unlocked: boolean;
-}
 
 const BrokenAuthAttackPage: React.FC = () => {
   const [username, setUsername] = useState('admin@scale.edu');
   const [password, setPassword] = useState('');
-  const [logs, setLogs] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [hints, setHints] = useState<HintEntry[]>([]);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [lastRequest, setLastRequest] = useState('');
+  const [lastExecutedQuery, setLastExecutedQuery] = useState('');
+  const [lastDbResult, setLastDbResult] = useState('');
+  const [lastExplanation, setLastExplanation] = useState('');
+  const [attackStatus, setAttackStatus] = useState<'success' | 'failed' | 'idle'>('idle');
   const navigate = useNavigate();
-
-  const appendLog = (line: string) => setLogs(prev => [...prev, line]);
-
-  const loadHints = async () => {
-    try {
-      const token = sessionStorage.getItem('token');
-      if (!token) return;
-      const res = await axios.get<HintEntry[]>(`${API_URL}/api/challenges/hints`, {
-        params: { challenge_id: 'broken-auth' },
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setHints(res.data);
-    } catch {
-      // ignore
-    }
-  };
-
-  React.useEffect(() => {
-    loadHints();
-  }, []);
-
-  const handleUseHint = async () => {
-    try {
-      const token = sessionStorage.getItem('token');
-      if (!token) return;
-      const locked = hints.find(h => !h.unlocked);
-      const target = locked ?? hints[hints.length - 1];
-      if (!target) return;
-      await axios.post(
-        `${API_URL}/api/challenges/hints/use`,
-        { challenge_id: 'broken-auth', hint_id: target.id },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      loadHints();
-    } catch {
-      // ignore
-    }
-  };
+  const liveQuery = `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    appendLog(`Attempting login for ${username} ...`);
+    const reqBody = { username, password };
+    setLastRequest(JSON.stringify(reqBody, null, 2));
     try {
       const res = await axios.post(
         `${API_URL}/api/auth/login`,
         { username, password },
         { params: { challenge: 'broken-auth' } },
       );
-      appendLog(`Server response: ${res.data.message || 'Login successful.'}`);
+      setLastExecutedQuery(res.data.executed_query || liveQuery);
+      setLastDbResult(JSON.stringify(res.data.returned_user ?? null, null, 2));
+      setLastExplanation(res.data.explanation || '');
 
-      if (res.data.broken_auth && res.data.role === 'admin') {
-        appendLog('Broken auth bypass succeeded. Admin session obtained.');
-        sessionStorage.setItem('token', res.data.access_token);
-        sessionStorage.setItem('role', 'admin');
-        sessionStorage.setItem('user_id', String(res.data.user_id ?? ''));
-        sessionStorage.setItem('user_email', res.data.email ?? username);
-
-        const token = res.data.access_token;
+      if (res.data.bypass_success) {
+        setAttackStatus('success');
+        // Keep challenge token isolated so challenge login does not overwrite platform session.
+        sessionStorage.setItem('challenge_token_broken_auth', res.data.access_token);
+        const token = sessionStorage.getItem('token') || res.data.access_token;
         try {
           await axios.post(
             `${API_URL}/api/challenges/mark-attack-complete`,
@@ -102,10 +63,14 @@ const BrokenAuthAttackPage: React.FC = () => {
         setShowAdmin(true);
         setTimeout(() => navigate('/challenges/attack-success?type=broken-auth'), 2000);
       } else {
-        appendLog('Login did not grant admin access. Try a different payload.');
+        setAttackStatus('failed');
       }
     } catch (err: any) {
-      appendLog(`Login failed: ${err.response?.data?.detail || 'Unknown error'}`);
+      setAttackStatus('failed');
+      const detail = err?.response?.data?.detail;
+      if (detail?.executed_query) setLastExecutedQuery(detail.executed_query);
+      if (detail) setLastDbResult(JSON.stringify(detail.returned_user ?? null, null, 2));
+      if (detail?.explanation) setLastExplanation(detail.explanation);
     } finally {
       setIsSubmitting(false);
     }
@@ -115,8 +80,11 @@ const BrokenAuthAttackPage: React.FC = () => {
     <div className="text-white p-6 max-w-5xl mx-auto">
       <h1 className="text-3xl font-bold mb-2">Broken Authentication Challenge</h1>
       <p className="text-gray-400 mb-6">
-        Bypass the login protection and obtain an <span className="font-semibold">admin</span> session using a crafted input.
+        Objective: login as <span className="font-semibold">admin</span> without knowing the real password.
       </p>
+      <div className="mb-6 bg-gray-900 border border-indigo-700 rounded p-3 text-sm text-indigo-200">
+        Try manipulating the query using SQL injection (e.g. bypass authentication).
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         {/* Login portal */}
@@ -151,41 +119,17 @@ const BrokenAuthAttackPage: React.FC = () => {
             </button>
           </form>
 
-          {/* Hints */}
-          <div className="mt-6 bg-gray-800 border border-gray-700 rounded p-3">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="text-sm font-bold text-blue-300">Hints</h3>
-              <button
-                onClick={handleUseHint}
-                className="text-xs px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 font-semibold"
-              >
-                Unlock next hint
-              </button>
-            </div>
-            {hints.length === 0 && <p className="text-xs text-gray-500">No hints available.</p>}
-            <ul className="text-xs list-disc list-inside space-y-1">
-              {hints.map(h => (
-                <li key={h.id} className={h.unlocked ? 'text-gray-200' : 'text-gray-500 italic'}>
-                  {h.text}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <ChallengeHintPanel challengeId="broken-auth" />
         </div>
 
-        {/* Attack console / Admin dashboard preview */}
-        <div className="bg-gray-900 p-4 rounded-lg border border-green-900 flex flex-col h-80">
-          <div className="text-green-500 mb-2 border-b border-green-900 pb-1 font-mono text-xs">
-            attacker@lab:~$ broken-auth
-          </div>
-          <div className="flex-1 overflow-y-auto font-mono text-xs mb-3">
-            {logs.length === 0 && <div className="text-gray-600">No login attempts yet.</div>}
-            {logs.map((log, i) => (
-              <div key={i} className="text-green-400">
-                {log}
-              </div>
-            ))}
-          </div>
+        <div className="bg-gray-900 p-4 rounded-lg border border-gray-700">
+          <h2 className="text-lg font-bold text-emerald-300 mb-3">Challenge Status</h2>
+          <p className={`font-semibold mb-2 ${attackStatus === 'success' ? 'text-green-300' : attackStatus === 'failed' ? 'text-red-300' : 'text-gray-300'}`}>
+            {attackStatus === 'success' ? '✔ SUCCESS - Injection worked' : attackStatus === 'failed' ? '❌ FAILED - Injection did not bypass auth' : 'Waiting for attempt'}
+          </p>
+          <p className="text-sm text-gray-300">
+            {lastExplanation || "Input is directly concatenated in the SQL query. A payload like ' OR 1=1 -- can make the WHERE condition always true."}
+          </p>
           {showAdmin && (
             <div className="bg-green-900/30 border border-green-700 rounded p-3 text-xs">
               <div className="font-bold text-green-300 mb-1">Welcome Admin!</div>
@@ -194,6 +138,30 @@ const BrokenAuthAttackPage: React.FC = () => {
               </p>
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-gray-900 border border-gray-700 rounded p-3">
+          <h3 className="text-sm font-bold text-gray-200 mb-2">Request</h3>
+          <pre className="text-xs text-green-300 whitespace-pre-wrap">{lastRequest || 'No request yet.'}</pre>
+        </div>
+        <div className="bg-gray-900 border border-gray-700 rounded p-3">
+          <h3 className="text-sm font-bold text-gray-200 mb-2">Query (Live + Executed)</h3>
+          <p className="text-[11px] text-gray-400 mb-1">Live preview</p>
+          <pre className="text-xs text-yellow-300 whitespace-pre-wrap mb-2">{liveQuery}</pre>
+          <p className="text-[11px] text-gray-400 mb-1">Executed query</p>
+          <pre className="text-xs text-orange-300 whitespace-pre-wrap">{lastExecutedQuery || 'No execution yet.'}</pre>
+        </div>
+        <div className="bg-gray-900 border border-gray-700 rounded p-3">
+          <h3 className="text-sm font-bold text-gray-200 mb-2">DB Result</h3>
+          <pre className="text-xs text-cyan-300 whitespace-pre-wrap">{lastDbResult || 'No result yet.'}</pre>
+        </div>
+        <div className="bg-gray-900 border border-gray-700 rounded p-3">
+          <h3 className="text-sm font-bold text-gray-200 mb-2">Explanation</h3>
+          <p className="text-xs text-blue-200 whitespace-pre-wrap">
+            {lastExplanation || 'Run an attempt to see why the query worked or failed.'}
+          </p>
         </div>
       </div>
     </div>

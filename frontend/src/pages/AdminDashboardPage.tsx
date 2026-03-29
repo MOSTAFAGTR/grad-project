@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from '../lib/api';
 import {
   FaUsers, FaBug, FaCheckCircle, FaServer, FaBell,
   FaTimes, FaUserPlus, FaCheck, FaTrash, FaEdit
@@ -10,6 +11,7 @@ const AdminDashboardPage: React.FC = () => {
   // Data State
   const [users, setUsers] = useState<any[]>([]);
   const [pendingUsers, setPendingUsers] = useState<any[]>([]);
+  const [platformStats, setPlatformStats] = useState<{ active_exploits: number; fixed_vulns: number; system_status: string } | null>(null);
 
   // UI State
   const [showRequests, setShowRequests] = useState(false);
@@ -23,7 +25,7 @@ const AdminDashboardPage: React.FC = () => {
 
   const token = sessionStorage.getItem('token');
   const headers = { headers: { Authorization: `Bearer ${token}` } };
-  const API_URL = 'http://localhost:8000/api';
+  const API_URL = `${API_BASE_URL}/api`;
 
   useEffect(() => {
     fetchData();
@@ -35,6 +37,8 @@ const AdminDashboardPage: React.FC = () => {
       setUsers(uRes.data);
       const pRes = await axios.get(`${API_URL}/auth/admin/pending`, headers);
       setPendingUsers(pRes.data);
+      const statsRes = await axios.get(`${API_URL}/stats/admin/dashboard`, headers);
+      setPlatformStats(statsRes.data);
     } catch (err) {
       console.error("Failed to fetch data", err);
     }
@@ -131,21 +135,21 @@ const AdminDashboardPage: React.FC = () => {
             <h3 className="text-gray-400">Active Exploits</h3>
             <FaBug className="text-red-400 text-2xl" />
           </div>
-          <p className="text-3xl font-bold mt-2">12</p>
+          <p className="text-3xl font-bold mt-2">{platformStats?.active_exploits ?? 0}</p>
         </div>
         <div className="bg-gray-800 p-6 rounded-lg border border-green-500 shadow-lg shadow-green-900/20">
           <div className="flex items-center justify-between">
             <h3 className="text-gray-400">Fixed Vulnerabilities</h3>
             <FaCheckCircle className="text-green-400 text-2xl" />
           </div>
-          <p className="text-3xl font-bold mt-2">89</p>
+          <p className="text-3xl font-bold mt-2">{platformStats?.fixed_vulns ?? 0}</p>
         </div>
         <div className="bg-gray-800 p-6 rounded-lg border border-purple-500 shadow-lg shadow-purple-900/20">
           <div className="flex items-center justify-between">
             <h3 className="text-gray-400">Sandbox Status</h3>
             <FaServer className="text-purple-400 text-2xl" />
           </div>
-          <p className="text-lg font-bold mt-2 text-green-400">Operational</p>
+          <p className="text-lg font-bold mt-2 text-green-400">{platformStats?.system_status ?? 'Unknown'}</p>
         </div>
       </div>
 

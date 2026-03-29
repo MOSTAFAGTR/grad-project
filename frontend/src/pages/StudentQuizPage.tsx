@@ -1,25 +1,32 @@
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import { useScanContext } from '../context/ScanContext';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const StudentQuizPage: React.FC = () => {
+  const { scanData } = useScanContext();
   const [step, setStep] = useState<'setup' | 'quiz' | 'result'>('setup');
   const [loading, setLoading] = useState(false);
 
   // Setup State
   const [topic, setTopic] = useState('SQL Injection');
+  const [categoryFilter, setCategoryFilter] = useState('Adaptive');
   const [mode, setMode] = useState('Adaptive');
+  const [difficultyLevel, setDifficultyLevel] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Intermediate');
   const [count, setCount] = useState(5);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [quizTitle, setQuizTitle] = useState('');
   const [assignmentId, setAssignmentId] = useState<number | null>(null);
+  const [generatedFromScan, setGeneratedFromScan] = useState(false);
 
   // Quiz State
   const [questions, setQuestions] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
+  const scoreRef = useRef(0);
+  const [wrongCategories, setWrongCategories] = useState<string[]>([]);
   const [lastResult, setLastResult] = useState<any>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -64,12 +71,63 @@ const StudentQuizPage: React.FC = () => {
         setQuestions(res.data);
         setQuizTitle(`Practice: ${topic}`);
         setAssignmentId(null);
+        setGeneratedFromScan(false);
         setStep('quiz');
         setCurrentIndex(0);
         setScore(0);
+        scoreRef.current = 0;
+        setWrongCategories([]);
       }
     } catch (err) { console.error(err); alert("Error starting quiz"); }
     setLoading(false);
+  };
+
+  const handleGenerateFromScan = async () => {
+    if (!token) return;
+    const findings = (scanData?.findings || scanData?.results?.findings || []).slice(0, 6);
+    if (findings.length === 0) {
+      alert('No scan findings available. Run scanner first.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await axios.post(
+        `${API_URL}/api/quiz/generate`,
+        { findings, difficulty: difficultyLevel, category: categoryFilter, explanation_depth: 'detailed' },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const generated = (res.data?.questions || []).map((q: any, idx: number) => ({
+        id: idx + 100000,
+        text: q.question || q.prompt,
+        difficulty: q.difficulty || difficultyLevel,
+        difficulty_score: q.difficulty_score || 2,
+        explanation: q.explanation,
+        category: q.category || 'General',
+        question_type: q.type || 'MCQ',
+        options: (q.options || []).map((opt: string, oidx: number) => ({
+          id: idx * 10 + oidx + 1,
+          text: opt,
+          is_correct: opt === (q.correct_answer || q.answer),
+        })),
+      }));
+      if (generated.length === 0) {
+        alert('Could not generate quiz from findings.');
+      } else {
+        setQuestions(generated);
+        setQuizTitle(`Adaptive Quiz from Scan Findings (${categoryFilter})`);
+        setAssignmentId(null);
+        setGeneratedFromScan(true);
+        setStep('quiz');
+        setCurrentIndex(0);
+        setScore(0);
+        scoreRef.current = 0;
+        setWrongCategories([]);
+      }
+    } catch {
+      alert('Failed to generate dynamic quiz.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleStartAssignment = async (id: number, title: string) => {
@@ -80,19 +138,48 @@ const StudentQuizPage: React.FC = () => {
       setQuestions(res.data);
       setQuizTitle(title);
       setAssignmentId(id);
+      setGeneratedFromScan(false);
       setStep('quiz');
       setCurrentIndex(0);
       setScore(0);
+      scoreRef.current = 0;
+      setWrongCategories([]);
     } catch (err) { alert("Failed to start assignment"); }
   };
 
   const handleAnswer = async (optId: number) => {
+    const current = questions[currentIndex];
+    // Dynamic scan-generated quiz items are client-side and not persisted in DB.
+    if (Number(current?.id) >= 100000) {
+      const selected = (current.options || []).find((o: any) => o.id === optId);
+      const correct = Boolean(selected?.is_correct);
+      const localResult = { correct, explanation: current.explanation || 'Review secure coding principles.' };
+      setLastResult(localResult);
+      if (correct) {
+        setScore((prev) => {
+          const next = prev + 1;
+          scoreRef.current = next;
+          return next;
+        });
+      } else {
+        setWrongCategories((prev) => [...prev, current?.category || 'General']);
+      }
+      return;
+    }
     const res = await axios.post(`${API_URL}/api/quizzes/submit-answer`,
-      { question_id: questions[currentIndex].id, selected_option_id: optId },
+      { question_id: current.id, selected_option_id: optId },
       { headers: { Authorization: `Bearer ${token}` } }
     );
     setLastResult(res.data);
-    if (res.data.correct) setScore(score + 1);
+    if (res.data.correct) {
+      setScore((prev) => {
+        const next = prev + 1;
+        scoreRef.current = next;
+        return next;
+      });
+    } else {
+      setWrongCategories((prev) => [...prev, current?.category || 'General']);
+    }
   };
 
   const handleNext = () => {
@@ -106,7 +193,7 @@ const StudentQuizPage: React.FC = () => {
         axios.post(`${API_URL}/api/quizzes/submit-attempt`, {
           assignment_id: assignmentId,
           title: quizTitle || 'Quiz',
-          score,
+          score: scoreRef.current,
           total: questions.length,
           time_seconds: elapsedSeconds + 1,
         }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
@@ -143,6 +230,24 @@ const StudentQuizPage: React.FC = () => {
               </div>
             </div>
             <div className="mb-6">
+              <label className="block text-gray-300 mb-2">Difficulty</label>
+              <select className="w-full bg-gray-700 p-2 rounded text-white" value={difficultyLevel} onChange={e => setDifficultyLevel(e.target.value as any)}>
+                <option value="Beginner">Beginner</option>
+                <option value="Intermediate">Intermediate</option>
+                <option value="Advanced">Advanced</option>
+              </select>
+            </div>
+            <div className="mb-6">
+              <label className="block text-gray-300 mb-2">Category Filter (scan-generated quiz)</label>
+              <select className="w-full bg-gray-700 p-2 rounded text-white" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
+                <option value="Adaptive">Adaptive</option>
+                <option value="SQL Injection">SQL Injection</option>
+                <option value="XSS">XSS</option>
+                <option value="Command Injection">Command Injection</option>
+                <option value="CSRF">CSRF</option>
+              </select>
+            </div>
+            <div className="mb-6">
               <label className="block text-gray-300 mb-2">Number of Questions</label>
               <select
                 className="w-full bg-gray-700 p-2 rounded text-white"
@@ -159,6 +264,9 @@ const StudentQuizPage: React.FC = () => {
             </div>
             <button onClick={handleStartPractice} disabled={loading} className="w-full bg-blue-600 py-3 rounded font-bold hover:bg-blue-700 transition">
               {loading ? "Loading..." : "Start Practice"}
+            </button>
+            <button onClick={handleGenerateFromScan} disabled={loading} className="w-full bg-purple-600 py-3 rounded font-bold hover:bg-purple-700 transition mt-3">
+              {loading ? "Loading..." : "Generate Quiz from Last Scan"}
             </button>
           </div>
 
@@ -182,11 +290,20 @@ const StudentQuizPage: React.FC = () => {
       {/* QUIZ VIEW */}
       {step === 'quiz' && questions.length > 0 && (
         <div className="bg-gray-800 p-8 rounded-xl border border-gray-700 max-w-2xl w-full shadow-2xl">
+          <div className="w-full h-2 bg-gray-700 rounded mb-4 overflow-hidden">
+            <div className="h-2 bg-blue-500" style={{ width: `${Math.round(((currentIndex + 1) / questions.length) * 100)}%` }} />
+          </div>
+          {generatedFromScan && (
+            <div className="mb-4 text-xs bg-purple-900/40 border border-purple-700 text-purple-200 rounded px-3 py-2">
+              Based on your uploaded project vulnerabilities
+            </div>
+          )}
           <div className="flex justify-between items-center mb-6 text-gray-400">
-            <span>Q {currentIndex + 1} / {questions.length}</span>
+            <span>Question {currentIndex + 1} / {questions.length}</span>
             <div className="flex gap-3 items-center">
               <span className="bg-amber-900/50 text-amber-300 px-3 py-1 rounded text-sm font-mono">{formatTime(elapsedSeconds)}</span>
               <span className="bg-gray-700 px-2 rounded text-xs py-1">{questions[currentIndex].difficulty}</span>
+                <span className="bg-purple-900/40 text-purple-200 px-2 rounded text-xs py-1">{questions[currentIndex].question_type || 'MCQ'}</span>
             </div>
           </div>
           <h2 className="text-2xl font-bold mb-8">{questions[currentIndex].text}</h2>
@@ -214,6 +331,22 @@ const StudentQuizPage: React.FC = () => {
           <h2 className="text-4xl font-bold text-white mb-4">Quiz Finished</h2>
           <div className="text-6xl font-extrabold text-blue-500 mb-2">{Math.round((score / questions.length) * 100)}%</div>
           <p className="text-gray-400 mb-6">Score: {score}/{questions.length} — Time: {formatTime(elapsedSeconds + 1)}</p>
+          <div className="bg-gray-700 rounded p-4 text-left mb-6">
+            <p className="text-sm text-gray-200">Final Performance Report</p>
+            {generatedFromScan && (
+              <p className="text-xs text-purple-200 mt-1">Based on your uploaded project vulnerabilities</p>
+            )}
+            <p className="text-xs text-gray-300 mt-1">Difficulty: {difficultyLevel}</p>
+            <p className="text-xs text-gray-300 mt-1">Correct answers: {score}</p>
+            <p className="text-xs text-gray-300 mt-1">Accuracy: {Math.round((score / questions.length) * 100)}%</p>
+            <p className="text-xs text-gray-300 mt-1">
+              Weak areas:{' '}
+              {[...new Set((wrongCategories || []).filter(Boolean))].slice(0, 3).join(', ') || 'None detected'}
+            </p>
+            <p className="text-xs text-gray-300 mt-1">
+              Recommendation: {Math.round((score / questions.length) * 100) >= 70 ? 'Move to advanced mixed-vulnerability quizzes.' : 'Review explanations and retry weak categories.'}
+            </p>
+          </div>
           <button onClick={() => setStep('setup')} className="bg-gray-700 px-8 py-3 rounded font-bold hover:bg-gray-600">Back to Dashboard</button>
         </div>
       )}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import ResultModal from '../components/ResultModal';
+import { API_BASE_URL } from '../lib/api';
 
 const VULNERABLE_CODE = `import sqlite3
 from flask import Flask, request, jsonify, session
@@ -63,7 +64,7 @@ const CsrfFixPage: React.FC = () => {
       if (!token) { alert("Please login."); setIsLoading(false); return; }
 
       const response = await axios.post(
-        'http://localhost:8000/api/challenges/submit-fix-csrf', 
+        `${API_BASE_URL}/api/challenges/submit-fix-csrf`,
         { code }, 
         { headers: { Authorization: `Bearer ${token}` } }
       );

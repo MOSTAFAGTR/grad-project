@@ -35,6 +35,13 @@ FIX_RECOMMENDATIONS = {
             "python": "password = os.getenv('DB_PASSWORD')",
         },
     },
+    "CSRF": {
+        "explanation": "State-changing actions can be triggered without verifying request origin/token.",
+        "recommendation": "Use anti-CSRF tokens and validate them on every state-changing request.",
+        "example": {
+            "python": "token = request.form.get('csrf_token')\nif token != session.get('csrf_token'):\n    abort(403)",
+        },
+    },
 }
 
 

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Boolean, DateTime, Float
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, Boolean, DateTime, Float, JSON, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .db.database import Base
@@ -88,6 +88,20 @@ class QuizAssignment(Base):
     question_ids = Column(Text)
     
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class QuizAssignmentStudent(Base):
+    __tablename__ = "quiz_assignment_students"
+    id = Column(Integer, primary_key=True, index=True)
+    assignment_id = Column(Integer, ForeignKey("quiz_assignments.id"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+
+class QuizAssignmentQuestion(Base):
+    __tablename__ = "quiz_assignment_questions"
+    id = Column(Integer, primary_key=True, index=True)
+    assignment_id = Column(Integer, ForeignKey("quiz_assignments.id"), nullable=False, index=True)
+    question_id = Column(Integer, ForeignKey("questions.id"), nullable=False, index=True)
 
 
 class QuizAttempt(Base):
@@ -256,3 +270,50 @@ class ChallengeState(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     last_updated = Column(DateTime, default=datetime.utcnow)
+
+
+class SecurityLog(Base):
+    __tablename__ = "security_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    event_type = Column(String(100), nullable=False)
+    severity = Column(String(20), nullable=False)
+    payload = Column(Text, nullable=True)
+    endpoint = Column(String(255), nullable=True)
+    ip_address = Column(String(64), nullable=True)
+    geo_bucket = Column(String(64), nullable=True)
+    user_agent = Column(String(512), nullable=True)
+    session_id = Column(String(128), nullable=True)
+    correlation_id = Column(String(128), nullable=True)
+    context_type = Column(String(50), default="real")
+    meta_data = Column("metadata", JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_security_logs_user_id", "user_id"),
+        Index("ix_security_logs_event_type", "event_type"),
+        Index("ix_security_logs_created_at", "created_at"),
+    )
+
+
+class UserLearningProgress(Base):
+    __tablename__ = "user_learning_progress"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    vulnerabilities_solved = Column(Integer, default=0)
+    failed_attempts = Column(Integer, default=0)
+    accuracy = Column(Float, default=0.0)
+    avg_time = Column(Float, default=0.0)
+    strongest_category = Column(String(100), default="N/A")
+    weakest_category = Column(String(100), default="N/A")
+    level = Column(String(30), default="Beginner")
+    streak_days = Column(Integer, default=0)
+    learning_speed = Column(Float, default=0.0)
+    retention_score = Column(Float, default=0.0)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")

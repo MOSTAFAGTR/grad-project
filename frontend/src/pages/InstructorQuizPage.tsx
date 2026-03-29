@@ -1,13 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from '../lib/api';
 
-const API_URL = 'http://localhost:8000/api';
+const API_URL = `${API_BASE_URL}/api`;
 
 const InstructorQuizPage: React.FC = () => {
   const [tab, setTab] = useState('bank'); // bank, create, ai, assign, assign_list
   const [questions, setQuestions] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [assignments, setAssignments] = useState<any[]>([]);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState({
+    question: '',
+    category: 'SQL Injection',
+    difficulty: 'Easy',
+    explanation: '',
+    options: ['', '', '', ''],
+    correct_answer: 0,
+  });
 
   // Selection State for Assignment
   const [selectedQ, setSelectedQ] = useState<number[]>([]);
@@ -21,8 +31,12 @@ const InstructorQuizPage: React.FC = () => {
 
   // Manual Question State
   const [newQ, setNewQ] = useState({
-    text: '', type: 'MCQ', topic: 'SQL Injection', difficulty: 'Easy', skill_focus: 'Concepts', explanation: '',
-    options: [{ text: '', is_correct: false }, { text: '', is_correct: false }]
+    question: '',
+    options: ['', '', '', ''],
+    correct_answer: 0,
+    explanation: '',
+    difficulty: 'Easy',
+    category: 'SQL Injection',
   });
 
   const token = sessionStorage.getItem('token');
@@ -34,8 +48,8 @@ const InstructorQuizPage: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const qRes = await axios.get(`${API_URL}/quizzes/questions`, headers);
-      setQuestions(qRes.data);
+      const qRes = await axios.get(`${API_URL}/quizzes/manage`, headers);
+      setQuestions(qRes.data.questions || []);
       const uRes = await axios.get(`${API_URL}/auth/users`, headers);
       setUsers(uRes.data);
       const aRes = await axios.get(`${API_URL}/quizzes/assignments/instructor`, headers);
@@ -45,14 +59,39 @@ const InstructorQuizPage: React.FC = () => {
 
   const handleDeleteQuestion = async (id: number) => {
     if (!confirm("Delete this question?")) return;
-    await axios.delete(`${API_URL}/quizzes/questions/${id}`, headers);
+    await axios.post(`${API_URL}/quizzes/manage`, { action: 'delete', id }, headers);
+    fetchData();
+  };
+
+  const startEditQuestion = (q: any) => {
+    setEditingId(q.id);
+    setEditDraft({
+      question: q.question || '',
+      category: q.category || 'SQL Injection',
+      difficulty: q.difficulty || 'Easy',
+      explanation: q.explanation || '',
+      options: Array.isArray(q.options) && q.options.length === 4 ? q.options : ['', '', '', ''],
+      correct_answer: Number.isInteger(q.correct_answer) ? q.correct_answer : 0,
+    });
+  };
+
+  const saveEditQuestion = async () => {
+    if (!editingId) return;
+    await axios.post(
+      `${API_URL}/quizzes/manage`,
+      { action: 'update', id: editingId, ...editDraft },
+      headers
+    );
+    setEditingId(null);
     fetchData();
   };
 
   const handleDeleteAllQuestions = async () => {
     if (!confirm("Are you sure you want to delete ALL questions from the bank? This cannot be undone.")) return;
     try {
-      await axios.delete(`${API_URL}/quizzes/questions`, headers);
+      await Promise.all(
+        questions.map((q) => axios.post(`${API_URL}/quizzes/manage`, { action: 'delete', id: q.id }, headers))
+      );
       fetchData();
     } catch (err) { alert("Failed to delete all questions"); }
   };
@@ -89,7 +128,20 @@ const InstructorQuizPage: React.FC = () => {
   };
 
   const saveQuestionToBank = async (q: any) => {
-    await axios.post(`${API_URL}/quizzes/questions`, q, headers);
+    const normalizedOptions = Array.isArray(q.options)
+      ? q.options.map((o: any) => (typeof o === 'string' ? o : o?.text || '')).slice(0, 4)
+      : [];
+    while (normalizedOptions.length < 4) normalizedOptions.push('');
+    const payload = {
+      action: 'create',
+      question: q.question || q.text || '',
+      options: normalizedOptions,
+      correct_answer: Number.isInteger(q.correct_answer) ? q.correct_answer : 0,
+      explanation: q.explanation || '',
+      difficulty: q.difficulty || 'Easy',
+      category: q.category || q.topic || 'General',
+    };
+    await axios.post(`${API_URL}/quizzes/manage`, payload, headers);
     alert("Saved!");
     fetchData();
   };
@@ -97,17 +149,19 @@ const InstructorQuizPage: React.FC = () => {
   // --- MANUAL HANDLERS ---
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newQ.explanation.trim()) {
+      alert('Explanation is required');
+      return;
+    }
     await saveQuestionToBank(newQ);
-    setNewQ({ ...newQ, text: '' });
+    setNewQ({ ...newQ, question: '', options: ['', '', '', ''], correct_answer: 0, explanation: '' });
   };
 
-  const handleOptionChange = (idx: number, field: string, val: any) => {
-    const updatedOptions: any = [...newQ.options];
-    updatedOptions[idx][field] = val;
+  const handleOptionChange = (idx: number, val: string) => {
+    const updatedOptions = [...newQ.options];
+    updatedOptions[idx] = val;
     setNewQ({ ...newQ, options: updatedOptions });
   };
-
-  const addOption = () => setNewQ({ ...newQ, options: [...newQ.options, { text: '', is_correct: false }] });
 
   // Toggle helpers
   const toggleQ = (id: number) => {
@@ -144,15 +198,52 @@ const InstructorQuizPage: React.FC = () => {
             )}
           </div>
           {questions.map(q => (
-
             <div key={q.id} className="bg-gray-800 p-4 rounded flex justify-between items-center border border-gray-700">
-              <div>
-                <p className="font-bold">{q.text}</p>
-                <span className="text-xs text-gray-400">{q.difficulty} | {q.topic}</span>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => handleDeleteQuestion(q.id)} className="text-red-400 hover:underline">Delete</button>
-              </div>
+              {editingId === q.id ? (
+                <div className="w-full space-y-2">
+                  <input className="w-full bg-gray-700 p-2 rounded text-white" value={editDraft.question} onChange={(e) => setEditDraft({ ...editDraft, question: e.target.value })} />
+                  <div className="flex gap-2">
+                    <select className="w-1/2 bg-gray-700 p-2 rounded text-white" value={editDraft.category} onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })}>
+                      <option>SQL Injection</option><option>XSS</option><option>CSRF</option><option>Command Injection</option><option>Authentication</option><option>General</option>
+                    </select>
+                    <select className="bg-gray-700 p-2 rounded text-white" value={editDraft.difficulty} onChange={(e) => setEditDraft({ ...editDraft, difficulty: e.target.value })}>
+                      <option>Easy</option><option>Medium</option><option>Hard</option>
+                    </select>
+                  </div>
+                  {editDraft.options.map((opt, idx) => (
+                    <input
+                      key={idx}
+                      className="w-full bg-gray-700 p-2 rounded text-white"
+                      value={opt}
+                      onChange={(e) => {
+                        const options = [...editDraft.options];
+                        options[idx] = e.target.value;
+                        setEditDraft({ ...editDraft, options });
+                      }}
+                      placeholder={`Option ${idx + 1}`}
+                    />
+                  ))}
+                  <select className="bg-gray-700 p-2 rounded text-white" value={editDraft.correct_answer} onChange={(e) => setEditDraft({ ...editDraft, correct_answer: Number(e.target.value) })}>
+                    <option value={0}>Correct: Option 1</option><option value={1}>Correct: Option 2</option><option value={2}>Correct: Option 3</option><option value={3}>Correct: Option 4</option>
+                  </select>
+                  <textarea className="w-full bg-gray-700 p-2 rounded text-white h-20" value={editDraft.explanation} onChange={(e) => setEditDraft({ ...editDraft, explanation: e.target.value })} />
+                  <div className="flex gap-3">
+                    <button onClick={saveEditQuestion} className="text-green-400 hover:underline">Save</button>
+                    <button onClick={() => setEditingId(null)} className="text-gray-300 hover:underline">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <p className="font-bold">{q.question}</p>
+                    <span className="text-xs text-gray-400">{q.difficulty} | {q.category}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => startEditQuestion(q)} className="text-blue-400 hover:underline">Edit</button>
+                    <button onClick={() => handleDeleteQuestion(q.id)} className="text-red-400 hover:underline">Delete</button>
+                  </div>
+                </>
+              )}
             </div>
           ))}
         </div>
@@ -162,24 +253,27 @@ const InstructorQuizPage: React.FC = () => {
       {tab === 'create' && (
         <form onSubmit={handleManualSubmit} className="bg-gray-800 p-6 rounded space-y-4 max-w-2xl">
           <h3 className="text-xl font-bold">Add New Question</h3>
-          <input className="w-full bg-gray-700 p-2 rounded text-white" placeholder="Question Text" value={newQ.text} onChange={e => setNewQ({ ...newQ, text: e.target.value })} required />
+          <input className="w-full bg-gray-700 p-2 rounded text-white" placeholder="Question Text" value={newQ.question} onChange={e => setNewQ({ ...newQ, question: e.target.value })} required />
           <div className="flex gap-2">
-            <input className="w-1/2 bg-gray-700 p-2 rounded text-white" placeholder="Topic" value={newQ.topic} onChange={e => setNewQ({ ...newQ, topic: e.target.value })} />
+            <select className="w-1/2 bg-gray-700 p-2 rounded text-white" value={newQ.category} onChange={e => setNewQ({ ...newQ, category: e.target.value })}>
+              <option>SQL Injection</option><option>XSS</option><option>CSRF</option><option>Command Injection</option><option>Authentication</option><option>General</option>
+            </select>
             <select className="bg-gray-700 p-2 rounded text-white" value={newQ.difficulty} onChange={e => setNewQ({ ...newQ, difficulty: e.target.value })}>
               <option>Easy</option><option>Medium</option><option>Hard</option>
             </select>
           </div>
-          <textarea className="w-full bg-gray-700 p-2 rounded text-white h-20" placeholder="Explanation" value={newQ.explanation} onChange={e => setNewQ({ ...newQ, explanation: e.target.value })} />
+          <textarea className="w-full bg-gray-700 p-2 rounded text-white h-20" placeholder="Explanation (required)" value={newQ.explanation} onChange={e => setNewQ({ ...newQ, explanation: e.target.value })} required />
 
           <div className="space-y-2">
-            <label>Options:</label>
+            <label>Options (4 required):</label>
             {newQ.options.map((opt, idx) => (
               <div key={idx} className="flex gap-2 items-center">
-                <input type="checkbox" checked={opt.is_correct} onChange={e => handleOptionChange(idx, 'is_correct', e.target.checked)} />
-                <input className="flex-1 bg-gray-700 p-2 rounded text-white" placeholder={`Option ${idx + 1}`} value={opt.text} onChange={e => handleOptionChange(idx, 'text', e.target.value)} required />
+                <input className="flex-1 bg-gray-700 p-2 rounded text-white" placeholder={`Option ${idx + 1}`} value={opt} onChange={e => handleOptionChange(idx, e.target.value)} required />
               </div>
             ))}
-            <button type="button" onClick={addOption} className="text-sm text-blue-400 hover:underline">+ Add Option</button>
+            <select className="bg-gray-700 p-2 rounded text-white" value={newQ.correct_answer} onChange={e => setNewQ({ ...newQ, correct_answer: Number(e.target.value) })}>
+              <option value={0}>Correct: Option 1</option><option value={1}>Correct: Option 2</option><option value={2}>Correct: Option 3</option><option value={3}>Correct: Option 4</option>
+            </select>
           </div>
           <button type="submit" className="bg-green-600 px-6 py-2 rounded font-bold w-full">Save to Bank</button>
         </form>
@@ -222,7 +316,7 @@ const InstructorQuizPage: React.FC = () => {
               {questions.map(q => (
                 <div key={q.id} onClick={() => toggleQ(q.id)}
                   className={`p-2 rounded cursor-pointer ${selectedQ.includes(q.id) ? 'bg-green-900 border-green-500 border' : 'bg-gray-700'}`}>
-                  {q.text}
+                  {q.question}
                 </div>
               ))}
             </div>

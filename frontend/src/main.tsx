@@ -1,10 +1,16 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import axios from 'axios'
 import App from './App.tsx'
 import './index.css'
+import { ScanProvider } from './context/ScanContext'
+
+axios.defaults.withCredentials = true
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <ScanProvider>
+      <App />
+    </ScanProvider>
   </React.StrictMode>,
 )

@@ -11,7 +11,6 @@ const RedirectAttackPage: React.FC = () => {
   const [targetDomain, setTargetDomain] = useState('');
   const [targetPath, setTargetPath] = useState('');
   const [queryString, setQueryString] = useState('');
-  const [previewUrl, setPreviewUrl] = useState('');
   const [logs, setLogs] = useState<string[]>([]);
   const [verified, setVerified] = useState<'pending' | 'success' | 'failed'>('pending');
   const [error, setError] = useState('');
@@ -34,7 +33,6 @@ const RedirectAttackPage: React.FC = () => {
   const handleVerify = () => {
     setError('');
     setVerified('pending');
-    setPreviewUrl(attackerTarget);
     if (!attackerTarget.trim()) {
       setError('Please build a target URL for the victim.');
       return;

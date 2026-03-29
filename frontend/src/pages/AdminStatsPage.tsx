@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { FaServer, FaUsers, FaNetworkWired, FaSync } from 'react-icons/fa';
+import { API_BASE_URL } from '../lib/api';
 
 const AdminStatsPage: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
@@ -14,7 +15,7 @@ const AdminStatsPage: React.FC = () => {
     try {
       // --- FIX: USE SESSION STORAGE ---
       const token = sessionStorage.getItem('token');
-      const res = await axios.get('http://localhost:8000/api/stats/admin/dashboard', {
+      const res = await axios.get(`${API_BASE_URL}/api/stats/admin/dashboard`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setStats(res.data);

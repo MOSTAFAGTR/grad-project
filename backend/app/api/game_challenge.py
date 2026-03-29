@@ -12,9 +12,58 @@ from .projects import (
     scan_project_for_vulnerabilities,
 )
 from ..scanner.scorer import calculate_risk
+from .auth import get_current_user, require_role
 
 
 router = APIRouter()
+
+_ADVANCED_HINTS: dict[str, list[dict[str, Any]]] = {
+    "sql-injection": [
+        {"level": 1, "text": "Inspect how user input is included in SQL query construction.", "penalty": 0},
+        {"level": 2, "text": "Look for quote-breaking payloads that alter WHERE conditions.", "penalty": 5},
+        {"level": 3, "text": "Use OR-based tautology to bypass credential checks.", "penalty": 10},
+    ],
+    "xss": [
+        {"level": 1, "text": "Find an HTML sink that renders untrusted input.", "penalty": 0},
+        {"level": 2, "text": "Try a payload that executes in browser context.", "penalty": 5},
+        {"level": 3, "text": "Test event-handler based payload if script tags are filtered.", "penalty": 10},
+    ],
+    "csrf": [
+        {"level": 1, "text": "Look for state-changing endpoints lacking CSRF token validation.", "penalty": 0},
+        {"level": 2, "text": "Use an auto-submitted form from attacker-controlled origin.", "penalty": 5},
+        {"level": 3, "text": "Ensure victim cookies are sent implicitly by browser.", "penalty": 10},
+    ],
+    "command-injection": [
+        {"level": 1, "text": "Find where user input reaches a shell command.", "penalty": 0},
+        {"level": 2, "text": "Try shell separators such as ';' or '&&'.", "penalty": 5},
+        {"level": 3, "text": "Inject a harmless marker command to confirm execution.", "penalty": 10},
+    ],
+    "security-misc": [
+        {"level": 1, "text": "Explore undocumented API paths that may expose config.", "penalty": 0},
+        {"level": 2, "text": "Probe internal/admin endpoints while authenticated.", "penalty": 5},
+        {"level": 3, "text": "Inspect responses for leaked secrets or debug metadata.", "penalty": 10},
+    ],
+    "directory-traversal": [
+        {"level": 1, "text": "Check how file path is composed from user input.", "penalty": 0},
+        {"level": 2, "text": "Try using ../ to escape intended directories.", "penalty": 5},
+        {"level": 3, "text": "Probe sensitive files such as /etc/passwd in vulnerable mode.", "penalty": 10},
+    ],
+    "xxe": [
+        {"level": 1, "text": "Review how XML parser handles external entities.", "penalty": 0},
+        {"level": 2, "text": "Use DOCTYPE with SYSTEM entity declarations.", "penalty": 5},
+        {"level": 3, "text": "Inject an entity that references local file paths.", "penalty": 10},
+    ],
+    "insecure-storage": [
+        {"level": 1, "text": "Inspect whether credentials are stored as plain text.", "penalty": 0},
+        {"level": 2, "text": "Attempt a storage dump and inspect password values.", "penalty": 5},
+        {"level": 3, "text": "Observe why plaintext storage enables credential compromise.", "penalty": 10},
+    ],
+    "broken-auth": [
+        {"level": 1, "text": "Observe how login checks are implemented.", "penalty": 0},
+        {"level": 2, "text": "Try manipulating auth input to alter decision logic.", "penalty": 5},
+        {"level": 3, "text": "Pivot from bypass to privileged response verification.", "penalty": 10},
+    ],
+}
 
 
 class AttackRequest(BaseModel):
@@ -27,6 +76,11 @@ class FixRequest(BaseModel):
     vulnerability_id: int
 
 
+class HintRequest(BaseModel):
+    challenge_id: str
+    time_spent_delta: int = 0
+
+
 def _get_challenge_or_404(challenge_id: int, db: Session) -> models.GameChallenge:
     challenge = db.query(models.GameChallenge).filter(models.GameChallenge.id == challenge_id).first()
     if not challenge:
@@ -34,8 +88,27 @@ def _get_challenge_or_404(challenge_id: int, db: Session) -> models.GameChalleng
     return challenge
 
 
+def _get_or_create_challenge_state(db: Session, user_id: int, challenge_id: str) -> models.ChallengeState:
+    state = (
+        db.query(models.ChallengeState)
+        .filter(models.ChallengeState.user_id == user_id, models.ChallengeState.challenge_id == challenge_id)
+        .first()
+    )
+    if state:
+        return state
+    state = models.ChallengeState(user_id=user_id, challenge_id=challenge_id, current_stage="started")
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    return state
+
+
 @router.post("/start")
-def start_challenge(project_id: str, db: Session = Depends(get_db)):
+def start_challenge(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("instructor", "admin")),
+):
     """
     Initialize a red vs blue challenge for a given project.
 
@@ -91,7 +164,11 @@ def start_challenge(project_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/red/attack")
-def red_team_attack(req: AttackRequest, db: Session = Depends(get_db)):
+def red_team_attack(
+    req: AttackRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("instructor", "admin")),
+):
     challenge = _get_challenge_or_404(req.challenge_id, db)
 
     vuln = (
@@ -127,7 +204,11 @@ def red_team_attack(req: AttackRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/blue/fix")
-def blue_team_fix(req: FixRequest, db: Session = Depends(get_db)):
+def blue_team_fix(
+    req: FixRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("instructor", "admin")),
+):
     challenge = _get_challenge_or_404(req.challenge_id, db)
 
     vuln = (
@@ -187,7 +268,11 @@ def blue_team_fix(req: FixRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/leaderboard")
-def challenge_leaderboard(challenge_id: int, db: Session = Depends(get_db)):
+def challenge_leaderboard(
+    challenge_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     challenge = _get_challenge_or_404(challenge_id, db)
 
     if challenge.red_score > challenge.blue_score:
@@ -206,7 +291,11 @@ def challenge_leaderboard(challenge_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/status")
-def challenge_status(challenge_id: int, db: Session = Depends(get_db)):
+def challenge_status(
+    challenge_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     challenge = _get_challenge_or_404(challenge_id, db)
 
     vulns = (
@@ -233,5 +322,56 @@ def challenge_status(challenge_id: int, db: Session = Depends(get_db)):
         "blue_team_score": challenge.blue_score,
         "score_difference": score_diff,
         "current_risk": risk,
+    }
+
+
+@router.post("/hint")
+def get_next_hint(
+    req: HintRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    hints = _ADVANCED_HINTS.get(req.challenge_id, [])
+    if not hints:
+        return {
+            "challenge_id": req.challenge_id,
+            "hint": None,
+            "level": 0,
+            "penalty": 0,
+            "remaining_levels": 0,
+            "recommendation": "No hints configured for this challenge.",
+            "completed": True,
+        }
+
+    state = _get_or_create_challenge_state(db, current_user.id, req.challenge_id)
+    next_index = min(state.hints_used or 0, len(hints) - 1)
+    hint = hints[next_index]
+
+    state.hints_used = min((state.hints_used or 0) + 1, len(hints))
+    state.attempt_count = (state.attempt_count or 0) + 1
+    if req.time_spent_delta:
+        state.time_spent_seconds = (state.time_spent_seconds or 0) + req.time_spent_delta
+    state.last_updated = datetime.utcnow()
+    db.commit()
+
+    recommendation = (
+        "Try the suggested direction now before requesting another hint."
+        if next_index < len(hints) - 1
+        else "You reached the final hint. Focus on implementing the secure fix."
+    )
+
+    return {
+        "challenge_id": req.challenge_id,
+        "hint": hint["text"],
+        "hint_text": hint["text"],
+        "level": hint["level"],
+        "penalty": hint["penalty"],
+        "remaining_levels": max(0, len(hints) - (state.hints_used or 0)),
+        "recommendation": recommendation,
+        "next_recommendation": recommendation,
+        "completed": state.hints_used >= len(hints),
+        "hints_used": state.hints_used,
+        "attempts": state.attempt_count,
+        "time_spent": state.time_spent_seconds,
     }
 

@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
+import ChallengeHintPanel from '../components/ChallengeHintPanel';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const API_BASE = `${API_URL}/api/challenges`;
@@ -27,7 +28,7 @@ const CommandInjectionAttackPage: React.FC = () => {
       const res = await axios.post<{ output: string; success?: boolean }>(`${API_BASE}/ping`, { host: host.trim() });
       const out = res.data.output || '';
       setOutput(out);
-      const executed = out.includes(SUCCESS_MARKER);
+      const executed = Boolean(res.data.success);
       setVerified(executed ? 'success' : 'failed');
       if (executed) {
         const token = sessionStorage.getItem('token');
@@ -96,6 +97,8 @@ const CommandInjectionAttackPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      <ChallengeHintPanel challengeId="command-injection" />
 
       {verified === 'success' && (
         <div className="bg-green-900/50 border border-green-500 text-green-200 p-4 rounded mb-4">

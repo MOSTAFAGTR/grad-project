@@ -4,6 +4,7 @@ import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import ResultModal from '../components/ResultModal';
 import { Link } from 'react-router-dom';
+import { API_BASE_URL } from '../lib/api';
 
 const VULNERABLE_CODE = `import subprocess
 from flask import Flask, request, jsonify
@@ -51,7 +52,7 @@ const CommandInjectionFixPage: React.FC = () => {
         return;
       }
       const response = await axios.post(
-        'http://localhost:8000/api/challenges/submit-fix-command-injection',
+        `${API_BASE_URL}/api/challenges/submit-fix-command-injection`,
         { code },
         { headers: { Authorization: `Bearer ${token}` } }
       );

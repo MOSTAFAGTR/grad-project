@@ -62,6 +62,30 @@ const typeConfig: Record<
     explanation:
       'The service was deployed with sensitive admin/debug endpoints exposed in production, leaking secrets and internal configuration. Disable debug mode, protect admin interfaces, and never expose configuration or environment data.',
   },
+  'directory-traversal': {
+    title: 'Traversal successful',
+    subtitle: 'You accessed a restricted file using path traversal.',
+    color: 'orange',
+    xp: 130,
+    explanation:
+      "The endpoint joined user input directly to a file path, so '../' escaped the intended directory. Fix by normalizing and validating final paths stay inside the allowed base folder.",
+  },
+  xxe: {
+    title: 'XXE successful',
+    subtitle: 'The XML payload extracted sensitive system data.',
+    color: 'purple',
+    xp: 140,
+    explanation:
+      'The parser accepted external entities, allowing attacker-controlled XML to read local files. Disable DTD/external entities and reject suspicious XML declarations.',
+  },
+  'insecure-storage': {
+    title: 'Storage exposure successful',
+    subtitle: 'You exposed plaintext credentials from storage.',
+    color: 'red',
+    xp: 130,
+    explanation:
+      'Passwords were stored in plaintext and leaked through dump/debug output. Use one-way hashing for credentials and avoid exposing raw secrets.',
+  },
 };
 
 const colorMap: Record<string, string> = {

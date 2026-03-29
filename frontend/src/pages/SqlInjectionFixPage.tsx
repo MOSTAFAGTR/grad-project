@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import ResultModal from '../components/ResultModal';
+import { API_BASE_URL } from '../lib/api';
 
 const VULNERABLE_CODE = `import os
 import mysql.connector
@@ -39,7 +40,12 @@ def login():
 const SqlInjectionFixPage: React.FC = () => {
   const [code, setCode] = useState(VULNERABLE_CODE);
   const [isLoading, setIsLoading] = useState(false);
-  const [modalState, setModalState] = useState({ isOpen: false, isSuccess: false, logs: '' });
+  const [modalState, setModalState] = useState({
+    isOpen: false,
+    isSuccess: false,
+    logs: '',
+    verification: null as null | { before_vulnerabilities?: number; after_vulnerabilities?: number; improvement_score?: number },
+  });
 
   const handleSubmit = async () => {
     setIsLoading(true);
@@ -48,7 +54,7 @@ const SqlInjectionFixPage: React.FC = () => {
       if (!token) { alert("Please login."); setIsLoading(false); return; }
 
       const response = await axios.post(
-        'http://localhost:8000/api/challenges/submit-fix', 
+        `${API_BASE_URL}/api/challenges/submit-fix`,
         { code }, 
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -56,14 +62,20 @@ const SqlInjectionFixPage: React.FC = () => {
       setModalState({
         isOpen: true,
         isSuccess: response.data.success,
-        logs: response.data.logs
+        logs: response.data.logs,
+        verification: {
+          before_vulnerabilities: response.data.before_vulnerabilities,
+          after_vulnerabilities: response.data.after_vulnerabilities,
+          improvement_score: response.data.improvement_score,
+        },
       });
 
     } catch (error: any) {
       setModalState({
         isOpen: true,
         isSuccess: false,
-        logs: error.response?.data?.detail || "System Error: Could not connect to sandbox."
+        logs: error.response?.data?.detail || "System Error: Could not connect to sandbox.",
+        verification: null,
       });
     } finally {
       setIsLoading(false);
@@ -88,6 +100,7 @@ const SqlInjectionFixPage: React.FC = () => {
         isOpen={modalState.isOpen} 
         isSuccess={modalState.isSuccess} 
         logs={modalState.logs} 
+        verification={modalState.verification}
         onClose={() => setModalState({ ...modalState, isOpen: false })} 
       />
     </div>

@@ -21,6 +21,11 @@ const successTypeMap: Record<number, string> = {
   2: 'xss',
   3: 'csrf',
   4: 'command-injection',
+  5: 'broken-auth',
+  6: 'security-misc',
+  7: 'insecure-storage',
+  8: 'directory-traversal',
+  9: 'xxe',
   10: 'redirect',
 };
 
@@ -54,7 +59,7 @@ const challenges = [
        color: 'orange',
         buttons: [{ text: 'Simulate', url: '/challenges/3/attack' },
            { text: 'Fix', url: '/challenges/3/fix' },
-            { text: 'Tutorial', url: '/under-construction' }] 
+            { text: 'Tutorial', url: '/challenges/3/tutorial' }] 
           },
   {
     id: 4,
@@ -85,9 +90,9 @@ const challenges = [
            { text: 'Fix', url: '/challenges/6/fix' },
             { text: 'Tutorial', url: '/under-construction' }]
            },
-  { id: 7, title: 'Insecure Storage', icon: <FaLock />, color: 'yellow', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
-  { id: 8, title: 'Directory Traversal', icon: <FaFolderOpen />, color: 'blue', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
-  { id: 9, title: 'XML External Entity (XXE)', icon: <FaFileCode />, color: 'indigo', buttons: [{ text: 'Simulate', url: '/under-construction' }, { text: 'Fix', url: '/under-construction' }, { text: 'Tutorial', url: '/under-construction' }] },
+  { id: 7, title: 'Insecure Storage', icon: <FaLock />, color: 'yellow', buttons: [{ text: 'Simulate', url: '/challenges/7/attack' }, { text: 'Fix', url: '/challenges/7/fix' }, { text: 'Tutorial', url: '/challenges/7/tutorial' }] },
+  { id: 8, title: 'Directory Traversal', icon: <FaFolderOpen />, color: 'blue', buttons: [{ text: 'Simulate', url: '/challenges/8/attack' }, { text: 'Fix', url: '/challenges/8/fix' }, { text: 'Tutorial', url: '/challenges/8/tutorial' }] },
+  { id: 9, title: 'XML External Entity (XXE)', icon: <FaFileCode />, color: 'indigo', buttons: [{ text: 'Simulate', url: '/challenges/9/attack' }, { text: 'Fix', url: '/challenges/9/fix' }, { text: 'Tutorial', url: '/challenges/9/tutorial' }] },
   {
     id: 10,
     title: 'Unvalidated Redirect',
@@ -107,6 +112,11 @@ const idToChallengeId: Record<number, string> = {
   2: 'xss',
   3: 'csrf',
   4: 'command-injection',
+  5: 'broken-auth',
+  6: 'security-misc',
+  7: 'insecure-storage',
+  8: 'directory-traversal',
+  9: 'xxe',
   10: 'redirect',
 };
 
@@ -174,7 +184,7 @@ const ChallengesListPage: React.FC = () => {
       <style>
         {`
           .card-container:hover {
-            transform: translateY(--5px) scale(1.02);
+            transform: translateY(-5px) scale(1.02);
             box-shadow: 0 10px 20px -5px var(--shadow-color);
           }
           .icon-container {

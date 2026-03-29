@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { FaShieldAlt, FaBug, FaTrophy, FaArrowRight, FaClipboardList } from 'react-icons/fa';
+import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer } from 'recharts';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -18,11 +19,30 @@ interface QuizAttempt {
   completed_at: string;
 }
 
+interface LearningProgress {
+  vulnerabilities_solved: number;
+  total_challenges?: number;
+  failed_attempts: number;
+  accuracy: number;
+  avg_time: number;
+  strongest_category: string;
+  weakest_category: string;
+  level: string;
+  streak_days: number;
+  learning_speed: number;
+  retention_score: number;
+  skills?: Record<string, number>;
+  skills_radar?: Array<{ subject: string; value: number }>;
+  recommendations: string[];
+}
+
+const TOTAL_CHALLENGES = 10;
+
 const DashboardHomePage: React.FC = () => {
-  const [progress, setProgress] = useState(0);
   const [userEmail, setUserEmail] = useState('');
   const [progressCount, setProgressCount] = useState(0);
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([]);
+  const [learning, setLearning] = useState<LearningProgress | null>(null);
 
   useEffect(() => {
     const email = sessionStorage.getItem('user_email') || sessionStorage.getItem('role') || 'Student';
@@ -32,17 +52,22 @@ const DashboardHomePage: React.FC = () => {
       axios.get(`${API_URL}/api/challenges/progress`, { headers: { Authorization: `Bearer ${token}` } })
         .then((res) => {
           const items = res.data as ProgressItem[];
-          setProgressCount(items.length);
-          setProgress(Math.min(100, Math.round((items.length / 10) * 100)));
+          setProgressCount(new Set(items.map((item) => item.challenge_id)).size);
         })
         .catch(() => {});
       axios.get(`${API_URL}/api/quizzes/attempts`, { headers: { Authorization: `Bearer ${token}` } })
         .then((res) => setQuizAttempts(res.data as QuizAttempt[]))
         .catch(() => {});
-    } else {
-      setTimeout(() => setProgress(35), 500);
+      axios.get(`${API_URL}/api/stats/progress/me`, { headers: { Authorization: `Bearer ${token}` } })
+        .then((res) => setLearning(res.data as LearningProgress))
+        .catch(() => {});
     }
   }, []);
+
+  const totalLabs = learning?.total_challenges ?? TOTAL_CHALLENGES;
+  const solvedLabs = learning?.vulnerabilities_solved ?? progressCount;
+  const progressPercent = Math.min(100, Math.round((solvedLabs / totalLabs) * 100));
+  const activeRemaining = Math.max(0, totalLabs - solvedLabs);
 
   const latestQuiz = quizAttempts[0];
   const avgScorePercent = quizAttempts.length > 0
@@ -51,6 +76,7 @@ const DashboardHomePage: React.FC = () => {
         quizAttempts.length
       )
     : 0;
+  const currentXp = solvedLabs * 100 + (quizAttempts.length ? avgScorePercent : 0);
   const avgTimeSeconds = quizAttempts.length > 0
     ? Math.round(quizAttempts.reduce((s, a) => s + a.time_seconds, 0) / quizAttempts.length)
     : 0;
@@ -67,7 +93,9 @@ const DashboardHomePage: React.FC = () => {
             Welcome back, {userEmail}
           </h1>
           <p className="text-xl text-gray-300">
-            Your secure coding journey continues. You have <span className="text-yellow-400 font-bold">2 active challenges</span> waiting.
+            Your secure coding journey continues. You have{' '}
+            <span className="text-yellow-400 font-bold">{activeRemaining} challenge{activeRemaining === 1 ? '' : 's'}</span> left
+            in the core lab set ({totalLabs} total).
           </p>
         </div>
 
@@ -78,7 +106,7 @@ const DashboardHomePage: React.FC = () => {
               <div className="p-3 bg-blue-900/50 rounded-lg text-blue-400"><FaShieldAlt size={24} /></div>
               <h3 className="text-xl font-bold">Defense Level</h3>
             </div>
-            <p className="text-3xl font-bold">{progressCount < 2 ? 'Novice' : progressCount < 5 ? 'Apprentice' : progressCount < 10 ? 'Expert' : 'Master'}</p>
+            <p className="text-3xl font-bold">{learning?.level || 'Beginner'}</p>
             <p className="text-sm text-gray-400 mt-1">Keep fixing to rank up</p>
           </div>
 
@@ -90,7 +118,7 @@ const DashboardHomePage: React.FC = () => {
               <div className="p-3 bg-purple-900/50 rounded-lg text-purple-400"><FaBug size={24} /></div>
               <h3 className="text-xl font-bold">Vulnerabilities</h3>
             </div>
-            <p className="text-3xl font-bold">{progressCount}/20</p>
+            <p className="text-3xl font-bold">{solvedLabs}/{totalLabs}</p>
             <p className="text-sm text-gray-400 mt-1">Patched successfully · Click to view Labs &amp; Attacks</p>
           </Link>
 
@@ -99,7 +127,7 @@ const DashboardHomePage: React.FC = () => {
               <div className="p-3 bg-yellow-900/50 rounded-lg text-yellow-400"><FaTrophy size={24} /></div>
               <h3 className="text-xl font-bold">Current Score</h3>
             </div>
-            <p className="text-3xl font-bold">{progressCount * 100 + (quizAttempts.length ? Math.round(quizAttempts.reduce((s, a) => s + (a.score / a.total) * 100, 0) / quizAttempts.length) : 0)} XP</p>
+            <p className="text-3xl font-bold">{currentXp} XP</p>
             <p className="text-sm text-gray-400 mt-1">Challenges + quiz scores</p>
           </div>
 
@@ -161,17 +189,22 @@ const DashboardHomePage: React.FC = () => {
                 </div>
                 <div className="text-right">
                   <span className="text-xs font-semibold inline-block text-blue-600">
-                    {progress}%
+                    {progressPercent}%
                   </span>
                 </div>
               </div>
               <div className="overflow-hidden h-4 mb-4 text-xs flex rounded bg-blue-200/20">
-                <div style={{ width: `${progress}%` }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500 transition-all duration-1000 ease-out"></div>
+                <div style={{ width: `${progressPercent}%` }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500 transition-all duration-1000 ease-out"></div>
               </div>
             </div>
-            <p className="text-gray-400 text-sm mt-4">
-              You are mastering the OWASP Top 10. Complete the XSS module to unlock "Broken Access Control".
-            </p>
+            <p className="text-gray-400 text-sm mt-4">Weakest area: <span className="text-amber-300">{learning?.weakest_category || 'N/A'}</span></p>
+            <p className="text-gray-400 text-sm mt-1">Strongest area: <span className="text-green-300">{learning?.strongest_category || 'N/A'}</span></p>
+            <p className="text-gray-400 text-sm mt-1">Accuracy: <span className="text-blue-300">{learning?.accuracy ?? 0}%</span> · Avg quiz time: <span className="text-blue-300">{Math.round(learning?.avg_time || 0)}s</span></p>
+            {learning?.recommendations?.[0] && (
+              <p className="text-gray-300 text-sm mt-3 bg-gray-800 p-2 rounded border border-gray-700">
+                Recommendation: {learning.recommendations[0]}
+              </p>
+            )}
           </div>
 
           {/* Recent Quiz Attempts - same template as stat cards */}
@@ -193,6 +226,23 @@ const DashboardHomePage: React.FC = () => {
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="lg:col-span-2 bg-gray-800/50 p-8 rounded-xl border border-gray-700">
+            <h2 className="text-2xl font-bold mb-4">Skill Radar</h2>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart data={learning?.skills_radar || []}>
+                  <PolarGrid />
+                  <PolarAngleAxis dataKey="subject" />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} />
+                  <Radar name="Skills" dataKey="value" stroke="#60a5fa" fill="#60a5fa" fillOpacity={0.4} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="text-gray-300 text-sm mt-3">
+              Streak: <span className="text-green-300">{learning?.streak_days ?? 0} days</span> · Learning speed: <span className="text-cyan-300">{learning?.learning_speed ?? 0}</span> · Retention: <span className="text-blue-300">{learning?.retention_score ?? 0}</span>
+            </p>
           </div>
 
         </div>

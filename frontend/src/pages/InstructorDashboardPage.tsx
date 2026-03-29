@@ -4,6 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
 import { FaUserGraduate, FaChalkboardTeacher, FaClipboardCheck, FaSearch, FaTimes, FaChartPie } from 'react-icons/fa';
+import { API_BASE_URL } from '../lib/api';
 
 const InstructorDashboardPage: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
@@ -11,10 +12,37 @@ const InstructorDashboardPage: React.FC = () => {
   const [stats, setStats] = useState<any>(null); // State for Real Stats
 
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
+  const [studentAnalytics, setStudentAnalytics] = useState<any | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (!selectedStudent) {
+      setStudentAnalytics(null);
+      return;
+    }
+    const load = async () => {
+      setAnalyticsLoading(true);
+      try {
+        const token = sessionStorage.getItem('token');
+        const res = await axios.get(
+          `${API_BASE_URL}/api/instructor/user/${selectedStudent.id}/analytics`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        setStudentAnalytics(res.data);
+      } catch {
+        setStudentAnalytics(null);
+      } finally {
+        setAnalyticsLoading(false);
+      }
+    };
+    load();
+  }, [selectedStudent]);
 
   const fetchData = async () => {
     try {
@@ -22,11 +50,11 @@ const InstructorDashboardPage: React.FC = () => {
       const headers = { Authorization: `Bearer ${token}` };
 
       // 1. Fetch Students List
-      const resUsers = await axios.get('http://localhost:8000/api/auth/users', { headers });
+      const resUsers = await axios.get(`${API_BASE_URL}/api/auth/users`, { headers });
       setUsers(resUsers.data.filter((u: any) => u.role === 'user'));
 
       // 2. Fetch Instructor Stats (Real Data)
-      const resStats = await axios.get('http://localhost:8000/api/stats/instructor/dashboard', { headers });
+      const resStats = await axios.get(`${API_BASE_URL}/api/stats/instructor/dashboard`, { headers });
       setStats(resStats.data);
 
     } catch (err) { console.error(err); }
@@ -34,6 +62,39 @@ const InstructorDashboardPage: React.FC = () => {
 
   const filteredStudents = users.filter(u => u.email.toLowerCase().includes(searchTerm.toLowerCase()));
   const handleViewAnalytics = (student: any) => setSelectedStudent(student);
+
+  const refreshStudentAnalytics = async () => {
+    if (!selectedStudent) return;
+    const token = sessionStorage.getItem('token');
+    const res = await axios.get(
+      `${API_BASE_URL}/api/instructor/user/${selectedStudent.id}/analytics`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    setStudentAnalytics(res.data);
+  };
+
+  const confirmResetProgress = async () => {
+    if (!selectedStudent) return;
+    setResetting(true);
+    try {
+      const token = sessionStorage.getItem('token');
+      await axios.post(
+        `${API_BASE_URL}/api/instructor/user/${selectedStudent.id}/reset-progress`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      setShowResetConfirm(false);
+      await refreshStudentAnalytics();
+    } catch {
+      alert('Reset failed');
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const totalCh = studentAnalytics?.total_challenges ?? 10;
+  const solvedCh = studentAnalytics?.vulnerabilities_solved ?? 0;
+  const studentProgressPct = Math.min(100, Math.round((solvedCh / totalCh) * 100));
 
   // Fallback if stats aren't loaded yet
   if (!stats) return <div className="p-10 text-white">Loading dashboard...</div>;
@@ -173,68 +234,120 @@ const InstructorDashboardPage: React.FC = () => {
                   <p className="text-gray-400">{selectedStudent.email} (ID: {selectedStudent.id})</p>
                 </div>
               </div>
-              <button onClick={() => setSelectedStudent(null)} className="text-gray-400 hover:text-white hover:bg-gray-700 p-2 rounded-full transition">
+              <button
+                onClick={() => {
+                  setShowResetConfirm(false);
+                  setSelectedStudent(null);
+                }}
+                className="text-gray-400 hover:text-white hover:bg-gray-700 p-2 rounded-full transition"
+              >
                 <FaTimes size={24} />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="p-8 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="p-8 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-8 relative">
 
-              {/* Left Column: Stats */}
+              {analyticsLoading && (
+                <div className="absolute inset-0 bg-gray-900/60 flex items-center justify-center z-10 text-white font-bold">
+                  Loading analytics…
+                </div>
+              )}
+
               <div className="space-y-6">
                 <div className="bg-gray-700/50 p-4 rounded-lg border border-gray-600">
-                  <h3 className="text-gray-300 font-bold mb-2">Performance Summary</h3>
+                  <h3 className="text-gray-300 font-bold mb-2">Lab progress</h3>
                   <div className="grid grid-cols-2 gap-4 text-center">
                     <div className="p-3 bg-gray-800 rounded">
-                      <p className="text-xs text-gray-400">Class Rank</p>
-                      <p className="text-2xl font-bold text-yellow-400">Top 10%</p>
+                      <p className="text-xs text-gray-400">Challenges solved</p>
+                      <p className="text-2xl font-bold text-green-400">{solvedCh}/{totalCh}</p>
                     </div>
                     <div className="p-3 bg-gray-800 rounded">
-                      <p className="text-xs text-gray-400">Avg Completion</p>
-                      <p className="text-2xl font-bold text-green-400">{stats.avg_completion_rate}%</p>
+                      <p className="text-xs text-gray-400">Level</p>
+                      <p className="text-2xl font-bold text-yellow-400">{studentAnalytics?.level ?? '—'}</p>
                     </div>
                   </div>
+                  <p className="text-xs text-gray-500 mt-2">Class avg completion: {stats.avg_completion_rate}%</p>
+                  <div className="mt-3 h-2 rounded bg-gray-900 overflow-hidden">
+                    <div className="h-full bg-blue-500 transition-all" style={{ width: `${studentProgressPct}%` }} />
+                  </div>
+                  <p className="text-right text-xs text-gray-400 mt-1">{studentProgressPct}%</p>
                 </div>
 
                 <div className="bg-gray-700/50 p-4 rounded-lg border border-gray-600">
                   <h3 className="text-gray-300 font-bold mb-3 flex items-center gap-2">
-                    <FaChartPie /> Skill Breakdown (Estimate)
+                    <FaChartPie /> Skill radar (same as student dashboard)
                   </h3>
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={[
-                        { subject: 'SQLi', A: 120, fullMark: 150 },
-                        { subject: 'XSS', A: 98, fullMark: 150 },
-                        { subject: 'Auth', A: 86, fullMark: 150 },
-                        { subject: 'Config', A: 99, fullMark: 150 },
-                      ]}>
+                      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={studentAnalytics?.skills_radar || []}>
                         <PolarGrid />
                         <PolarAngleAxis dataKey="subject" stroke="#ccc" />
-                        <PolarRadiusAxis />
-                        <Radar name="Student" dataKey="A" stroke="#8884d8" fill="#8884d8" fillOpacity={0.6} />
+                        <PolarRadiusAxis domain={[0, 100]} />
+                        <Radar name="Skills" dataKey="value" stroke="#8884d8" fill="#8884d8" fillOpacity={0.6} />
                       </RadarChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
               </div>
 
-              {/* Right Column: Info */}
               <div className="space-y-4">
                 <div className="bg-blue-900/20 p-4 rounded border border-blue-800">
-                  <h4 className="text-blue-400 font-bold mb-2">Status</h4>
-                  <p className="text-sm">This student has been active recently. Their progress aligns with the class average.</p>
+                  <h4 className="text-blue-400 font-bold mb-2">Strongest / weakest</h4>
+                  <p className="text-sm">
+                    Strongest: <span className="text-green-300">{studentAnalytics?.strongest_category ?? '—'}</span>
+                    <br />
+                    Weakest: <span className="text-amber-300">{studentAnalytics?.weakest_category ?? '—'}</span>
+                  </p>
+                  {studentAnalytics?.recommendations?.[0] && (
+                    <p className="text-sm text-gray-300 mt-2">{studentAnalytics.recommendations[0]}</p>
+                  )}
                 </div>
 
                 <div className="mt-6 pt-6 border-t border-gray-700">
                   <h4 className="text-sm font-bold text-gray-400 mb-2">Instructor Actions</h4>
-                  <div className="flex gap-2">
-                    <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-bold">Message Student</button>
-                    <button className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm font-bold">Reset Progress</button>
+                  <div className="flex gap-2 flex-wrap">
+                    <button type="button" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-bold">Message Student</button>
+                    <button
+                      type="button"
+                      onClick={() => setShowResetConfirm(true)}
+                      className="bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded text-sm font-bold"
+                    >
+                      Reset Progress
+                    </button>
                   </div>
                 </div>
               </div>
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showResetConfirm && selectedStudent && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 max-w-md w-full shadow-xl">
+            <h3 className="text-xl font-bold text-white mb-2">Reset student progress?</h3>
+            <p className="text-gray-300 text-sm mb-4">
+              This clears lab progress, quiz attempts, answers, and learning stats for {selectedStudent.email}. This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(false)}
+                className="px-4 py-2 rounded bg-gray-700 text-white hover:bg-gray-600"
+                disabled={resetting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmResetProgress}
+                className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-500 disabled:opacity-50"
+                disabled={resetting}
+              >
+                {resetting ? 'Resetting…' : 'Confirm reset'}
+              </button>
             </div>
           </div>
         </div>
