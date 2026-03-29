@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { FaShieldAlt, FaBug, FaTrophy, FaArrowRight, FaClipboardList } from 'react-icons/fa';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer } from 'recharts';
+import { api } from '../lib/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -43,6 +44,8 @@ const DashboardHomePage: React.FC = () => {
   const [progressCount, setProgressCount] = useState(0);
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([]);
   const [learning, setLearning] = useState<LearningProgress | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [reportError, setReportError] = useState('');
 
   useEffect(() => {
     const email = sessionStorage.getItem('user_email') || sessionStorage.getItem('role') || 'Student';
@@ -81,6 +84,28 @@ const DashboardHomePage: React.FC = () => {
     ? Math.round(quizAttempts.reduce((s, a) => s + a.time_seconds, 0) / quizAttempts.length)
     : 0;
   const formatTime = (s: number) => (s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`);
+
+  const handleDownloadReport = async () => {
+    setIsGeneratingReport(true);
+    setReportError('');
+    try {
+      const response = await api.get('/api/report/pdf', { responseType: 'blob' });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = href;
+      anchor.download = 'pentest_report.pdf';
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(href);
+    } catch {
+      setReportError('No scan found. Please scan a project before generating a report.');
+      window.setTimeout(() => setReportError(''), 4000);
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
 
   return (
     <div className="relative min-h-screen text-white bg-gray-900 p-8">
@@ -205,6 +230,21 @@ const DashboardHomePage: React.FC = () => {
                 Recommendation: {learning.recommendations[0]}
               </p>
             )}
+          </div>
+
+          <div className="lg:col-span-2 bg-gray-800/50 p-6 rounded-xl border border-gray-700">
+            <h2 className="text-xl font-bold mb-3">Penetration Test Report</h2>
+            <p className="text-gray-400 text-sm mb-4">
+              Export your latest scan and remediation progress as a professional PDF report.
+            </p>
+            <button
+              onClick={handleDownloadReport}
+              disabled={isGeneratingReport}
+              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-3 rounded font-bold transition"
+            >
+              {isGeneratingReport ? 'Generating...' : 'Download Pentest Report'}
+            </button>
+            {reportError && <p className="text-red-400 text-sm mt-3">{reportError}</p>}
           </div>
 
           {/* Recent Quiz Attempts - same template as stat cards */}

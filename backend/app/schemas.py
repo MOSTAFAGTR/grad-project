@@ -43,6 +43,25 @@ class CodeSubmission(BaseModel):
     code: str
 
 
+class DiffLine(BaseModel):
+    type: str
+    line_number_original: Optional[int]
+    line_number_fixed: Optional[int]
+    content: str
+    annotation: Optional[str]
+
+
+class FixSubmissionResponse(BaseModel):
+    success: bool
+    logs: str
+    fixed: Optional[bool] = None
+    improvement_score: Optional[int] = None
+    before_vulnerabilities: Optional[int] = None
+    after_vulnerabilities: Optional[int] = None
+    test_output: Optional[str] = None
+    code_diff: List[DiffLine] = []
+
+
 class PingRequest(BaseModel):
     """Request body for command-injection vulnerable ping endpoint."""
     host: str

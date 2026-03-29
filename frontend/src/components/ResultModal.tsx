@@ -1,5 +1,14 @@
 import React from 'react';
 import { FaCheckCircle, FaTimesCircle, FaChevronDown, FaBug } from 'react-icons/fa';
+import CodeDiffViewer from './CodeDiffViewer';
+
+type DiffLine = {
+  type: 'added' | 'removed' | 'context';
+  line_number_original: number | null;
+  line_number_fixed: number | null;
+  content: string;
+  annotation: string | null;
+};
 
 interface ResultModalProps {
   isOpen: boolean;
@@ -10,15 +19,16 @@ interface ResultModalProps {
     after_vulnerabilities?: number;
     improvement_score?: number;
   } | null;
+  codeDiff?: DiffLine[];
   onClose: () => void;
 }
 
-const ResultModal: React.FC<ResultModalProps> = ({ isOpen, isSuccess, logs, verification, onClose }) => {
+const ResultModal: React.FC<ResultModalProps> = ({ isOpen, isSuccess, logs, verification, codeDiff = [], onClose }) => {
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm transition-opacity duration-300">
-      <div className={`bg-gray-800 rounded-xl shadow-2xl p-8 max-w-lg w-full mx-4 border-2 transform transition-all duration-300 scale-100 ${isSuccess ? 'border-green-500' : 'border-red-500'}`}>
+      <div className={`bg-gray-800 rounded-xl shadow-2xl p-8 max-w-5xl w-full mx-4 border-2 transform transition-all duration-300 scale-100 ${isSuccess ? 'border-green-500' : 'border-red-500'}`}>
         
         {/* 1. Animated Icon & One-Line Status */}
         <div className="flex flex-col items-center mb-6">
@@ -38,6 +48,12 @@ const ResultModal: React.FC<ResultModalProps> = ({ isOpen, isSuccess, logs, veri
               : "Your solution did not fix the vulnerability."}
           </p>
         </div>
+
+        {isSuccess && codeDiff.length > 0 && (
+          <div className="mb-6 bg-white rounded-lg p-3">
+            <CodeDiffViewer diff={codeDiff} />
+          </div>
+        )}
 
         {/* 2. Dropdown for Logs */}
         {verification && (

@@ -1,5 +1,5 @@
 import React, { useState, ChangeEvent, useEffect } from 'react';
-import { API_BASE_URL } from '../lib/api';
+import { api } from '../lib/api';
 import { useNavigate } from 'react-router-dom';
 import { useScanContext } from '../context/ScanContext';
 import { DEFAULT_PAYLOADS, getDefaultPayload } from '../utils/payloads';
@@ -64,27 +64,16 @@ const Scanner: React.FC = () => {
   }, [scanData]);
 
   useEffect(() => {
-    const token = sessionStorage.getItem('token') || '';
-    if (!projectId || scanResults || !token) return;
+    if (!projectId || scanResults) return;
     const controller = new AbortController();
-    fetch(`${API_BASE_URL}/api/project/${encodeURIComponent(projectId)}`, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${token}` },
-      signal: controller.signal,
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || 'Project no longer exists');
-        }
-        return res.json();
-      })
+    api
+      .get(`/api/project/${encodeURIComponent(projectId)}`, { signal: controller.signal })
       .then(() => {
         setMessage('Restored project context. Click "Scan Project" to fetch latest findings.');
       })
       .catch((err: any) => {
         if (err?.name === 'AbortError') return;
-        setMessage(err.message || 'Unable to restore project context.');
+        setMessage(err?.response?.data?.detail || err.message || 'Unable to restore project context.');
       });
     return () => controller.abort();
   }, [projectId, scanResults]);
@@ -124,20 +113,10 @@ const Scanner: React.FC = () => {
       const formData = new FormData();
       formData.append('file', selectedFile);
 
-      const response = await fetch(`${API_BASE_URL}/api/project/upload`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${sessionStorage.getItem('token') || ''}`,
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.detail || 'Upload failed');
-      }
-
-      const data = await response.json();
+      // Use shared api instance so Authorization is attached consistently.
+      // Do not set multipart Content-Type manually; axios injects boundary automatically.
+      const response = await api.post('/api/project/upload', formData);
+      const data = response.data;
       const resolvedProjectId =
         data.project_id ||
         data.projectId ||
@@ -148,27 +127,19 @@ const Scanner: React.FC = () => {
       setProjectOverview(null);
 
       if (resolvedProjectId) {
-        const analysisResponse = await fetch(
-          `${API_BASE_URL}/api/project/analyze-structure?project_id=${encodeURIComponent(resolvedProjectId)}`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${sessionStorage.getItem('token') || ''}`,
-            },
-          },
+        const analysisResponse = await api.post(
+          `/api/project/analyze-structure?project_id=${encodeURIComponent(resolvedProjectId)}`,
         );
-        if (analysisResponse.ok) {
-          const analysisData: ProjectOverview = await analysisResponse.json();
-          setProjectOverview(analysisData);
-          setScanData({
-            projectId: resolvedProjectId,
-            results: null,
-            overview: analysisData,
-            summary: null,
-            findings: [],
-            debug: null,
-          });
-        }
+        const analysisData: ProjectOverview = analysisResponse.data;
+        setProjectOverview(analysisData);
+        setScanData({
+          projectId: resolvedProjectId,
+          results: null,
+          overview: analysisData,
+          summary: null,
+          findings: [],
+          debug: null,
+        });
       }
 
       setMessage('Upload successful!');
@@ -188,20 +159,8 @@ const Scanner: React.FC = () => {
       setScanResults(null);
       setSelectedFinding(null);
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/project/scan?project_id=${encodeURIComponent(projectId)}`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${sessionStorage.getItem('token') || ''}`,
-          },
-        },
-      );
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.detail || 'Scan failed');
-      }
-      const data = await response.json();
+      const response = await api.post(`/api/project/scan?project_id=${encodeURIComponent(projectId)}`);
+      const data = response.data;
       setScanResults(data);
       setScanData({
         projectId,
@@ -268,26 +227,15 @@ const Scanner: React.FC = () => {
 
     setMentorLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/ai/analyze-code`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionStorage.getItem('token') || ''}`,
-        },
-        body: JSON.stringify({
+      const response = await api.post('/api/ai/analyze-code', {
           code,
           language: finding.language || 'unknown',
           vulnerability_type: getFindingType(finding),
           severity: finding.severity || 'Medium',
           file: finding.file,
           line: finding.line || 0,
-        }),
       });
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.detail || 'AI mentor request failed');
-      }
-      const data: MentorResponse = await response.json();
+      const data: MentorResponse = response.data;
       setMentorData(data);
       setMentorCache((prev) => ({ ...prev, [key]: data }));
     } catch (err: any) {

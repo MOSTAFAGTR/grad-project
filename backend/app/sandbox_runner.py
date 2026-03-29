@@ -6,6 +6,7 @@ import uuid
 import os
 import traceback
 import re
+import difflib
 from requests.exceptions import ReadTimeout
 
 ALLOWED_CHALLENGE_DIRS = {
@@ -22,6 +23,230 @@ ALLOWED_CHALLENGE_DIRS = {
 }
 MAX_SUBMITTED_CODE_CHARS = int(os.getenv("SANDBOX_MAX_CODE_CHARS", "200000"))
 SANDBOX_RUN_TIMEOUT = int(os.getenv("SANDBOX_RUN_TIMEOUT", "25"))
+
+DIFF_ANNOTATIONS: dict[str, list[dict[str, str]]] = {
+    "sql-injection": [
+        {
+            "pattern": 'f"',
+            "removed_annotation": (
+                "F-string interpolation inserts user input directly into the SQL query. "
+                "An attacker controls this string and can inject any SQL they want."
+            ),
+            "added_annotation": (
+                "Parameterized query - the DB driver sends the value separately from the SQL structure. "
+                "The database never interprets user input as SQL syntax."
+            ),
+        },
+        {
+            "pattern": "f'",
+            "removed_annotation": (
+                "F-string interpolation inserts user input directly into the SQL query. "
+                "An attacker controls this string and can inject any SQL they want."
+            ),
+            "added_annotation": (
+                "Parameterized query - the DB driver sends the value separately from the SQL structure. "
+                "The database never interprets user input as SQL syntax."
+            ),
+        },
+        {
+            "pattern": "execute(",
+            "removed_annotation": (
+                "Executing a query built from raw string concatenation. "
+                "The database cannot distinguish between your SQL and the attacker's injected SQL."
+            ),
+            "added_annotation": (
+                "Passing parameters as a tuple forces the DB driver to escape and quote all values automatically."
+            ),
+        },
+    ],
+    "xss": [
+        {
+            "pattern": "innerHTML",
+            "removed_annotation": (
+                "Setting innerHTML with unsanitized user input allows any HTML or script tag the user submits "
+                "to execute in the victim's browser."
+            ),
+            "added_annotation": (
+                "textContent sets the value as plain text. "
+                "The browser never parses it as HTML so scripts cannot run."
+            ),
+        },
+        {
+            "pattern": "render_template_string",
+            "removed_annotation": (
+                "render_template_string with user-controlled input enables Server-Side Template Injection. "
+                "Attackers can execute arbitrary Python."
+            ),
+            "added_annotation": (
+                "Escaping input before rendering ensures any HTML special characters are neutralized "
+                "before the browser sees them."
+            ),
+        },
+    ],
+    "command-injection": [
+        {
+            "pattern": "shell=True",
+            "removed_annotation": (
+                "shell=True passes the full command string to /bin/sh. "
+                "If user input is in the string, the attacker can append their own shell commands using ; or &&."
+            ),
+            "added_annotation": (
+                "shell=False with a list of arguments prevents the shell from ever parsing the input. "
+                "Each argument is passed directly to the process."
+            ),
+        },
+        {
+            "pattern": "os.system",
+            "removed_annotation": (
+                "os.system passes the string to the shell interpreter directly. "
+                "User input in this string is a direct command injection vulnerability."
+            ),
+            "added_annotation": (
+                "subprocess.run with a list and shell=False never invokes a shell - user input cannot "
+                "be interpreted as a command."
+            ),
+        },
+    ],
+    "csrf": [
+        {
+            "pattern": "csrf_token",
+            "removed_annotation": (
+                "No CSRF token means any website can silently trigger this action on behalf of a "
+                "logged-in user by submitting a hidden form."
+            ),
+            "added_annotation": (
+                "Validating a per-session CSRF token ensures only requests originating from your own "
+                "page are accepted."
+            ),
+        }
+    ],
+    "broken-auth": [
+        {
+            "pattern": "password",
+            "removed_annotation": (
+                "Comparing or storing plaintext passwords means a DB breach exposes every user's real "
+                "password immediately."
+            ),
+            "added_annotation": (
+                "Hashing with bcrypt stores an irreversible digest. "
+                "Even with DB access, attackers cannot recover the original password."
+            ),
+        }
+    ],
+    "directory-traversal": [
+        {
+            "pattern": "../",
+            "removed_annotation": (
+                "Allowing ../ in file paths lets attackers walk up the directory tree and read any file "
+                "the server process has permission to access."
+            ),
+            "added_annotation": (
+                "Resolving to an absolute path and checking it starts with the allowed base directory "
+                "prevents any escape from the intended folder."
+            ),
+        }
+    ],
+    "xxe": [
+        {
+            "pattern": "resolve_entities",
+            "removed_annotation": (
+                "resolve_entities=True allows the XML parser to fetch external resources defined in the "
+                "DOCTYPE, enabling file disclosure and SSRF."
+            ),
+            "added_annotation": (
+                "Disabling entity resolution makes the parser ignore DOCTYPE declarations entirely - "
+                "external entities are never fetched."
+            ),
+        }
+    ],
+}
+
+
+def _is_security_relevant_line(content: str) -> bool:
+    stripped = (content or "").strip()
+    if not stripped:
+        return False
+    if stripped.startswith("#") or stripped.startswith("//") or stripped.startswith("/*") or stripped.startswith("*"):
+        return False
+    if stripped.startswith("import ") or stripped.startswith("from "):
+        return False
+    return True
+
+
+def _annotation_for_line(challenge_slug: str, line_type: str, content: str):
+    if line_type not in {"added", "removed"} or not _is_security_relevant_line(content):
+        return None
+    rules = DIFF_ANNOTATIONS.get(challenge_slug, [])
+    for rule in rules:
+        if rule.get("pattern", "") in content:
+            if line_type == "removed":
+                return rule.get("removed_annotation")
+            return rule.get("added_annotation")
+    return None
+
+
+def generate_code_diff(original_code: str, fixed_code: str, challenge_slug: str) -> list[dict]:
+    diff_output = difflib.unified_diff(
+        (original_code or "").splitlines(),
+        (fixed_code or "").splitlines(),
+        fromfile="original",
+        tofile="fixed",
+        lineterm="",
+    )
+    lines: list[dict] = []
+    original_line = 0
+    fixed_line = 0
+    hunk_re = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+
+    for raw in diff_output:
+        if raw.startswith("---") or raw.startswith("+++"):
+            continue
+        if raw.startswith("@@"):
+            match = hunk_re.match(raw)
+            if match:
+                original_line = int(match.group(1))
+                fixed_line = int(match.group(2))
+            continue
+        if raw.startswith("-"):
+            content = raw[1:]
+            lines.append(
+                {
+                    "type": "removed",
+                    "line_number_original": original_line,
+                    "line_number_fixed": None,
+                    "content": content,
+                    "annotation": _annotation_for_line(challenge_slug, "removed", content),
+                }
+            )
+            original_line += 1
+            continue
+        if raw.startswith("+"):
+            content = raw[1:]
+            lines.append(
+                {
+                    "type": "added",
+                    "line_number_original": None,
+                    "line_number_fixed": fixed_line,
+                    "content": content,
+                    "annotation": _annotation_for_line(challenge_slug, "added", content),
+                }
+            )
+            fixed_line += 1
+            continue
+        if raw.startswith(" "):
+            content = raw[1:]
+            lines.append(
+                {
+                    "type": "context",
+                    "line_number_original": original_line,
+                    "line_number_fixed": fixed_line,
+                    "content": content,
+                    "annotation": None,
+                }
+            )
+            original_line += 1
+            fixed_line += 1
+    return lines
 
 
 def run_in_sandbox(student_code: str, challenge_dir: str, event_logger=None):

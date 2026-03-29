@@ -17,6 +17,18 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles, children 
   useEffect(() => {
     let mounted = true;
     const verifySession = async () => {
+      const token = sessionStorage.getItem('token');
+      if (!token || token === 'cookie-auth') {
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('role');
+        sessionStorage.removeItem('user_id');
+        sessionStorage.removeItem('user_email');
+        if (mounted) {
+          setVerifiedRole(null);
+          setIsVerifying(false);
+        }
+        return;
+      }
       try {
         const res = await api.get('/api/auth/me');
         const serverRole = res.data?.role ?? 'user';
@@ -24,10 +36,14 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles, children 
           setVerifiedRole(serverRole);
           setIsVerifying(false);
         }
-        sessionStorage.setItem('token', 'cookie-auth');
         sessionStorage.setItem('role', serverRole);
+        if (res.data?.id != null) sessionStorage.setItem('user_id', String(res.data.id));
+        if (res.data?.email) sessionStorage.setItem('user_email', String(res.data.email));
       } catch {
-        sessionStorage.clear();
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('role');
+        sessionStorage.removeItem('user_id');
+        sessionStorage.removeItem('user_email');
         if (mounted) {
           setVerifiedRole(null);
           setIsVerifying(false);

@@ -464,7 +464,7 @@ def scan_project(
         total_vulnerabilities=result["total_vulnerabilities"],
         risk_score=risk["total_score"],
         risk_level=risk["risk_level"],
-        vuln_summary=json.dumps(result["summary"] or {}),
+        vuln_summary=json.dumps(result or {}),
     )
     db.add(history)
     db.commit()

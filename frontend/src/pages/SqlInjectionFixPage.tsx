@@ -45,6 +45,13 @@ const SqlInjectionFixPage: React.FC = () => {
     isSuccess: false,
     logs: '',
     verification: null as null | { before_vulnerabilities?: number; after_vulnerabilities?: number; improvement_score?: number },
+    codeDiff: [] as Array<{
+      type: 'added' | 'removed' | 'context';
+      line_number_original: number | null;
+      line_number_fixed: number | null;
+      content: string;
+      annotation: string | null;
+    }>,
   });
 
   const handleSubmit = async () => {
@@ -68,6 +75,7 @@ const SqlInjectionFixPage: React.FC = () => {
           after_vulnerabilities: response.data.after_vulnerabilities,
           improvement_score: response.data.improvement_score,
         },
+        codeDiff: Array.isArray(response.data.code_diff) ? response.data.code_diff : [],
       });
 
     } catch (error: any) {
@@ -76,6 +84,7 @@ const SqlInjectionFixPage: React.FC = () => {
         isSuccess: false,
         logs: error.response?.data?.detail || "System Error: Could not connect to sandbox.",
         verification: null,
+        codeDiff: [],
       });
     } finally {
       setIsLoading(false);
@@ -101,6 +110,7 @@ const SqlInjectionFixPage: React.FC = () => {
         isSuccess={modalState.isSuccess} 
         logs={modalState.logs} 
         verification={modalState.verification}
+        codeDiff={modalState.codeDiff}
         onClose={() => setModalState({ ...modalState, isOpen: false })} 
       />
     </div>

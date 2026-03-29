@@ -56,18 +56,18 @@ def _challenge_source_file(challenge_dir: str) -> Path:
     return (Path("/app/challenges").resolve() / challenge_dir / "app.py").resolve()
 
 
+def _challenge_slug_from_dir(challenge_dir: str) -> str:
+    return challenge_dir.replace("challenge-", "", 1)
+
+
 def _verify_fix_improvement(challenge_dir: str, submitted_code: str):
     source_file = _challenge_source_file(challenge_dir)
-    if not source_file.exists():
-        return {
-            "fixed": False,
-            "improvement_score": 0,
-            "before_vulnerabilities": 0,
-            "after_vulnerabilities": 0,
-            "test_output": f"Challenge source not found: {source_file}",
-        }
+    if source_file.exists():
+        with open(source_file, "r", encoding="utf-8", errors="ignore") as source_fp:
+            vulnerable_source = source_fp.read()
+    else:
+        vulnerable_source = ""
 
-    vulnerable_source = source_file.read_text(encoding="utf-8", errors="ignore")
     before_result = sandbox_runner.run_in_sandbox_detailed(vulnerable_source, challenge_dir)
     after_result = sandbox_runner.run_in_sandbox_detailed(submitted_code or "", challenge_dir)
 
@@ -79,12 +79,19 @@ def _verify_fix_improvement(challenge_dir: str, submitted_code: str):
         if before_count == 0 and after_count == 0
         else max(0, min(100, int(((before_count - after_count) / max(before_count, 1)) * 100)))
     )
+    challenge_slug = _challenge_slug_from_dir(challenge_dir)
+    code_diff = (
+        sandbox_runner.generate_code_diff(vulnerable_source, submitted_code or "", challenge_slug)
+        if fixed and vulnerable_source
+        else []
+    )
     return {
         "fixed": fixed,
         "improvement_score": improvement_score,
         "before_vulnerabilities": before_count,
         "after_vulnerabilities": after_count,
         "test_output": str(after_result.get("logs") or ""),
+        "code_diff": code_diff,
     }
 
 

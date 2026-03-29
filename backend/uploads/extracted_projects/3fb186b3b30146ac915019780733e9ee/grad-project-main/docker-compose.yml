@@ -1,0 +1,157 @@
+networks:
+  scale_net:
+    name: scale_net
+    driver: bridge
+
+services:
+  # 1. SANDBOX BUILDER
+  sandbox_base:
+    build: 
+      context: ./backend/sandbox_base
+    image: scale-sandbox-base
+    container_name: scale_sandbox_builder
+    command: ["echo", "Sandbox Base Image Built Successfully"]
+    networks:
+      - scale_net
+
+  # 2. MAIN BACKEND API
+  backend:
+    build: ./backend
+    container_name: scale_application-backend-1
+    restart: on-failure 
+    ports:
+      - "8000:8000"
+    volumes:
+      # Required by sandbox runner to build/run challenge containers.
+      # Keep this for lab mode; avoid in production unless strongly isolated.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./backend:/app
+      # --- MOUNT CHALLENGE FOLDERS ---
+      - ./challenge-sql-injection:/app/challenges/challenge-sql-injection
+      - ./challenge-xss:/app/challenges/challenge-xss
+      - ./challenge-csrf:/app/challenges/challenge-csrf
+      - ./challenge-redirect:/app/challenges/challenge-redirect
+      - ./challenge-command-injection:/app/challenges/challenge-command-injection
+      - ./challenge-broken-auth:/app/challenges/challenge-broken-auth
+      - ./challenge-security-misc:/app/challenges/challenge-security-misc
+      - ./challenge-directory-traversal:/app/challenges/challenge-directory-traversal
+      - ./challenge-xxe:/app/challenges/challenge-xxe
+      - ./challenge-insecure-storage:/app/challenges/challenge-insecure-storage
+    networks:
+      - scale_net
+    depends_on:
+      main_db:
+        condition: service_healthy
+      challenge_db_sqli:
+        condition: service_healthy
+      challenge_db_csrf:
+        condition: service_healthy
+      sandbox_base:
+        condition: service_completed_successfully
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-mysql+pymysql://user:password@main_db/scale_db}
+      - SQLI_DATABASE_URL=${SQLI_DATABASE_URL:-mysql+pymysql://user:password@challenge_db_sqli/testdb}
+      - CSRF_DATABASE_URL=${CSRF_DATABASE_URL:-mysql+pymysql://user:password@challenge_db_csrf/csrfdb}
+      - SECRET_KEY=${SECRET_KEY:-scale_graduation_project_secret_key}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-600}
+      - ENABLE_BROKEN_AUTH_CHALLENGE=${ENABLE_BROKEN_AUTH_CHALLENGE:-true}
+      - SANDBOX_MAX_CODE_CHARS=${SANDBOX_MAX_CODE_CHARS:-200000}
+    command: ["sh", "-c", "python seed_db.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
+
+  # 3. FRONTEND
+  frontend:
+    build: ./frontend
+    container_name: scale_application-frontend-1
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - scale_net
+    command: npm run dev -- --host
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
+
+  # 4. AI SERVICE
+  ai_service:
+    build: ./ai_service
+    container_name: scale_application-ai_service-1
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./ai_service:/app
+    networks:
+      - scale_net
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+
+  # 5. MAIN DATABASE (App Data)
+  main_db:
+    image: mysql:8.0
+    container_name: main_db
+    environment:
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-scale_db}
+      - MYSQL_USER=${MYSQL_USER:-user}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-password}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+    volumes:
+      - scale_db_data:/var/lib/mysql
+      - ./db_init/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - scale_net
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u${MYSQL_USER:-user} -p${MYSQL_PASSWORD:-password} || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  # 6. SQL INJECTION DATABASE
+  challenge_db_sqli:
+    image: mysql:8.0
+    container_name: challenge_db_sqli
+    environment:
+      - MYSQL_DATABASE=${SQLI_MYSQL_DATABASE:-testdb}
+      - MYSQL_USER=${SQLI_MYSQL_USER:-user}
+      - MYSQL_PASSWORD=${SQLI_MYSQL_PASSWORD:-password}
+      - MYSQL_ROOT_PASSWORD=${SQLI_MYSQL_ROOT_PASSWORD:-rootpassword}
+    volumes:
+      - ./challenge-sql-injection/users.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3307:3306"
+    networks:
+      - scale_net
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u${SQLI_MYSQL_USER:-user} -p${SQLI_MYSQL_PASSWORD:-password} || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  # 7. CSRF CHALLENGE DATABASE (NEW EXTERNAL DB)
+  challenge_db_csrf:
+    image: mysql:8.0
+    container_name: challenge_db_csrf
+    environment:
+      - MYSQL_DATABASE=${CSRF_MYSQL_DATABASE:-csrfdb}
+      - MYSQL_USER=${CSRF_MYSQL_USER:-user}
+      - MYSQL_PASSWORD=${CSRF_MYSQL_PASSWORD:-password}
+      - MYSQL_ROOT_PASSWORD=${CSRF_MYSQL_ROOT_PASSWORD:-rootpassword}
+    volumes:
+      # Mount the new SQL file here
+      - ./challenge-csrf/csrf.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3308:3306"
+    networks:
+      - scale_net
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u${CSRF_MYSQL_USER:-user} -p${CSRF_MYSQL_PASSWORD:-password} || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+volumes:
+  scale_db_data:

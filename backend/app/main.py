@@ -7,7 +7,7 @@ import logging
 
 # --- IMPORT ROUTERS ---
 # We added 'stats', 'projects', 'game_challenge', and 'misconfig' to this import list
-from .api import auth, quizzes, challenges, stats, messages, projects, game_challenge, misconfig, ai_mentor, attack_simulator, project_analyzer, security_logs, quiz_dynamic, instructor
+from .api import auth, quizzes, challenges, stats, messages, projects, game_challenge, misconfig, ai_mentor, attack_simulator, project_analyzer, security_logs, quiz_dynamic, instructor, report
 from .db import database
 from . import models 
 
@@ -56,6 +56,7 @@ app.include_router(security_logs.router, prefix="/api/security", tags=["security
 # NEW: dynamic quiz generation from scan findings
 app.include_router(quiz_dynamic.router, prefix="/api/quiz", tags=["quiz_dynamic"])
 app.include_router(instructor.router, prefix="/api/instructor", tags=["instructor"])
+app.include_router(report.router)
 
 
 def _ensure_runtime_schema():

@@ -40,11 +40,11 @@ const LoginPage: React.FC = () => {
       const { access_token, role, user_id, email: resEmail } = res.data;
 
       if (access_token) {
-        // JWT is stored in HttpOnly cookie by backend.
-        sessionStorage.setItem('token', 'cookie-auth');
+        sessionStorage.setItem('token', access_token);
         sessionStorage.setItem('role', role ?? 'user');
         sessionStorage.setItem('user_id', String(user_id ?? ''));
         if (resEmail) sessionStorage.setItem('user_email', resEmail);
+        else sessionStorage.removeItem('user_email');
         if (role === 'admin') navigate('/admin/stats');
         else if (role === 'instructor') navigate('/instructor/dashboard');
         else navigate('/home');
