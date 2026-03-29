@@ -60,6 +60,10 @@ coverage/
 .DS_Store
 Thumbs.db
 
+backend/uploads/
+backend/uploads/projects/
+backend/uploads/extracted_projects/
+*.zip
 # ===========================
 # Docker
 # ===========================
