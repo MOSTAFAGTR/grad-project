@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import ResultModal from '../components/ResultModal';
+import ChallengeHintPanel from '../components/ChallengeHintPanel';
 import { API_BASE_URL } from '../lib/api';
 
 const VULNERABLE_CODE = `from pathlib import Path
@@ -77,6 +78,9 @@ const DirectoryTraversalFixPage: React.FC = () => {
       <button onClick={handleSubmit} disabled={isLoading} className="bg-green-600 px-8 py-3 rounded font-bold hover:bg-green-700 transition disabled:opacity-50">
         {isLoading ? 'Running Tests...' : 'Submit Fix'}
       </button>
+      <div className="mt-6">
+        <ChallengeHintPanel challengeId="directory-traversal" />
+      </div>
       <ResultModal
         isOpen={modalState.isOpen}
         isSuccess={modalState.isSuccess}

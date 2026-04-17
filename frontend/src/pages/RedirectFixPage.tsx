@@ -3,6 +3,7 @@ import { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import ResultModal from '../components/ResultModal';
+import ChallengeHintPanel from '../components/ChallengeHintPanel';
 import { Link } from 'react-router-dom';
 import { API_BASE_URL } from '../lib/api';
 
@@ -95,6 +96,10 @@ const RedirectFixPage: React.FC = () => {
         <Link to="/challenges" className="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded font-bold">
           Back to Challenges
         </Link>
+      </div>
+
+      <div className="mt-6">
+        <ChallengeHintPanel challengeId="redirect" />
       </div>
 
       <ResultModal

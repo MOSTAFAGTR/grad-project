@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from typing import Optional
 import os
 import random
+import math
+import json
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -43,6 +45,15 @@ class QuizManageRequest(BaseModel):
     category: Optional[str] = None
 
 
+class MistakeQuizGenerateRequest(BaseModel):
+    count: int = 10
+    difficulty: str = "Intermediate"
+    explanation_depth: str = "detailed"
+    include_scan: bool = True
+    include_failed_quiz: bool = True
+    include_challenge_state: bool = True
+
+
 def _normalize_vuln_name(vuln: str) -> str:
     raw = (vuln or "").strip()
     aliases = {
@@ -62,6 +73,118 @@ def _normalize_vuln_name(vuln: str) -> str:
 def _difficulty_score(level: str) -> int:
     lv = (level or "Intermediate").capitalize()
     return {"Beginner": 1, "Intermediate": 2, "Advanced": 3}.get(lv, 2)
+
+
+def _challenge_slug_to_topic(challenge_id: str) -> str:
+    key = (challenge_id or "").strip().lower()
+    slug_map = {
+        "sql-injection": "SQL Injection",
+        "xss": "XSS",
+        "csrf": "CSRF",
+        "command-injection": "Command Injection",
+        "broken-auth": "Broken Authentication",
+        "security-misc": "Security Misconfiguration",
+        "insecure-storage": "Insecure Storage",
+        "directory-traversal": "Directory Traversal",
+        "xxe": "XXE",
+        "redirect": "Unvalidated Redirect",
+    }
+    return slug_map.get(key, _normalize_vuln_name(challenge_id or "Unknown"))
+
+
+def _collect_mistake_sources(
+    db: Session,
+    user_id: int,
+    include_scan: bool,
+    include_failed_quiz: bool,
+    include_challenge_state: bool,
+) -> tuple[list[tuple[str, str]], dict[str, int]]:
+    sources: list[tuple[str, str]] = []
+    stats = {"failed_quiz": 0, "challenge_state": 0, "scan_findings": 0}
+
+    if include_failed_quiz:
+        wrong_answers = (
+            db.query(models.UserAnswer)
+            .filter(
+                models.UserAnswer.user_id == user_id,
+                models.UserAnswer.is_correct == False,  # noqa: E712
+            )
+            .order_by(models.UserAnswer.timestamp.desc())
+            .limit(40)
+            .all()
+        )
+        topic_counts: dict[str, int] = {}
+        for ans in wrong_answers:
+            q = db.query(models.Question).filter(models.Question.id == ans.question_id).first()
+            if not q:
+                continue
+            topic = _normalize_vuln_name(q.topic or q.skill_focus or "Unknown")
+            topic_counts[topic] = topic_counts.get(topic, 0) + 1
+            prompt = (q.text or "Unknown question").strip()
+            sources.append((topic, f"Quiz mistake: {prompt[:260]}"))
+            stats["failed_quiz"] += 1
+
+        # Add one aggregate seed for each weak topic to reinforce repetition patterns.
+        for topic, misses in sorted(topic_counts.items(), key=lambda item: item[1], reverse=True)[:6]:
+            sources.append((topic, f"Weak area signal: {misses} incorrect answers in {topic}."))
+
+    if include_challenge_state:
+        states = (
+            db.query(models.ChallengeState)
+            .filter(models.ChallengeState.user_id == user_id)
+            .order_by(
+                models.ChallengeState.attempt_count.desc(),
+                models.ChallengeState.hints_used.desc(),
+                models.ChallengeState.last_updated.desc(),
+            )
+            .limit(20)
+            .all()
+        )
+        for st in states:
+            if (st.attempt_count or 0) <= 0 and (st.hints_used or 0) <= 0:
+                continue
+            topic = _challenge_slug_to_topic(st.challenge_id)
+            snippet = (
+                f"Challenge struggle: {topic}, attempts={st.attempt_count or 0}, "
+                f"hints={st.hints_used or 0}, stage={st.current_stage or 'unknown'}."
+            )
+            sources.append((topic, snippet))
+            stats["challenge_state"] += 1
+
+    if include_scan:
+        owned_projects = db.query(models.Project.id).filter(models.Project.owner_id == user_id).all()
+        project_ids = [row[0] for row in owned_projects]
+        if project_ids:
+            latest_scan = (
+                db.query(models.ScanHistory)
+                .filter(models.ScanHistory.project_id.in_(project_ids))
+                .order_by(models.ScanHistory.scan_date.desc())
+                .first()
+            )
+            if latest_scan and latest_scan.vuln_summary:
+                try:
+                    summary = json.loads(latest_scan.vuln_summary)
+                except Exception:
+                    summary = {}
+                findings = summary.get("findings", []) if isinstance(summary, dict) else []
+                for finding in findings[:24]:
+                    topic = _normalize_vuln_name(
+                        finding.get("vulnerability_type") or finding.get("type") or "Unknown"
+                    )
+                    code = (finding.get("code_snippet") or "No code snippet provided").strip()
+                    sources.append((topic, code[:300]))
+                    stats["scan_findings"] += 1
+
+    # Keep first occurrence per (topic, snippet) pair.
+    deduped: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for topic, snippet in sources:
+        key = (topic, snippet)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append((topic, snippet))
+    return deduped, stats
 
 
 def _build_question_set(vuln_type: str, code: str, difficulty: str, explanation_depth: str, idx: int):
@@ -214,6 +337,55 @@ def generate_quiz_from_scan(
     elif serper_configured():
         out["ai_note"] = "Web search (Serper) context is available for this adaptive quiz."
     return out
+
+
+@router.post("/generate-from-mistakes")
+def generate_quiz_from_mistakes(
+    req: MistakeQuizGenerateRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("user")),
+):
+    total_requested = max(5, min(int(req.count or 10), 30))
+    difficulty = (req.difficulty or "Intermediate").capitalize()
+    explanation_depth = req.explanation_depth or "detailed"
+
+    sources, source_stats = _collect_mistake_sources(
+        db=db,
+        user_id=current_user.id,
+        include_scan=bool(req.include_scan),
+        include_failed_quiz=bool(req.include_failed_quiz),
+        include_challenge_state=bool(req.include_challenge_state),
+    )
+    if not sources:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No mistake data found yet. Complete at least one quiz/challenge attempt "
+                "or run a project scan, then try again."
+            ),
+        )
+
+    seed_count = max(1, min(len(sources), math.ceil(total_requested / 5)))
+    selected_sources = sources[:seed_count]
+
+    questions: list[dict] = []
+    for idx, (vuln_type, code) in enumerate(selected_sources, start=1):
+        questions.extend(_build_question_set(vuln_type, code, difficulty, explanation_depth, idx))
+
+    for q in questions:
+        if not q.get("explanation"):
+            q["explanation"] = "Review the vulnerable pattern and apply secure coding controls."
+
+    trimmed_questions = questions[:total_requested]
+    return {
+        "total": len(trimmed_questions),
+        "questions": trimmed_questions,
+        "difficulty": difficulty,
+        "category": "Mistake-Driven",
+        "source_breakdown": source_stats,
+        "source_items_used": seed_count,
+        "ai_available": bool(_openai_key()) or serper_configured(),
+    }
 
 
 @router.get("/manage")

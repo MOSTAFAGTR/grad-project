@@ -30,6 +30,22 @@ function filterFindingsForScan(findings: any[], focus: 'all' | 'highest'): any[]
   return scored.filter((x) => x.s === maxS).map((x) => x.f);
 }
 
+function shuffleOptions(options: any[]): any[] {
+  const arr = [...(options || [])];
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function randomizeQuestionOptions(questions: any[]): any[] {
+  return (questions || []).map((q) => ({
+    ...q,
+    options: shuffleOptions(q.options || []),
+  }));
+}
+
 const StudentQuizPage: React.FC = () => {
   const { scanData } = useScanContext();
   const [step, setStep] = useState<'setup' | 'quiz' | 'result'>('setup');
@@ -41,6 +57,8 @@ const StudentQuizPage: React.FC = () => {
 
   const [scanQuizCount, setScanQuizCount] = useState(8);
   const [scanFocus, setScanFocus] = useState<'all' | 'highest'>('all');
+  const [mistakeQuizCount, setMistakeQuizCount] = useState(10);
+  const [includeScanInMistakeQuiz, setIncludeScanInMistakeQuiz] = useState(true);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [quizTitle, setQuizTitle] = useState('');
   const [assignmentId, setAssignmentId] = useState<number | null>(null);
@@ -51,6 +69,13 @@ const StudentQuizPage: React.FC = () => {
   const [score, setScore] = useState(0);
   const scoreRef = useRef(0);
   const [wrongCategories, setWrongCategories] = useState<string[]>([]);
+  const [answerHistory, setAnswerHistory] = useState<any[]>([]);
+  const [quizSessionId, setQuizSessionId] = useState<number>(0);
+  const [answeredQuestionKeys, setAnsweredQuestionKeys] = useState<Set<string>>(new Set());
+  const [isAnswerSubmitting, setIsAnswerSubmitting] = useState(false);
+  const [tutorLoading, setTutorLoading] = useState(false);
+  const [tutorReview, setTutorReview] = useState<any[] | null>(null);
+  const [tutorError, setTutorError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<any>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -113,15 +138,22 @@ const StudentQuizPage: React.FC = () => {
       if (res.data.length === 0) {
         alert('No questions found. Ask instructor to add some!');
       } else {
-        setQuestions(res.data);
+        const sessionId = Date.now();
+        setQuestions(randomizeQuestionOptions(res.data || []));
         setQuizTitle(topicFilter === 'All topics' ? 'Standard Quiz (all topics)' : `Standard Quiz: ${topicFilter}`);
         setAssignmentId(null);
         setGeneratedFromScan(false);
+        setQuizSessionId(sessionId);
         setStep('quiz');
         setCurrentIndex(0);
         setScore(0);
         scoreRef.current = 0;
         setWrongCategories([]);
+        setAnswerHistory([]);
+        setAnsweredQuestionKeys(new Set());
+        setIsAnswerSubmitting(false);
+        setTutorReview(null);
+        setTutorError(null);
       }
     } catch (err) {
       console.error(err);
@@ -161,15 +193,22 @@ const StudentQuizPage: React.FC = () => {
       if (generated.length === 0) {
         alert('Could not generate quiz from findings.');
       } else {
-        setQuestions(generated);
+        const sessionId = Date.now();
+        setQuestions(randomizeQuestionOptions(generated));
         setQuizTitle(`Quiz from scan (${scanFocus === 'highest' ? 'highest severity' : 'all findings'})`);
         setAssignmentId(null);
         setGeneratedFromScan(true);
+        setQuizSessionId(sessionId);
         setStep('quiz');
         setCurrentIndex(0);
         setScore(0);
         scoreRef.current = 0;
         setWrongCategories([]);
+        setAnswerHistory([]);
+        setAnsweredQuestionKeys(new Set());
+        setIsAnswerSubmitting(false);
+        setTutorReview(null);
+        setTutorError(null);
       }
     } catch {
       alert('Failed to generate dynamic quiz.');
@@ -178,20 +217,80 @@ const StudentQuizPage: React.FC = () => {
     }
   };
 
+  const handleGenerateMistakeQuiz = async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const res = await axios.post(
+        `${API_URL}/api/quiz/generate-from-mistakes`,
+        {
+          count: mistakeQuizCount,
+          difficulty: difficultyLevel,
+          explanation_depth: 'detailed',
+          include_scan: includeScanInMistakeQuiz,
+          include_failed_quiz: true,
+          include_challenge_state: true,
+        },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const generated = (res.data?.questions || []).map((q: any, idx: number) => ({
+        id: idx + 200000,
+        text: q.question || q.prompt,
+        difficulty: q.difficulty || difficultyLevel,
+        difficulty_score: q.difficulty_score || 2,
+        explanation: q.explanation,
+        category: q.category || 'General',
+        question_type: q.type || 'MCQ',
+        options: (q.options || []).map((opt: string, oidx: number) => ({
+          id: idx * 10 + oidx + 1,
+          text: opt,
+          is_correct: opt === (q.correct_answer || q.answer),
+        })),
+      }));
+      if (generated.length === 0) {
+        alert('No mistake-driven quiz could be generated yet.');
+      } else {
+        const sessionId = Date.now();
+        setQuestions(randomizeQuestionOptions(generated));
+        setQuizTitle('Quiz from my mistakes');
+        setAssignmentId(null);
+        setGeneratedFromScan(false);
+        setQuizSessionId(sessionId);
+        setStep('quiz');
+        setCurrentIndex(0);
+        setScore(0);
+        scoreRef.current = 0;
+        setWrongCategories([]);
+      }
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      alert(typeof detail === 'string' ? detail : 'Failed to generate mistake-driven quiz.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleStartAssignment = async (id: number, title: string) => {
     try {
+      const sessionId = Date.now();
       const res = await axios.get(`${API_URL}/api/quizzes/assignments/${id}/take`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setQuestions(res.data);
+      setQuestions(randomizeQuestionOptions(res.data || []));
       setQuizTitle(title);
       setAssignmentId(id);
       setGeneratedFromScan(false);
+      setQuizSessionId(sessionId);
       setStep('quiz');
       setCurrentIndex(0);
       setScore(0);
       scoreRef.current = 0;
       setWrongCategories([]);
+      setAnswerHistory([]);
+      setAnsweredQuestionKeys(new Set());
+      setIsAnswerSubmitting(false);
+      setTutorReview(null);
+      setTutorError(null);
     } catch (err) {
       alert('Failed to start assignment');
     }
@@ -199,12 +298,68 @@ const StudentQuizPage: React.FC = () => {
 
   const handleAnswer = async (optId: number) => {
     const current = questions[currentIndex];
-    if (Number(current?.id) >= 100000) {
-      const selected = (current.options || []).find((o: any) => o.id === optId);
-      const correct = Boolean(selected?.is_correct);
-      const localResult = { correct, explanation: current.explanation || 'Review secure coding principles.' };
-      setLastResult(localResult);
-      if (correct) {
+    const questionKey = `${currentIndex}:${String(current?.id)}`;
+    if (isAnswerSubmitting || answeredQuestionKeys.has(questionKey)) return;
+    setIsAnswerSubmitting(true);
+
+    const selectedOption = (current.options || []).find((o: any) => o.id === optId);
+    const correctOption = (current.options || []).find((o: any) => Boolean(o.is_correct));
+    try {
+      if (Number(current?.id) >= 100000) {
+        const correct = Boolean(selectedOption?.is_correct);
+        const localResult = { correct, explanation: current.explanation || 'Review secure coding principles.' };
+        setLastResult(localResult);
+        setAnswerHistory((prev) => [
+          ...prev.filter((a) => a.question_key !== questionKey),
+          {
+            question_key: questionKey,
+            question_id: current.id,
+            question_text: current.text,
+            category: current.category || 'General',
+            selected_option_id: selectedOption?.id,
+            selected_option_text: selectedOption?.text || '',
+            correct_option_text: correctOption?.text || '',
+            explanation: current.explanation || '',
+            source: 'generated',
+            session_id: quizSessionId,
+            correct,
+          },
+        ]);
+        if (correct) {
+          setScore((prev) => {
+            const next = prev + 1;
+            scoreRef.current = next;
+            return next;
+          });
+        } else {
+          setWrongCategories((prev) => [...prev, current?.category || 'General']);
+        }
+        setAnsweredQuestionKeys((prev) => new Set([...Array.from(prev), questionKey]));
+        return;
+      }
+      const res = await axios.post(
+        `${API_URL}/api/quizzes/submit-answer`,
+        { question_id: current.id, selected_option_id: optId },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      setLastResult(res.data);
+      setAnswerHistory((prev) => [
+        ...prev.filter((a) => a.question_key !== questionKey),
+        {
+          question_key: questionKey,
+          question_id: current.id,
+          question_text: current.text,
+          category: current.category || 'General',
+          selected_option_id: selectedOption?.id,
+          selected_option_text: selectedOption?.text || '',
+          correct_option_text: correctOption?.text || '',
+          explanation: current.explanation || res.data?.explanation || '',
+          source: 'bank',
+          session_id: quizSessionId,
+          correct: Boolean(res.data?.correct),
+        },
+      ]);
+      if (res.data.correct) {
         setScore((prev) => {
           const next = prev + 1;
           scoreRef.current = next;
@@ -213,27 +368,15 @@ const StudentQuizPage: React.FC = () => {
       } else {
         setWrongCategories((prev) => [...prev, current?.category || 'General']);
       }
-      return;
-    }
-    const res = await axios.post(
-      `${API_URL}/api/quizzes/submit-answer`,
-      { question_id: current.id, selected_option_id: optId },
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    setLastResult(res.data);
-    if (res.data.correct) {
-      setScore((prev) => {
-        const next = prev + 1;
-        scoreRef.current = next;
-        return next;
-      });
-    } else {
-      setWrongCategories((prev) => [...prev, current?.category || 'General']);
+      setAnsweredQuestionKeys((prev) => new Set([...Array.from(prev), questionKey]));
+    } finally {
+      setIsAnswerSubmitting(false);
     }
   };
 
   const handleNext = () => {
     setLastResult(null);
+    setIsAnswerSubmitting(false);
     if (currentIndex + 1 < questions.length) setCurrentIndex(currentIndex + 1);
     else {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -269,6 +412,44 @@ const StudentQuizPage: React.FC = () => {
     borderRadius: 12,
     padding: 24,
     flex: '1 1 300px',
+  };
+
+  const wrongAnswerItems = Array.from(
+    new Map(
+      answerHistory
+        .filter((a) => !a.correct && a.session_id === quizSessionId)
+        .map((a) => [a.question_key || `${a.question_id}:${a.question_text}`, a]),
+    ).values(),
+  );
+
+  const handleAskTutor = async () => {
+    if (!token || wrongAnswerItems.length === 0) return;
+    setTutorLoading(true);
+    setTutorError(null);
+    try {
+      const payload = {
+        wrong_answers: wrongAnswerItems.map((a) => ({
+          question_id: a.question_id,
+          question_text: a.question_text,
+          category: a.category,
+          selected_option_id: a.selected_option_id,
+          selected_option_text: a.selected_option_text,
+          correct_option_text: a.correct_option_text,
+          explanation: a.explanation,
+          source: a.source,
+        })),
+      };
+      const res = await axios.post(`${API_URL}/api/quizzes/post-quiz-tutor-review`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setTutorReview(res.data?.review || []);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      setTutorError(typeof detail === 'string' ? detail : 'Could not load tutor review.');
+      setTutorReview([]);
+    } finally {
+      setTutorLoading(false);
+    }
   };
 
   return (
@@ -365,6 +546,37 @@ const StudentQuizPage: React.FC = () => {
                 {loading ? 'Loading...' : 'Generate Scan Quiz'}
               </button>
             </div>
+
+            <div style={cardStyle}>
+              <h2 style={{ fontWeight: 700, fontSize: 18, marginBottom: 12 }}>Quiz from My Mistakes</h2>
+              <p className="text-gray-400 text-sm mb-4">
+                Generate questions from your wrong quiz answers, challenge struggles, and optional latest scan findings.
+              </p>
+              <label className="block text-gray-300 text-sm mb-1">Number of questions</label>
+              <input
+                type="number"
+                min={5}
+                max={30}
+                value={mistakeQuizCount}
+                onChange={(e) => setMistakeQuizCount(Number(e.target.value))}
+                className="w-full bg-gray-700 p-2 rounded text-white mb-3 border border-gray-600"
+              />
+              <label className="inline-flex items-center gap-2 text-sm text-gray-300 mb-4">
+                <input
+                  type="checkbox"
+                  checked={includeScanInMistakeQuiz}
+                  onChange={(e) => setIncludeScanInMistakeQuiz(e.target.checked)}
+                />
+                Include latest scan findings
+              </label>
+              <button
+                onClick={handleGenerateMistakeQuiz}
+                disabled={loading}
+                className="w-full bg-emerald-600 py-3 rounded font-bold hover:bg-emerald-700 transition disabled:opacity-40"
+              >
+                {loading ? 'Loading...' : 'Generate Mistake Quiz'}
+              </button>
+            </div>
           </div>
 
           <div className="bg-gray-800 p-8 rounded-lg border border-purple-900">
@@ -421,7 +633,7 @@ const StudentQuizPage: React.FC = () => {
               <button
                 key={opt.id}
                 onClick={() => handleAnswer(opt.id)}
-                disabled={lastResult !== null}
+                disabled={lastResult !== null || isAnswerSubmitting}
                 className={`w-full text-left p-4 rounded border transition ${
                   lastResult ? 'bg-gray-700 opacity-70' : 'bg-gray-700 hover:border-blue-500'
                 }`}
@@ -474,6 +686,37 @@ const StudentQuizPage: React.FC = () => {
                 : 'Review explanations and retry weak categories.'}
             </p>
           </div>
+          {wrongAnswerItems.length > 0 && (
+            <div className="bg-gray-900 border border-indigo-700 rounded p-4 text-left mb-6">
+              <p className="text-sm font-semibold text-indigo-300 mb-2">AI Post-Quiz Tutor</p>
+              <p className="text-xs text-gray-300 mb-3">
+                Review your wrong answers with grounded explanations from actual quiz data.
+              </p>
+              <button
+                onClick={handleAskTutor}
+                disabled={tutorLoading}
+                className="bg-indigo-600 px-4 py-2 rounded text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {tutorLoading ? 'Analyzing...' : `Explain ${wrongAnswerItems.length} wrong answer(s)`}
+              </button>
+              {tutorError && <p className="text-xs text-red-300 mt-2">{tutorError}</p>}
+              {tutorReview && tutorReview.length > 0 && (
+                <div className="mt-4 space-y-3 max-h-80 overflow-y-auto">
+                  {tutorReview.map((item: any, idx: number) => (
+                    <div key={`${idx}-${item.index}`} className="bg-gray-800 border border-gray-700 rounded p-3">
+                      <p className="text-xs text-indigo-200 mb-1">Question {item.index} • {item.category}</p>
+                      <p className="text-sm text-gray-100 mb-2">{item.question}</p>
+                      <p className="text-xs text-red-300"><span className="font-semibold">Your answer:</span> {item.selected_answer}</p>
+                      <p className="text-xs text-green-300"><span className="font-semibold">Correct answer:</span> {item.correct_answer}</p>
+                      <p className="text-xs text-gray-300 mt-2"><span className="font-semibold text-gray-200">Why wrong:</span> {item.why_wrong}</p>
+                      <p className="text-xs text-gray-300 mt-1"><span className="font-semibold text-gray-200">Why correct:</span> {item.why_correct}</p>
+                      <p className="text-xs text-amber-200 mt-1"><span className="font-semibold">Next step:</span> {item.next_step}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <button onClick={() => setStep('setup')} className="bg-gray-700 px-8 py-3 rounded font-bold hover:bg-gray-600">
             Back to Dashboard
           </button>

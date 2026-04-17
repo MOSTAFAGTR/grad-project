@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import ResultModal from '../components/ResultModal';
+import ChallengeHintPanel from '../components/ChallengeHintPanel';
 import { API_BASE_URL } from '../lib/api';
 
 const VULNERABLE_CODE = `import os
@@ -104,6 +105,10 @@ const SqlInjectionFixPage: React.FC = () => {
         {isLoading ? <span className="animate-spin">↻</span> : null}
         {isLoading ? 'Running Tests...' : 'Submit Fix'}
       </button>
+
+      <div className="mt-6">
+        <ChallengeHintPanel challengeId="sql-injection" />
+      </div>
 
       <ResultModal 
         isOpen={modalState.isOpen} 

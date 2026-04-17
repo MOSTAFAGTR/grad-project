@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import ResultModal from '../components/ResultModal';
+import ChallengeHintPanel from '../components/ChallengeHintPanel';
 import { API_BASE_URL } from '../lib/api';
 
 const VULNERABLE_CODE = `import sqlite3
@@ -102,6 +103,10 @@ const CsrfFixPage: React.FC = () => {
       <button onClick={handleSubmit} disabled={isLoading} className="bg-green-600 w-48 py-3 rounded font-bold hover:bg-green-700 transition flex justify-center items-center gap-2">
         {isLoading ? <span className="animate-spin">↻</span> : 'Submit Fix'}
       </button>
+
+      <div className="mt-6">
+        <ChallengeHintPanel challengeId="csrf" />
+      </div>
 
       <ResultModal 
         isOpen={modalState.isOpen} 

@@ -55,6 +55,22 @@ class QuizManageRequest(BaseModel):
     difficulty: Optional[str] = None
     category: Optional[str] = None
 
+
+class TutorReviewItemIn(BaseModel):
+    question_id: Optional[int] = None
+    question_text: str
+    category: Optional[str] = None
+    selected_option_id: Optional[int] = None
+    selected_option_text: Optional[str] = None
+    correct_option_text: Optional[str] = None
+    explanation: Optional[str] = None
+    source: Optional[str] = None  # bank | generated
+
+
+class TutorReviewRequest(BaseModel):
+    wrong_answers: List[TutorReviewItemIn]
+
+
 @router.get("/topics", response_model=List[str])
 def get_topics(
     db: Session = Depends(get_db),
@@ -329,6 +345,92 @@ def submit_quiz_attempt(d: QuizAttemptSubmit, db: Session = Depends(get_db), use
 def get_my_quiz_attempts(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Get current user's quiz attempts, newest first."""
     return db.query(QuizAttempt).filter(QuizAttempt.user_id == user.id).order_by(QuizAttempt.completed_at.desc()).all()
+
+
+@router.post("/post-quiz-tutor-review")
+def post_quiz_tutor_review(
+    req: TutorReviewRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("user")),
+):
+    """
+    Build grounded explanations for wrong answers after quiz completion.
+    """
+    wrong_answers = req.wrong_answers or []
+    if not wrong_answers:
+        raise HTTPException(status_code=400, detail="No wrong answers provided.")
+
+    review = []
+    for idx, item in enumerate(wrong_answers[:20], start=1):
+        qid = item.question_id
+        selected_text = (item.selected_option_text or "").strip()
+        category = (item.category or "General").strip()
+
+        q_db = None
+        if qid is not None and qid < 100000:
+            q_db = db.query(Question).filter(Question.id == qid).first()
+
+        if q_db:
+            correct_opt = next((o for o in q_db.options if o.is_correct), None)
+            selected_opt = None
+            if item.selected_option_id is not None:
+                selected_opt = next((o for o in q_db.options if o.id == item.selected_option_id), None)
+            if not selected_opt and selected_text:
+                selected_opt = next((o for o in q_db.options if (o.text or "").strip() == selected_text), None)
+
+            correct_text = (correct_opt.text if correct_opt else item.correct_option_text or "").strip()
+            selected_final = (selected_opt.text if selected_opt else selected_text or "No answer selected").strip()
+            explanation = (q_db.explanation or item.explanation or "").strip()
+            confidence = "verified_db"
+            question_text = (q_db.text or item.question_text or "").strip()
+        else:
+            correct_text = (item.correct_option_text or "").strip()
+            selected_final = selected_text or "No answer selected"
+            explanation = (item.explanation or "").strip()
+            confidence = "generated_payload"
+            question_text = (item.question_text or "").strip()
+
+        if not question_text or not correct_text:
+            continue
+
+        why_wrong = (
+            f"You chose '{selected_final}', but the correct answer is '{correct_text}'. "
+            "Your selected option does not apply the required security control for this scenario."
+        )
+        why_correct = (
+            explanation
+            if explanation
+            else "The correct option directly fixes the insecure data flow/sink behavior, not just the symptom."
+        )
+        next_step = (
+            f"Retry a similar {category} question and explain in one sentence why '{correct_text}' is safer."
+        )
+
+        review.append(
+            {
+                "index": idx,
+                "question": question_text,
+                "category": category,
+                "selected_answer": selected_final,
+                "correct_answer": correct_text,
+                "why_wrong": why_wrong,
+                "why_correct": why_correct,
+                "next_step": next_step,
+                "confidence": confidence,
+            }
+        )
+
+    if not review:
+        raise HTTPException(status_code=400, detail="Could not build tutor review from submitted answers.")
+
+    return {
+        "total_wrong_reviewed": len(review),
+        "review": review,
+        "grounding": {
+            "db_verified_items": sum(1 for r in review if r.get("confidence") == "verified_db"),
+            "generated_items": sum(1 for r in review if r.get("confidence") == "generated_payload"),
+        },
+    }
 
 
 @router.get("/manage")

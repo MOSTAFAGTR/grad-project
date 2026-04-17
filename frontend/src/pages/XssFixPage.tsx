@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import ResultModal from '../components/ResultModal';
+import ChallengeHintPanel from '../components/ChallengeHintPanel';
 import { API_BASE_URL } from '../lib/api';
 
 const VULNERABLE_CODE = `from flask import Flask, request, render_template_string
@@ -75,6 +76,10 @@ const XssFixPage: React.FC = () => {
         {isLoading ? <span className="animate-spin">↻</span> : null}
         {isLoading ? 'Running Tests...' : 'Submit Fix'}
       </button>
+
+      <div className="mt-6">
+        <ChallengeHintPanel challengeId="xss" />
+      </div>
 
       <ResultModal
         isOpen={modalState.isOpen}
