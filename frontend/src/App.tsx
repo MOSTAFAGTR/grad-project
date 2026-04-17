@@ -30,12 +30,17 @@ import BrokenAuthAttackPage from './pages/BrokenAuthAttackPage';
 import BrokenAuthFixPage from './pages/BrokenAuthFixPage';
 import SecurityMiscAttackPage from './pages/SecurityMiscAttackPage';
 import SecurityMiscFixPage from './pages/SecurityMiscFixPage';
+import BrokenAuthTutorialPage from './pages/BrokenAuthTutorialPage';
+import SecurityMiscTutorialPage from './pages/SecurityMiscTutorialPage';
 import Scanner from './pages/Scanner';
 import AttackLab from './pages/AttackLab';
 import SecurityLogsPage from './pages/SecurityLogsPage';
 import InsecureStorageChallengePage from './pages/InsecureStorageChallengePage';
 import DirectoryTraversalChallengePage from './pages/DirectoryTraversalChallengePage';
 import XxeChallengePage from './pages/XxeChallengePage';
+import RedBlueGamePage from './pages/RedBlueGamePage';
+import RedBlueCreatePage from './pages/RedBlueCreatePage';
+import RedBlueMyGamesPage from './pages/RedBlueMyGamesPage';
 
 // Components
 import MainLayout from './components/MainLayout';
@@ -76,9 +81,11 @@ const App: React.FC = () => {
 
             <Route path="/challenges/5/attack" element={<BrokenAuthAttackPage />} />
             <Route path="/challenges/5/fix" element={<BrokenAuthFixPage />} />
+            <Route path="/challenges/5/tutorial" element={<BrokenAuthTutorialPage />} />
 
             <Route path="/challenges/6/attack" element={<SecurityMiscAttackPage />} />
             <Route path="/challenges/6/fix" element={<SecurityMiscFixPage />} />
+            <Route path="/challenges/6/tutorial" element={<SecurityMiscTutorialPage />} />
             <Route path="/challenges/7/:tab" element={<InsecureStorageChallengePage />} />
             <Route path="/challenges/8/:tab" element={<DirectoryTraversalChallengePage />} />
             <Route path="/challenges/9/:tab" element={<XxeChallengePage />} />
@@ -88,8 +95,10 @@ const App: React.FC = () => {
             <Route path="/challenges/10/:tab" element={<RedirectChallengePage />} />
 
             <Route path="/challenges/attack-success" element={<AttackSuccessPage />} />
+            <Route path="/redblue/game/:gameId" element={<RedBlueGamePage />} />
             <Route element={<ProtectedRoute allowedRoles={['user']} />}>
               <Route path="/quiz" element={<StudentQuizPage />} />
+              <Route path="/redblue/my-games" element={<RedBlueMyGamesPage />} />
             </Route>
             <Route path="/under-construction" element={<UnderConstructionPage />} />
           </Route>
@@ -100,6 +109,7 @@ const App: React.FC = () => {
           <Route element={<MainLayout />}>
             <Route path="/instructor/dashboard" element={<InstructorDashboardPage />} /> {/* NEW DASHBOARD */}
             <Route path="/instructor/quiz" element={<InstructorQuizPage />} />
+            <Route path="/redblue/create" element={<RedBlueCreatePage />} />
           </Route>
         </Route>
 

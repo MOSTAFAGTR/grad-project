@@ -1,6 +1,9 @@
 import type { FC } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { FaCheckCircle } from 'react-icons/fa';
+import { api } from '../lib/api';
+import AttackReplayVisualizer from '../components/AttackReplayVisualizer';
 
 const typeConfig: Record<
   string,
@@ -100,52 +103,111 @@ const colorMap: Record<string, string> = {
 
 const AttackSuccessPage: FC = () => {
   const [searchParams] = useSearchParams();
-  const type = searchParams.get('type') ?? 'xss';
-  const config = typeConfig[type] ?? typeConfig.xss;
+  const rawType = searchParams.get('type') ?? searchParams.get('challenge') ?? 'xss';
+  const challengeSlug = rawType;
+  const config = typeConfig[challengeSlug] ?? typeConfig.xss;
   const accent = colorMap[config.color] ?? colorMap.cyan;
 
+  const [showReplay, setShowReplay] = useState(false);
+  const [replaySample, setReplaySample] = useState(false);
+  const [hasProgress, setHasProgress] = useState(false);
+  const [progressLoaded, setProgressLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await api.get('/api/challenges/progress');
+        if (cancelled) return;
+        const ids = new Set((res.data || []).map((p: { challenge_id: string }) => p.challenge_id));
+        setHasProgress(ids.has(challengeSlug));
+      } catch {
+        setHasProgress(false);
+      } finally {
+        if (!cancelled) setProgressLoaded(true);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [challengeSlug]);
+
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-6">
-      <div
-        className="w-24 h-24 rounded-full flex items-center justify-center mb-6 animate-pulse"
-        style={{ backgroundColor: `${accent}20`, border: `3px solid ${accent}` }}
-      >
-        <FaCheckCircle className="text-5xl" style={{ color: accent }} />
-      </div>
-      <h1 className="text-4xl font-bold mb-3" style={{ color: accent }}>
-        {config.title}
-      </h1>
-      <p className="text-gray-400 max-w-lg mb-8">
-        {config.subtitle}
-      </p>
-      <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 max-w-2xl text-left mb-6">
-        <h2 className="text-lg font-semibold mb-2" style={{ color: accent }}>
-          Challenge Summary
-        </h2>
-        <p className="text-sm text-gray-300 mb-2">
-          <span className="font-semibold">XP gained:</span> <span style={{ color: accent }}>{config.xp}</span>
-        </p>
-        <p className="text-sm text-gray-300">
-          {config.explanation}
-        </p>
-      </div>
-      <div className="flex gap-4">
-        <Link
-          to="/challenges"
-          className="px-8 py-3 font-bold rounded-lg transition-colors"
-          style={{
-            backgroundColor: accent,
-            color: '#fff',
-          }}
+    <div className="min-h-screen">
+      {showReplay && (
+        <AttackReplayVisualizer
+          challengeSlug={challengeSlug}
+          isSample={replaySample}
+          onClose={() => setShowReplay(false)}
+        />
+      )}
+      <div className="flex flex-col items-center justify-center h-full text-center p-6">
+        <div
+          className="w-24 h-24 rounded-full flex items-center justify-center mb-6 animate-pulse"
+          style={{ backgroundColor: `${accent}20`, border: `3px solid ${accent}` }}
         >
-          Return to Challenges
-        </Link>
-        <Link
-          to="/home"
-          className="px-8 py-3 font-bold rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
-        >
-          Dashboard
-        </Link>
+          <FaCheckCircle className="text-5xl" style={{ color: accent }} />
+        </div>
+        <h1 className="text-4xl font-bold mb-3" style={{ color: accent }}>
+          {config.title}
+        </h1>
+        <p className="text-gray-400 max-w-lg mb-8">{config.subtitle}</p>
+        <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 max-w-2xl text-left mb-6">
+          <h2 className="text-lg font-semibold mb-2" style={{ color: accent }}>
+            Challenge Summary
+          </h2>
+          <p className="text-sm text-gray-300 mb-2">
+            <span className="font-semibold">XP gained:</span>{' '}
+            <span style={{ color: accent }}>{config.xp}</span>
+          </p>
+          <p className="text-sm text-gray-300">{config.explanation}</p>
+        </div>
+
+        <div className="flex flex-wrap gap-4 justify-center mb-4">
+          <button
+            type="button"
+            onClick={() => {
+              setReplaySample(false);
+              setShowReplay(true);
+            }}
+            className="px-6 py-3 font-bold rounded-lg border-2 transition-colors"
+            style={{ borderColor: accent, color: accent }}
+          >
+            ▶ Replay Attack
+          </button>
+          {progressLoaded && !hasProgress && (
+            <button
+              type="button"
+              onClick={() => {
+                setReplaySample(true);
+                setShowReplay(true);
+              }}
+              className="px-4 py-2 text-sm rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600"
+            >
+              Show Sample Replay (Hint)
+            </button>
+          )}
+        </div>
+
+        <div className="flex gap-4">
+          <Link
+            to="/challenges"
+            className="px-8 py-3 font-bold rounded-lg transition-colors"
+            style={{
+              backgroundColor: accent,
+              color: '#fff',
+            }}
+          >
+            Return to Challenges
+          </Link>
+          <Link
+            to="/home"
+            className="px-8 py-3 font-bold rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+          >
+            Dashboard
+          </Link>
+        </div>
       </div>
     </div>
   );

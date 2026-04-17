@@ -18,7 +18,7 @@ services:
   backend:
     build: ./backend
     container_name: scale_application-backend-1
-    restart: on-failure 
+    restart: on-failure
     ports:
       - "8000:8000"
     volumes:
@@ -48,6 +48,11 @@ services:
         condition: service_healthy
       sandbox_base:
         condition: service_completed_successfully
+    # Injects OPENAI_API_KEY, SERPER_API_KEY, etc. from the same folder as docker-compose.yml
+    # (copy .env.example to .env). Optional so compose still runs if you only use backend/.env.
+    env_file:
+      - path: .env
+        required: false
     environment:
       - DATABASE_URL=${DATABASE_URL:-mysql+pymysql://user:password@main_db/scale_db}
       - SQLI_DATABASE_URL=${SQLI_DATABASE_URL:-mysql+pymysql://user:password@challenge_db_sqli/testdb}
@@ -56,6 +61,7 @@ services:
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-600}
       - ENABLE_BROKEN_AUTH_CHALLENGE=${ENABLE_BROKEN_AUTH_CHALLENGE:-true}
       - SANDBOX_MAX_CODE_CHARS=${SANDBOX_MAX_CODE_CHARS:-200000}
+      - AI_SERVICE_URL=${AI_SERVICE_URL:-http://ai_service:8001}
     command: ["sh", "-c", "python seed_db.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
 
   # 3. FRONTEND

@@ -1,13 +1,13 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 type ScanData = {
   projectId: string;
   project_id?: string;
-  results: any;
-  overview: any;
-  summary: any;
-  findings: any[];
-  debug: any;
+  results?: any;
+  overview?: any;
+  summary?: any;
+  findings?: any[];
+  debug?: any;
 } | null;
 
 type ScanContextType = {
@@ -16,16 +16,20 @@ type ScanContextType = {
   clearScanData: () => void;
 };
 
-const STORAGE_KEY = 'scale.scanData';
+const getUserScopedKey = () => {
+  const userId = sessionStorage.getItem('user_id');
+  return userId ? `scale.scanData.${userId}` : 'scale.scanData.guest';
+};
 
 const ScanContext = createContext<ScanContextType | undefined>(undefined);
 
 export const ScanProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [scanData, setScanDataState] = useState<ScanData>(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(getUserScopedKey());
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as ScanData;
+      const parsed = JSON.parse(raw) as ScanData | null;
+      if (!parsed) return null;
       return {
         ...parsed,
         projectId: parsed.projectId || parsed.project_id || '',
@@ -34,6 +38,31 @@ export const ScanProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return null;
     }
   });
+
+  useEffect(() => {
+    const onUserChange = () => {
+      try {
+        const raw = localStorage.getItem(getUserScopedKey());
+        if (!raw) {
+          setScanDataState(null);
+          return;
+        }
+        const parsed = JSON.parse(raw) as ScanData | null;
+        if (!parsed) {
+          setScanDataState(null);
+          return;
+        }
+        setScanDataState({
+          ...parsed,
+          projectId: parsed.projectId || parsed.project_id || '',
+        });
+      } catch {
+        setScanDataState(null);
+      }
+    };
+    window.addEventListener('scale-user-changed', onUserChange);
+    return () => window.removeEventListener('scale-user-changed', onUserChange);
+  }, []);
 
   const setScanData = (data: ScanData) => {
     const normalized = data
@@ -45,8 +74,9 @@ export const ScanProvider: React.FC<{ children: React.ReactNode }> = ({ children
       : null;
     setScanDataState(normalized);
     try {
-      if (normalized) localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-      else localStorage.removeItem(STORAGE_KEY);
+      const key = getUserScopedKey();
+      if (normalized) localStorage.setItem(key, JSON.stringify(normalized));
+      else localStorage.removeItem(key);
     } catch {
       // ignore storage failures
     }
@@ -73,4 +103,3 @@ export const useScanContext = () => {
   }
   return ctx;
 };
-

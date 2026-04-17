@@ -47,7 +47,12 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
     } catch {
       // ignore logout transport errors and clear local session anyway
     } finally {
-      sessionStorage.clear(); // Clears only this tab
+      const userId = sessionStorage.getItem('user_id');
+      if (userId) {
+        localStorage.removeItem(`scale.scanData.${userId}`);
+      }
+      sessionStorage.clear();
+      window.dispatchEvent(new Event('scale-user-changed'));
       navigate('/login');
     }
   };
@@ -90,6 +95,10 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
               <NavLink to="/challenges" style={({ isActive }) => (isActive ? activeLinkStyle : undefined)} className={linkStyle}>
                 <FaShieldAlt className="text-lg" />
                 {!collapsed && <span className="font-medium">Labs & Attacks</span>}
+              </NavLink>
+              <NavLink to="/redblue/my-games" style={({ isActive }) => (isActive ? activeLinkStyle : undefined)} className={linkStyle}>
+                <FaShieldAlt className="text-lg" />
+                {!collapsed && <span className="font-medium">My Games</span>}
               </NavLink>
               <NavLink to="/scanner" style={({ isActive }) => (isActive ? activeLinkStyle : undefined)} className={linkStyle}>
                 <FaShieldAlt className="text-lg" />
@@ -141,6 +150,10 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
               <NavLink to="/instructor/quiz" style={({ isActive }) => (isActive ? activeLinkStyle : undefined)} className={linkStyle}>
                 <FaChalkboardTeacher className="text-lg" />
                 {!collapsed && <span className="font-medium">Quiz Manager</span>}
+              </NavLink>
+              <NavLink to="/redblue/create" style={({ isActive }) => (isActive ? activeLinkStyle : undefined)} className={linkStyle}>
+                <FaShieldAlt className="text-lg" />
+                {!collapsed && <span className="font-medium">Red vs Blue</span>}
               </NavLink>
             </>
           )}

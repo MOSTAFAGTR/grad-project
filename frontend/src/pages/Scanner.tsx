@@ -25,6 +25,9 @@ interface MentorResponse {
   secure_code_example: string;
   critique: string;
   confidence: 'Low' | 'Medium' | 'High';
+  fallback?: boolean;
+  ai_available?: boolean;
+  response?: string;
 }
 
 interface ProjectOverview {
@@ -34,6 +37,188 @@ interface ProjectOverview {
   files_summary: Array<{ path: string; language: string; size: number }>;
   risk_indicators: string[];
   ai_summary?: string | null;
+}
+
+const SEVERITY_ORDER: Record<string, number> = {
+  Critical: 0,
+  High: 1,
+  Medium: 2,
+  Low: 3,
+  Unknown: 4,
+};
+
+function DependenciesPanel({
+  depData,
+  depLoading,
+  depError,
+  depSeverityFilter,
+  setDepSeverityFilter,
+}: {
+  depData: any;
+  depLoading: boolean;
+  depError: string;
+  depSeverityFilter: string;
+  setDepSeverityFilter: (v: string) => void;
+}) {
+  if (depLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="animate-spin rounded-full h-10 w-10 border-2 border-teal-500 border-t-transparent" />
+      </div>
+    );
+  }
+  if (depError) {
+    return <div className="text-red-400 text-sm">{depError}</div>;
+  }
+  const vulns: any[] = depData?.dependency_vulns || [];
+  const manifests: string[] = depData?.manifests_scanned || [];
+  const totalV = depData?.total_dependency_vulns ?? 0;
+
+  if (totalV === 0 && manifests.length === 0) {
+    return (
+      <p className="text-gray-400 text-sm">
+        No dependency manifest files found in this project. Upload a project containing package.json or requirements.txt
+        to enable dependency scanning.
+      </p>
+    );
+  }
+
+  const filtered =
+    depSeverityFilter === 'all'
+      ? vulns
+      : vulns.filter((v) => (v.severity || '').toLowerCase() === depSeverityFilter.toLowerCase());
+  const sorted = [...filtered].sort(
+    (a, b) =>
+      (SEVERITY_ORDER[a.severity as keyof typeof SEVERITY_ORDER] ?? 99) -
+      (SEVERITY_ORDER[b.severity as keyof typeof SEVERITY_ORDER] ?? 99),
+  );
+
+  const hasCritHigh = vulns.some((v) => v.severity === 'Critical' || v.severity === 'High');
+  const mediumOnly =
+    vulns.length > 0 && vulns.every((v) => v.severity === 'Medium' || v.severity === 'Unknown' || v.severity === 'Low');
+
+  if (manifests.length > 0 && totalV === 0) {
+    return (
+      <div className="space-y-4">
+        <div className="p-3 rounded border border-green-700 bg-green-900/30 text-green-200 text-sm">
+          No known vulnerabilities found across {manifests.length} manifest file{manifests.length === 1 ? '' : 's'}.
+        </div>
+        <table className="w-full text-xs border border-gray-700 rounded">
+          <tbody>
+            {manifests.map((m) => (
+              <tr key={m} className="border-t border-gray-700">
+                <td className="p-2 font-mono text-gray-300 break-all">{m}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div
+        className={`p-3 rounded border text-sm ${
+          hasCritHigh ? 'border-red-700 bg-red-900/30 text-red-100' : mediumOnly ? 'border-amber-600 bg-amber-900/30 text-amber-100' : 'border-gray-600 bg-gray-800/60 text-gray-200'
+        }`}
+      >
+        {totalV} vulnerable dependenc{totalV === 1 ? 'y' : 'ies'} found across {manifests.length} manifest file
+        {manifests.length === 1 ? '' : 's'}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="text-xs text-gray-400">Severity</label>
+        <select
+          className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
+          value={depSeverityFilter}
+          onChange={(e) => setDepSeverityFilter(e.target.value)}
+        >
+          <option value="all">All severities</option>
+          <option value="Critical">Critical</option>
+          <option value="High">High</option>
+          <option value="Medium">Medium</option>
+          <option value="Low">Low</option>
+        </select>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-xs text-left border border-gray-700 rounded">
+          <thead className="bg-gray-800 text-gray-300">
+            <tr>
+              <th className="p-2">Package</th>
+              <th className="p-2">Version</th>
+              <th className="p-2">Ecosystem</th>
+              <th className="p-2">CVE</th>
+              <th className="p-2">Severity</th>
+              <th className="p-2">Description</th>
+              <th className="p-2">Fixed In</th>
+              <th className="p-2">Advisory</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((row, idx) => {
+              const eco = row.ecosystem || '';
+              const ecoClass =
+                eco === 'npm'
+                  ? 'bg-blue-900/50 text-blue-200 border-blue-700'
+                  : eco === 'PyPI'
+                    ? 'bg-yellow-900/50 text-yellow-100 border-yellow-700'
+                    : eco === 'Maven'
+                      ? 'bg-orange-900/50 text-orange-100 border-orange-700'
+                      : eco === 'Packagist'
+                        ? 'bg-purple-900/50 text-purple-100 border-purple-700'
+                        : 'bg-gray-800 text-gray-300 border-gray-600';
+              const sev = row.severity || 'Unknown';
+              const sevClass =
+                sev === 'Critical'
+                  ? 'bg-red-900/60 text-red-100'
+                  : sev === 'High'
+                    ? 'bg-orange-900/60 text-orange-100'
+                    : sev === 'Medium'
+                      ? 'bg-amber-900/60 text-amber-100'
+                      : 'bg-gray-700 text-gray-200';
+              const desc = String(row.description || '');
+              const fix = row.fixed_in || '';
+              return (
+                <tr key={`${row.package}-${row.version}-${idx}`} className="border-t border-gray-700">
+                  <td className="p-2 font-mono">{row.package}</td>
+                  <td className="p-2 font-mono">{row.version}</td>
+                  <td className="p-2">
+                    <span className={`px-2 py-0.5 rounded border text-[10px] ${ecoClass}`}>{eco}</span>
+                  </td>
+                  <td className="p-2 font-mono text-[10px]">{row.cve_id || '—'}</td>
+                  <td className="p-2">
+                    <span className={`px-2 py-0.5 rounded text-[10px] ${sevClass}`}>{sev}</span>
+                  </td>
+                  <td className="p-2 max-w-xs text-gray-300" title={desc}>
+                    {desc.length > 80 ? `${desc.slice(0, 80)}…` : desc}
+                  </td>
+                  <td className={`p-2 ${fix ? 'text-green-400' : 'text-red-400'}`}>{fix || 'No fix available'}</td>
+                  <td className="p-2">
+                    <a href={row.osv_url} target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">
+                      View →
+                    </a>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <details className="group">
+        <summary className="cursor-pointer text-sm text-gray-400 list-none [&::-webkit-details-marker]:hidden">
+          Manifests scanned ({manifests.length} files)
+        </summary>
+        <ul className="mt-2 text-xs font-mono text-gray-500 list-disc pl-5 space-y-1">
+          {manifests.map((m) => (
+            <li key={m}>{m}</li>
+          ))}
+        </ul>
+      </details>
+    </div>
+  );
 }
 
 const Scanner: React.FC = () => {
@@ -54,6 +239,13 @@ const Scanner: React.FC = () => {
   const [mentorEditedCode, setMentorEditedCode] = useState('');
   const [mentorCache, setMentorCache] = useState<Record<string, MentorResponse>>({});
   const [mentorTarget, setMentorTarget] = useState<Finding | null>(null);
+  const [resultTab, setResultTab] = useState<'findings' | 'dependencies'>('findings');
+  const [depData, setDepData] = useState<any>(null);
+  const [depLoading, setDepLoading] = useState(false);
+  const [depError, setDepError] = useState('');
+  const [depSeverityFilter, setDepSeverityFilter] = useState<string>('all');
+  const [depRefreshTick, setDepRefreshTick] = useState(0);
+  const [mentorNoAiNote, setMentorNoAiNote] = useState('');
 
   useEffect(() => {
     if (!scanData) return;
@@ -77,6 +269,27 @@ const Scanner: React.FC = () => {
       });
     return () => controller.abort();
   }, [projectId, scanResults]);
+
+  useEffect(() => {
+    if (resultTab !== 'dependencies' || !projectId) return;
+    let cancelled = false;
+    setDepLoading(true);
+    setDepError('');
+    api
+      .get(`/api/project/${encodeURIComponent(projectId)}/dependencies`)
+      .then((res) => {
+        if (!cancelled) setDepData(res.data || {});
+      })
+      .catch((err: any) => {
+        if (!cancelled) setDepError(err?.response?.data?.detail || err.message || 'Failed to load');
+      })
+      .finally(() => {
+        if (!cancelled) setDepLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [resultTab, projectId, depRefreshTick]);
 
   const findings = scanResults?.findings || [];
   const severitySummary = findings.reduce(
@@ -219,6 +432,7 @@ const Scanner: React.FC = () => {
     setMentorTarget(finding);
     setMentorEditedCode(code);
     setMentorError('');
+    setMentorNoAiNote('');
 
     if (mentorCache[key]) {
       setMentorData(mentorCache[key]);
@@ -235,9 +449,14 @@ const Scanner: React.FC = () => {
           file: finding.file,
           line: finding.line || 0,
       });
-      const data: MentorResponse = response.data;
-      setMentorData(data);
-      setMentorCache((prev) => ({ ...prev, [key]: data }));
+      const data = response.data as MentorResponse;
+      if (data.fallback) {
+        setMentorData(null);
+        setMentorNoAiNote(data.response || 'AI mentor is not configured.');
+      } else {
+        setMentorData(data);
+        setMentorCache((prev) => ({ ...prev, [key]: data }));
+      }
     } catch (err: any) {
       setMentorError(err.message || 'AI mentor request failed');
       setMentorData(null);
@@ -319,6 +538,44 @@ const Scanner: React.FC = () => {
           {scanResults && (
             <div className="mt-8">
               <h2 className="text-xl font-bold mb-2">Scan Results</h2>
+              <div className="flex gap-2 mb-4">
+                <button
+                  type="button"
+                  onClick={() => setResultTab('findings')}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+                    resultTab === 'findings' ? 'bg-teal-600 text-white' : 'bg-gray-700 text-gray-300'
+                  }`}
+                >
+                  Findings
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setResultTab('dependencies')}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+                    resultTab === 'dependencies' ? 'bg-teal-600 text-white' : 'bg-gray-700 text-gray-300'
+                  }`}
+                >
+                  Dependencies
+                </button>
+              </div>
+
+              {resultTab === 'dependencies' && (
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <p className="text-sm text-gray-400">
+                    Dependency scan runs in background. Results may take up to 30 seconds after the main scan completes.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setDepRefreshTick((t) => t + 1)}
+                    className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-gray-700 hover:bg-gray-600 text-white shrink-0"
+                  >
+                    Refresh
+                  </button>
+                </div>
+              )}
+
+              {resultTab === 'findings' && (
+                <>
               <p className="text-sm text-gray-300">
                 Total Vulnerabilities:{' '}
                 <span className="font-semibold">
@@ -443,6 +700,18 @@ const Scanner: React.FC = () => {
                   </p>
                 </div>
               )}
+                </>
+              )}
+
+              {resultTab === 'dependencies' && (
+                <DependenciesPanel
+                  depData={depData}
+                  depLoading={depLoading}
+                  depError={depError}
+                  depSeverityFilter={depSeverityFilter}
+                  setDepSeverityFilter={setDepSeverityFilter}
+                />
+              )}
             </div>
           )}
 
@@ -523,6 +792,12 @@ const Scanner: React.FC = () => {
             {mentorError && (
               <div className="mb-4 p-3 rounded border border-red-700 bg-red-900/30 text-red-200 text-sm">
                 {mentorError}
+              </div>
+            )}
+
+            {mentorNoAiNote && (
+              <div className="mb-4 p-3 rounded border border-amber-700 bg-amber-900/30 text-amber-100 text-sm">
+                {mentorNoAiNote}
               </div>
             )}
 

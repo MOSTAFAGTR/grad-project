@@ -1,15 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
+import os
 import random
 from sqlalchemy.orm import Session
 
 from .. import models
 from .auth import require_role
 from ..db.database import get_db
+from ..ai.serper_helpers import serper_configured
 
 
 router = APIRouter()
+
+
+def _openai_key() -> str:
+    return (os.getenv("OPENAI_API_KEY", "") or "").strip()
 
 
 class ScanFinding(BaseModel):
@@ -196,12 +202,18 @@ def generate_quiz_from_scan(
         if not q.get("explanation"):
             q["explanation"] = "Review the vulnerable pattern and apply secure coding controls."
 
-    return {
+    out: dict = {
         "total": len(questions),
         "questions": questions,
         "difficulty": difficulty,
         "category": req.category,
+        "ai_available": bool(_openai_key()) or serper_configured(),
     }
+    if _openai_key():
+        out["ai_note"] = "AI-enhanced explanations are active for this adaptive quiz."
+    elif serper_configured():
+        out["ai_note"] = "Web search (Serper) context is available for this adaptive quiz."
+    return out
 
 
 @router.get("/manage")

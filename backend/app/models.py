@@ -177,6 +177,7 @@ class Team(Base):
     name = Column(String(255), nullable=False)
     type = Column(String(10), nullable=False)  # 'red' or 'blue'
     created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     members = relationship("TeamMember", back_populates="team")
 
@@ -201,8 +202,11 @@ class GameChallenge(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(String(100), nullable=False)
-    status = Column(String(20), default="active")  # active / completed
+    status = Column(String(20), default="active")  # active / inactive / completed
     created_at = Column(DateTime, default=datetime.utcnow)
+    # SCALE lab challenge number (1–10) for instructor-led red vs blue sessions.
+    lab_challenge_id = Column(Integer, nullable=True)
+    started_at = Column(DateTime, nullable=True)
 
     red_team_id = Column(Integer, ForeignKey("teams.id"))
     blue_team_id = Column(Integer, ForeignKey("teams.id"))
@@ -233,10 +237,14 @@ class RedTeamAction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     challenge_id = Column(Integer, ForeignKey("game_challenges.id"), nullable=False)
-    vulnerability_id = Column(Integer, ForeignKey("challenge_vulnerabilities.id"), nullable=False)
+    vulnerability_id = Column(Integer, ForeignKey("challenge_vulnerabilities.id"), nullable=True)
     exploit_attempted = Column(Boolean, default=True)
     success = Column(Boolean, default=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    payload_used = Column(Text, nullable=True)
+    impact_description = Column(Text, nullable=True)
+    status = Column(String(20), nullable=True, default="confirmed")
 
 
 class BlueTeamFix(Base):
@@ -244,9 +252,11 @@ class BlueTeamFix(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     challenge_id = Column(Integer, ForeignKey("game_challenges.id"), nullable=False)
-    vulnerability_id = Column(Integer, ForeignKey("challenge_vulnerabilities.id"), nullable=False)
+    vulnerability_id = Column(Integer, ForeignKey("challenge_vulnerabilities.id"), nullable=True)
     fixed = Column(Boolean, default=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    submitted_code = Column(Text, nullable=True)
 
 
 # --- PER-CHALLENGE STATE TRACKING ---

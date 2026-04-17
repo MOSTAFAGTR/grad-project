@@ -1,3 +1,7 @@
+from app.env_bootstrap import load_env
+
+load_env()
+
 from app.db.database import SessionLocal, engine
 from app import models
 from sqlalchemy.orm import Session

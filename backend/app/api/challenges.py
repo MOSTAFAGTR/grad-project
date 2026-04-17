@@ -21,7 +21,7 @@ from ..security.security_logger import (
     detect_attack_severity,
     log_security_event,
 )
-from ..security.learning_tracker import recalculate_learning_progress
+from ..security.learning_tracker import LEGACY_CHALLENGE_IDS, recalculate_learning_progress
 from ..schemas import (
     LoginAttempt, CodeSubmission, CommentCreate,
     CommentResponse, ProgressResponse, CSRFAccountResponse,
@@ -784,6 +784,54 @@ def mark_challenge_complete(db: Session, user_id: int, challenge_name: str):
 def get_my_progress(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return db.query(UserProgress).filter(UserProgress.user_id == current_user.id).all()
 
+
+def _progress_challenge_variants(slug: str) -> set[str]:
+    s = (slug or "").strip().lower()
+    variants = {s}
+    for legacy_num, canon in LEGACY_CHALLENGE_IDS.items():
+        if canon == s:
+            variants.add(legacy_num)
+    return variants
+
+
+@router.delete("/progress/{challenge_slug}")
+def delete_challenge_progress(
+    challenge_slug: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    variants = _progress_challenge_variants(challenge_slug)
+    found = (
+        db.query(UserProgress)
+        .filter(UserProgress.user_id == current_user.id, UserProgress.challenge_id.in_(variants))
+        .first()
+    )
+    if not found:
+        raise HTTPException(status_code=404, detail="No progress record found for this challenge.")
+    db.query(UserProgress).filter(
+        UserProgress.user_id == current_user.id,
+        UserProgress.challenge_id.in_(variants),
+    ).delete(synchronize_session=False)
+    db.query(ChallengeState).filter(
+        ChallengeState.user_id == current_user.id,
+        ChallengeState.challenge_id.in_(variants),
+    ).delete(synchronize_session=False)
+    db.commit()
+    recalculate_learning_progress(db, current_user.id)
+    log_security_event(
+        db=db,
+        event_type="CHALLENGE_PROGRESS_DELETED",
+        severity=SecuritySeverity.LOW,
+        payload={"challenge_slug": challenge_slug},
+        request=request,
+        user_id=current_user.id,
+        metadata={"challenge_slug": challenge_slug},
+        context_type="challenge",
+    )
+    return {"message": "Challenge progress deleted.", "challenge_id": challenge_slug}
+
+
 @router.post("/mark-attack-complete")
 def mark_attack_complete(
     challenge_type: str = Query(..., description="Challenge type: sql-injection, xss, csrf, command-injection, redirect"),
@@ -890,6 +938,102 @@ _HINTS: dict[str, list[dict[str, object]]] = {
         {"level": 3, "text": "Fix by hashing before storing credentials.", "penalty": 10},
     ],
 }
+
+
+ATTACK_REPLAYS: dict[str, list[dict[str, object]]] = {
+    "sql-injection": [
+        {"step": 1, "type": "user_action", "title": "Open login page", "description": "Student navigates to the SQL Injection challenge login form.", "data": None},
+        {"step": 2, "type": "user_input", "title": "Enter malicious payload", "description": "Student types a SQL injection payload into the username field.", "data": "' OR 1=1 --"},
+        {"step": 3, "type": "http_request", "title": "Request sent to server", "description": "Browser sends a POST request to the vulnerable login endpoint.", "data": 'POST /api/challenges/sqli/login\nContent-Type: application/json\n\n{"username": "\' OR 1=1 --", "password": "anything"}'},
+        {"step": 4, "type": "server_processing", "title": "Vulnerable query assembled", "description": "The server builds a SQL query using string interpolation, injecting the payload directly.", "data": "SELECT * FROM users WHERE username = '' OR 1=1 --' AND password = 'anything'"},
+        {"step": 5, "type": "server_processing", "title": "Database returns all rows", "description": "The OR 1=1 condition is always true. The -- comments out the password check. All user rows are returned.", "data": "Result: 5 rows returned\n[{id:1, username:'admin', role:'admin'}, ...]"},
+        {"step": 6, "type": "http_response", "title": "Server grants admin access", "description": "The server returns the first row's session token, granting admin access without a valid password.", "data": '{"success": true, "message": "Logged in as admin", "token": "eyJ..."}'},
+    ],
+    "xss": [
+        {"step": 1, "type": "user_action", "title": "Open comment section", "description": "Student navigates to the XSS challenge page with a comment input field.", "data": None},
+        {"step": 2, "type": "user_input", "title": "Submit script payload", "description": "Student types a script tag as a comment.", "data": "<script>alert(document.cookie)</script>"},
+        {"step": 3, "type": "http_request", "title": "Comment stored in database", "description": "The comment is saved without sanitization.", "data": 'POST /api/challenges/xss/comments\n\n{"content": "<script>alert(document.cookie)</script>"}'},
+        {"step": 4, "type": "server_processing", "title": "Page renders unsanitized comment", "description": "The server returns the raw comment HTML. The browser parses it as a script tag.", "data": 'innerHTML = "<script>alert(document.cookie)</script>"'},
+        {"step": 5, "type": "http_response", "title": "Script executes in victim browser", "description": "The injected script runs with the victim's session context and can steal cookies.", "data": "alert() fires → cookie value: session_id=abc123xyz"},
+    ],
+    "csrf": [
+        {"step": 1, "type": "user_action", "title": "Victim visits malicious page", "description": "A logged-in user visits an attacker-controlled page while their session is active.", "data": None},
+        {"step": 2, "type": "server_processing", "title": "Hidden form auto-submits", "description": "The malicious page contains a hidden form that auto-submits on load.", "data": "<form action='http://bank/transfer' method='POST'>\n  <input name='amount' value='9999'>\n  <input name='to' value='attacker'>\n</form>\n<script>document.forms[0].submit()</script>"},
+        {"step": 3, "type": "http_request", "title": "Browser sends request with victim cookies", "description": "The browser automatically attaches the victim's session cookie to the cross-origin request.", "data": 'POST /api/challenges/csrf/transfer\nCookie: session=victim_token\n\n{"amount": 9999, "to_user": "attacker"}'},
+        {"step": 4, "type": "server_processing", "title": "Server accepts request — no token check", "description": "The server sees a valid session cookie and processes the transfer without verifying origin.", "data": "UPDATE accounts SET balance = balance - 9999 WHERE user = 'victim'"},
+        {"step": 5, "type": "http_response", "title": "Transfer completes silently", "description": "Funds transferred. Victim never clicked anything on the real site.", "data": '{"success": true, "transferred": 9999}'},
+    ],
+    "command-injection": [
+        {"step": 1, "type": "user_action", "title": "Open ping tool", "description": "Student opens the command injection challenge which has a ping input field.", "data": None},
+        {"step": 2, "type": "user_input", "title": "Inject shell command", "description": "Student appends a shell command after a semicolon in the host field.", "data": "127.0.0.1; cat /etc/passwd"},
+        {"step": 3, "type": "http_request", "title": "Request sent to backend", "description": "The input is sent directly to the backend without sanitization.", "data": 'POST /api/calc\n\n{"host": "127.0.0.1; cat /etc/passwd"}'},
+        {"step": 4, "type": "server_processing", "title": "Shell interprets injected command", "description": "subprocess.run with shell=True passes the full string to /bin/sh. The semicolon starts a new command.", "data": 'sh -c "ping -c 1 127.0.0.1; cat /etc/passwd"'},
+        {"step": 5, "type": "http_response", "title": "Server returns /etc/passwd contents", "description": "The injected command output is returned alongside the ping result.", "data": "root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:..."},
+    ],
+    "broken-auth": [
+        {"step": 1, "type": "user_action", "title": "Open login page", "description": "Student opens the broken authentication challenge login.", "data": None},
+        {"step": 2, "type": "user_input", "title": "Enter admin credentials", "description": "Student enters known or guessed admin credentials.", "data": "username: admin\npassword: admin123"},
+        {"step": 3, "type": "http_request", "title": "Login request sent", "description": "Credentials sent to the broken-auth endpoint.", "data": 'POST /api/auth/login?challenge=broken_auth\n\n{"username": "admin", "password": "admin123"}'},
+        {"step": 4, "type": "server_processing", "title": "Plaintext password compared", "description": "The server compares passwords in plaintext — no hashing. Credential dump from DB reveals all passwords.", "data": "SELECT password FROM users WHERE username='admin'\nResult: 'admin123' (plaintext match)"},
+        {"step": 5, "type": "http_response", "title": "Admin session granted", "description": "Login succeeds. JWT token issued with admin role.", "data": '{"access_token": "eyJ...", "role": "admin"}'},
+    ],
+    "directory-traversal": [
+        {"step": 1, "type": "user_action", "title": "Open file viewer", "description": "Student opens the directory traversal challenge file viewer.", "data": None},
+        {"step": 2, "type": "user_input", "title": "Enter traversal payload", "description": "Student uses ../ sequences to escape the intended directory.", "data": "../../../../etc/passwd"},
+        {"step": 3, "type": "http_request", "title": "Request sent with traversal path", "description": "The path is sent unvalidated to the file read endpoint.", "data": "GET /api/challenges/directory-traversal/file?path=../../../../etc/passwd"},
+        {"step": 4, "type": "server_processing", "title": "Server resolves path outside root", "description": "open() follows the ../ sequences and resolves to /etc/passwd.", "data": "resolved path: /etc/passwd\nopen('/etc/passwd', 'r')"},
+        {"step": 5, "type": "http_response", "title": "Sensitive file returned", "description": "The server returns the contents of /etc/passwd to the student.", "data": "root:x:0:0:root:/root:/bin/bash\n..."},
+    ],
+    "xxe": [
+        {"step": 1, "type": "user_action", "title": "Open XML upload form", "description": "Student opens the XXE challenge XML processor.", "data": None},
+        {"step": 2, "type": "user_input", "title": "Craft malicious XML", "description": "Student creates XML with an external entity pointing to a sensitive file.", "data": "<?xml version='1.0'?>\n<!DOCTYPE foo [\n  <!ENTITY xxe SYSTEM 'file:///etc/passwd'>\n]>\n<user><name>&xxe;</name></user>"},
+        {"step": 3, "type": "http_request", "title": "XML submitted to parser", "description": "The malicious XML is sent to the backend XML parsing endpoint.", "data": "POST /api/challenges/xxe/parse\nContent-Type: application/xml"},
+        {"step": 4, "type": "server_processing", "title": "Parser resolves external entity", "description": "The XML parser with resolve_entities=True reads the file referenced in the DOCTYPE.", "data": "&xxe; → reads /etc/passwd → inlines content into XML tree"},
+        {"step": 5, "type": "http_response", "title": "File contents in response", "description": "The parsed XML response contains the file contents where &xxe; was referenced.", "data": "<user><name>root:x:0:0:root:/root:/bin/bash\n...</name></user>"},
+    ],
+    "insecure-storage": [
+        {"step": 1, "type": "user_action", "title": "Register and store data", "description": "Student registers an account in the insecure storage challenge.", "data": None},
+        {"step": 2, "type": "server_processing", "title": "Data stored in memory only", "description": "The challenge app stores user data in a Python dict, not a database.", "data": "users_store = {}\nusers_store['victim'] = {'password': 'secret123'}"},
+        {"step": 3, "type": "user_action", "title": "Exploit: direct memory access", "description": "Because storage is in-memory, any server restart wipes all data. An attacker can also enumerate keys.", "data": "GET /api/challenges/insecure-storage/users"},
+        {"step": 4, "type": "http_response", "title": "All user data exposed", "description": "The endpoint returns all keys in the in-memory store without auth.", "data": '{"users": {"victim": {"password": "secret123"}}}'},
+    ],
+    "security-misc": [
+        {"step": 1, "type": "user_action", "title": "Probe debug endpoint", "description": "Student discovers a misconfigured admin endpoint exposed without authentication.", "data": None},
+        {"step": 2, "type": "http_request", "title": "Access admin config endpoint", "description": "Student sends a request to the misconfigured endpoint.", "data": "GET /api/admin/config"},
+        {"step": 3, "type": "server_processing", "title": "No auth check performed", "description": "The endpoint skips authentication and returns sensitive server configuration.", "data": 'return {"db_url": DB_URL, "secret_key": SECRET_KEY, "debug": True}'},
+        {"step": 4, "type": "http_response", "title": "Sensitive config exposed", "description": "Secret keys and database URLs returned to unauthenticated attacker.", "data": '{"db_url": "mysql://root:pass@db/main", "secret_key": "hardcoded_secret"}'},
+    ],
+    "redirect": [
+        {"step": 1, "type": "user_action", "title": "Craft malicious redirect URL", "description": "Student crafts a URL using the application's redirect parameter pointing to an external site.", "data": None},
+        {"step": 2, "type": "http_request", "title": "Send redirect request", "description": "The crafted URL is sent to the redirect endpoint.", "data": "GET /api/challenges/redirect?url=https://evil.com"},
+        {"step": 3, "type": "server_processing", "title": "No URL validation performed", "description": "The server takes the url parameter and redirects without checking if it is an allowed domain.", "data": "return RedirectResponse(url=request.query_params['url'])"},
+        {"step": 4, "type": "http_response", "title": "Victim redirected to attacker site", "description": "User is sent to the external attacker-controlled URL, enabling phishing.", "data": "HTTP 302 Location: https://evil.com"},
+    ],
+}
+
+
+@router.get("/replay/{challenge_slug}")
+def get_attack_replay(
+    challenge_slug: str,
+    sample: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    steps = ATTACK_REPLAYS.get(challenge_slug)
+    if not steps:
+        raise HTTPException(status_code=404, detail="No replay available for this challenge.")
+    if not sample:
+        done = (
+            db.query(UserProgress)
+            .filter(UserProgress.user_id == current_user.id, UserProgress.challenge_id == challenge_slug)
+            .first()
+        )
+        if not done:
+            raise HTTPException(
+                status_code=403,
+                detail="Complete the attack first to unlock the replay. Pass ?sample=true for a hint replay.",
+            )
+    return {"challenge_slug": challenge_slug, "steps": steps, "total_steps": len(steps)}
 
 
 @router.get("/hints", response_model=list[HintEntry])

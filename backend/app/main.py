@@ -1,13 +1,18 @@
+from .env_bootstrap import load_env
+
+load_env()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import OperationalError
 from sqlalchemy import inspect, text
 import time
 import logging
+import os
 
 # --- IMPORT ROUTERS ---
 # We added 'stats', 'projects', 'game_challenge', and 'misconfig' to this import list
-from .api import auth, quizzes, challenges, stats, messages, projects, game_challenge, misconfig, ai_mentor, attack_simulator, project_analyzer, security_logs, quiz_dynamic, instructor, report
+from .api import auth, quizzes, challenges, stats, messages, projects, game_challenge, misconfig, ai_mentor, attack_simulator, project_analyzer, security_logs, quiz_dynamic, instructor, report, red_blue
 from .db import database
 from . import models 
 
@@ -57,6 +62,7 @@ app.include_router(security_logs.router, prefix="/api/security", tags=["security
 app.include_router(quiz_dynamic.router, prefix="/api/quiz", tags=["quiz_dynamic"])
 app.include_router(instructor.router, prefix="/api/instructor", tags=["instructor"])
 app.include_router(report.router)
+app.include_router(red_blue.router, prefix="/api/redblue", tags=["redblue"])
 
 
 def _ensure_runtime_schema():
@@ -93,11 +99,66 @@ def _ensure_runtime_schema():
                         continue
                     conn.execute(text(f"ALTER TABLE user_learning_progress ADD COLUMN {column_name} {ddl}"))
                     logger.warning("Applied runtime schema patch: user_learning_progress.%s", column_name)
+
+            tables = set(inspector.get_table_names())
+            if "teams" in tables:
+                tcols = {c["name"] for c in inspector.get_columns("teams")}
+                if "created_by" not in tcols:
+                    conn.execute(text("ALTER TABLE teams ADD COLUMN created_by INT NULL"))
+                    logger.warning("Applied runtime schema patch: teams.created_by")
+            if "game_challenges" in tables:
+                gc_cols = {c["name"] for c in inspector.get_columns("game_challenges")}
+                if "lab_challenge_id" not in gc_cols:
+                    conn.execute(text("ALTER TABLE game_challenges ADD COLUMN lab_challenge_id INT NULL"))
+                    logger.warning("Applied runtime schema patch: game_challenges.lab_challenge_id")
+                if "started_at" not in gc_cols:
+                    conn.execute(text("ALTER TABLE game_challenges ADD COLUMN started_at DATETIME NULL"))
+                    logger.warning("Applied runtime schema patch: game_challenges.started_at")
+            if "red_team_actions" in tables:
+                rcols = {c["name"] for c in inspector.get_columns("red_team_actions")}
+                for col, ddl in (
+                    ("user_id", "INT NULL"),
+                    ("payload_used", "TEXT NULL"),
+                    ("impact_description", "TEXT NULL"),
+                    ("status", "VARCHAR(20) NULL DEFAULT 'confirmed'"),
+                ):
+                    if col not in rcols:
+                        conn.execute(text(f"ALTER TABLE red_team_actions ADD COLUMN {col} {ddl}"))
+                        logger.warning("Applied runtime schema patch: red_team_actions.%s", col)
+                try:
+                    conn.execute(text("ALTER TABLE red_team_actions MODIFY COLUMN vulnerability_id INT NULL"))
+                except Exception:
+                    pass
+            if "blue_team_fixes" in tables:
+                bcols = {c["name"] for c in inspector.get_columns("blue_team_fixes")}
+                for col, ddl in (("user_id", "INT NULL"), ("submitted_code", "TEXT NULL")):
+                    if col not in bcols:
+                        conn.execute(text(f"ALTER TABLE blue_team_fixes ADD COLUMN {col} {ddl}"))
+                        logger.warning("Applied runtime schema patch: blue_team_fixes.%s", col)
+                try:
+                    conn.execute(text("ALTER TABLE blue_team_fixes MODIFY COLUMN vulnerability_id INT NULL"))
+                except Exception:
+                    pass
     except Exception as exc:
         # Logging subsystem must not block API startup if migration is partially unsupported.
         logger.warning("Runtime schema self-heal skipped: %s", exc)
 
 # --- DATABASE CONNECTION RETRY ---
+@app.on_event("startup")
+async def log_ai_status():
+    oa = (os.getenv("OPENAI_API_KEY", "") or "").strip()
+    sp = (os.getenv("SERPER_API_KEY", "") or "").strip()
+    if oa:
+        logger.info("AI features: OpenAI ENABLED (OPENAI_API_KEY set)")
+    if sp:
+        logger.info("AI features: Serper web search ENABLED (SERPER_API_KEY set)")
+    if not oa and not sp:
+        logger.warning(
+            "AI features: DISABLED (set OPENAI_API_KEY and/or SERPER_API_KEY in .env). "
+            "Serper.dev provides Google search-backed hints without an LLM."
+        )
+
+
 @app.on_event("startup")
 def startup_event():
     logger.info("Waiting for Database...")

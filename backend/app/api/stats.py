@@ -4,9 +4,9 @@ from sqlalchemy import func
 from .. import models
 from ..db.database import get_db
 from .auth import require_role, get_current_user
-from ..security.security_logger import SecurityEventType
 from ..security.learning_tracker import (
     build_learning_progress_payload,
+    build_challenge_progress_detail,
     compute_skills_scores,
     SKILL_BUCKETS,
     TOTAL_CHALLENGES,
@@ -39,85 +39,42 @@ def get_admin_dashboard_stats(
         {"name": "Admins", "value": admin_count},
     ]
 
-    # 5. DATA FOR BAR CHART (all 10 challenges, no fabricated attempts)
-    progress_counts = db.query(
-        models.UserProgress.challenge_id, func.count(models.UserProgress.challenge_id)
-    ).group_by(models.UserProgress.challenge_id).all()
-
-    success_counts = {str(pid): int(count) for pid, count in progress_counts}
-
-    event_counts = {
-        event_type: int(count)
-        for event_type, count in db.query(
-            models.SecurityLog.event_type,
-            func.count(models.SecurityLog.id),
-        )
-        .filter(models.SecurityLog.context_type == "challenge")
-        .group_by(models.SecurityLog.event_type)
-        .all()
-    }
-
-    challenge_rows = [
-        {
-            "name": "SQL Injection",
-            "ids": {"1", "sql-injection"},
-            "events": {SecurityEventType.CHALLENGE_SQLI},
-        },
-        {
-            "name": "XSS",
-            "ids": {"2", "xss"},
-            "events": {SecurityEventType.CHALLENGE_XSS},
-        },
-        {
-            "name": "CSRF",
-            "ids": {"3", "csrf"},
-            "events": {SecurityEventType.CHALLENGE_CSRF},
-        },
-        {
-            "name": "Command Injection",
-            "ids": {"4", "command-injection"},
-            "events": {SecurityEventType.CHALLENGE_COMMAND},
-        },
-        {
-            "name": "Broken Authentication",
-            "ids": {"5", "broken-auth"},
-            "events": set(),  # CHALLENGE_AUTH is shared with security-misc in current logger mapping
-        },
-        {
-            "name": "Security Misconfiguration",
-            "ids": {"6", "security-misc"},
-            "events": set(),  # CHALLENGE_AUTH is shared with broken-auth in current logger mapping
-        },
-        {
-            "name": "Insecure Storage",
-            "ids": {"7", "insecure-storage"},
-            "events": {SecurityEventType.CHALLENGE_STORAGE},
-        },
-        {
-            "name": "Directory Traversal",
-            "ids": {"8", "directory-traversal"},
-            "events": {SecurityEventType.CHALLENGE_TRAVERSAL},
-        },
-        {
-            "name": "XXE",
-            "ids": {"9", "xxe"},
-            "events": {SecurityEventType.CHALLENGE_XXE},
-        },
-        {
-            "name": "Redirect",
-            "ids": {"10", "redirect"},
-            "events": {SecurityEventType.CHALLENGE_REDIRECT},
-        },
+    # 5. DATA FOR BAR CHART — real attempt sums from challenge_state.attempt_count
+    # and completion counts from user_progress per challenge slug (not fabricated).
+    challenge_slugs: list[tuple[str, str]] = [
+        ("SQL Injection", "sql-injection"),
+        ("XSS", "xss"),
+        ("CSRF", "csrf"),
+        ("Command Injection", "command-injection"),
+        ("Broken Authentication", "broken-auth"),
+        ("Security Misconfiguration", "security-misc"),
+        ("Insecure Storage", "insecure-storage"),
+        ("Directory Traversal", "directory-traversal"),
+        ("XXE", "xxe"),
+        ("Redirect", "redirect"),
     ]
 
     challenge_usage = []
-    for row in challenge_rows:
-        successes = sum(success_counts.get(ch_id, 0) for ch_id in row["ids"])
-        attempts = sum(event_counts.get(evt, 0) for evt in row["events"]) if row["events"] else successes
+    for display_name, slug in challenge_slugs:
+        attempts_raw = (
+            db.query(func.coalesce(func.sum(models.ChallengeState.attempt_count), 0))
+            .filter(models.ChallengeState.challenge_id == slug)
+            .scalar()
+        )
+        attempts = int(attempts_raw or 0)
+
+        successes = (
+            db.query(func.count(func.distinct(models.UserProgress.user_id)))
+            .filter(models.UserProgress.challenge_id == slug)
+            .scalar()
+            or 0
+        )
+        successes = int(successes)
+
         challenge_usage.append(
             {
-                "name": row["name"],
-                "attempts": max(successes, attempts),
+                "name": display_name,
+                "attempts": attempts,
                 "successes": successes,
             }
         )
@@ -186,4 +143,6 @@ def get_my_learning_progress(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    return build_learning_progress_payload(db, current_user.id)
+    payload = build_learning_progress_payload(db, current_user.id)
+    payload["challenge_detail"] = build_challenge_progress_detail(db, current_user.id)
+    return payload

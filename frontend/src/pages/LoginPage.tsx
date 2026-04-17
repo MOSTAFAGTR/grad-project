@@ -45,6 +45,7 @@ const LoginPage: React.FC = () => {
         sessionStorage.setItem('user_id', String(user_id ?? ''));
         if (resEmail) sessionStorage.setItem('user_email', resEmail);
         else sessionStorage.removeItem('user_email');
+        window.dispatchEvent(new Event('scale-user-changed'));
         if (role === 'admin') navigate('/admin/stats');
         else if (role === 'instructor') navigate('/instructor/dashboard');
         else navigate('/home');

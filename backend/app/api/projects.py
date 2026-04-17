@@ -4,6 +4,7 @@ import shutil
 import zipfile
 import os
 import json
+import threading
 from datetime import datetime
 import logging
 from typing import Optional
@@ -18,15 +19,21 @@ from ..scanner.scorer import calculate_risk
 from ..scanner.fixer import attach_fixes
 from ..scanner.report_generator import generate_security_report, generate_pdf_report
 from ..ai.mentor import generate_ai_security_feedback
-from ..db.database import get_db
+from ..db.database import get_db, SessionLocal
 from .. import models
 from .auth import get_current_user, get_current_admin
 from ..security.security_logger import SecurityEventType, SecuritySeverity, log_security_event
 from ..security.learning_tracker import recalculate_learning_progress
+from ..ai.serper_helpers import serper_configured
 
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _openai_key() -> str:
+    return (os.getenv("OPENAI_API_KEY", "") or "").strip()
+
 
 def _resolve_storage_root() -> Path:
     configured_root = os.getenv("PROJECT_STORAGE_ROOT", "").strip()
@@ -414,6 +421,34 @@ def list_project_files(
     }
 
 
+def _run_dep_scan_background(extracted_root: str, project_id: str) -> None:
+    try:
+        from ..scanner.dependency_scanner import scan_dependencies
+
+        dep_result = scan_dependencies(extracted_root)
+        db = SessionLocal()
+        try:
+            scan_row = (
+                db.query(models.ScanHistory)
+                .filter(models.ScanHistory.project_id == project_id)
+                .order_by(models.ScanHistory.scan_date.desc())
+                .first()
+            )
+            if scan_row:
+                existing = json.loads(scan_row.vuln_summary or "{}")
+                existing["dependency_scan"] = dep_result
+                existing["total_vulnerabilities"] = int(existing.get("total_vulnerabilities", 0)) + int(
+                    dep_result.get("total_dependency_vulns", 0)
+                )
+                scan_row.vuln_summary = json.dumps(existing)
+                scan_row.total_vulnerabilities = int(existing.get("total_vulnerabilities", 0))
+                db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"Background dep scan error: {e}")
+
+
 @router.post("/project/scan")
 def scan_project(
     project_id: str = Query(..., description="ID of extracted project folder"),
@@ -469,6 +504,13 @@ def scan_project(
     db.add(history)
     db.commit()
     recalculate_learning_progress(db, current_user.id)
+
+    t = threading.Thread(
+        target=_run_dep_scan_background,
+        args=(str(scan_root), project_id),
+        daemon=True,
+    )
+    t.start()
 
     log_security_event(
         db=db,
@@ -584,6 +626,14 @@ def scan_project_with_ai(
     - and suggests secure refactorings.
     Detection and scoring logic remain rule-based and deterministic.
     """
+    if not _openai_key() and not serper_configured():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "AI scan is not available. Set OPENAI_API_KEY and/or SERPER_API_KEY in your .env file. "
+                "Use the standard scan endpoint instead: POST /api/project/scan"
+            ),
+        )
     _assert_project_access(db, project_id, current_user)
     project_dir = EXTRACTED_PROJECTS_DIR / project_id
     if not project_dir.exists():
@@ -732,6 +782,28 @@ def get_project_by_id(
         "last_scan_summary": json.loads(latest_scan.vuln_summary) if latest_scan and latest_scan.vuln_summary else {},
         "project_path_exists": True,
     }
+
+
+@router.get("/project/{project_id}/dependencies")
+def get_project_dependencies(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _assert_project_access(db, project_id, current_user)
+    latest_scan = (
+        db.query(models.ScanHistory)
+        .filter(models.ScanHistory.project_id == project_id)
+        .order_by(models.ScanHistory.scan_date.desc())
+        .first()
+    )
+    if not latest_scan or not latest_scan.vuln_summary:
+        raise HTTPException(status_code=404, detail="No scan found for this project.")
+    try:
+        summary = json.loads(latest_scan.vuln_summary)
+    except Exception:
+        raise HTTPException(status_code=404, detail="No scan found for this project.")
+    return summary.get("dependency_scan", {})
 
 
 @router.get("/admin/overview")

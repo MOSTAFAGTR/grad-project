@@ -5,11 +5,11 @@ from typing import Dict, Any
 from dotenv import load_dotenv
 import openai
 
+from .serper_helpers import scan_feedback_from_serper, serper_configured
 
-# Load environment variables from .env so OPENAI_API_KEY can be configured
-load_dotenv()
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# env_bootstrap runs first; override=True so empty Docker-injected keys are replaced from .env
+load_dotenv(override=True)
 
 
 def generate_ai_security_feedback(finding: Dict[str, Any]) -> Dict[str, Any]:
@@ -20,6 +20,11 @@ def generate_ai_security_feedback(finding: Dict[str, Any]) -> Dict[str, Any]:
     - detection remains deterministic and auditable,
     - AI is an optional enhancement that enriches explanations and examples.
     """
+    key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    openai.api_key = key or None
+    if not openai.api_key and serper_configured():
+        return scan_feedback_from_serper(finding)
+
     if not openai.api_key:
         # If API key is not configured, gracefully skip AI enrichment.
         return {}
@@ -81,6 +86,10 @@ Respond ONLY as a JSON object with the following shape:
             "best_practices": data.get("best_practices"),
         }
     except Exception:
+        if serper_configured():
+            fb = scan_feedback_from_serper(finding)
+            if fb:
+                return fb
         # On any error (timeout, parsing, API failure), return empty analysis
         # so the platform still works with rule-based results only.
         return {}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { FaMagic } from 'react-icons/fa';
 import { API_BASE_URL } from '../lib/api';
 
 const API_URL = `${API_BASE_URL}/api`;
@@ -42,11 +43,22 @@ const InstructorQuizPage: React.FC = () => {
   const token = sessionStorage.getItem('token');
   const headers = { headers: { Authorization: `Bearer ${token}` } };
 
+  const [selectedTopic, setSelectedTopic] = useState('');
+  const [selectedDifficulty, setSelectedDifficulty] = useState('Intermediate');
+  const [numQuestions, setNumQuestions] = useState(10);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([]);
+  const [dueDate, setDueDate] = useState('');
+  const [studentsLoading, setStudentsLoading] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateSuccess, setGenerateSuccess] = useState<string | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+
   useEffect(() => {
     fetchData();
   }, []);
 
   const fetchData = async () => {
+    setStudentsLoading(true);
     try {
       const qRes = await axios.get(`${API_URL}/quizzes/manage`, headers);
       setQuestions(qRes.data.questions || []);
@@ -54,7 +66,62 @@ const InstructorQuizPage: React.FC = () => {
       setUsers(uRes.data);
       const aRes = await axios.get(`${API_URL}/quizzes/assignments/instructor`, headers);
       setAssignments(aRes.data);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setStudentsLoading(false);
+    }
+  };
+
+  const studentUsers = users.filter((u: { role?: string }) => u.role === 'user');
+
+  const handleAiGenerateAssign = async () => {
+    setGenerateSuccess(null);
+    setGenerateError(null);
+    setIsGenerating(true);
+    try {
+      const res = await axios.post(
+        `${API_URL}/quizzes/ai-generate-and-assign`,
+        {
+          topic: selectedTopic,
+          difficulty: selectedDifficulty,
+          num_questions: numQuestions,
+          student_ids: selectedStudentIds,
+          due_date: dueDate || null,
+        },
+        headers,
+      );
+      const d = res.data;
+      let msg: string;
+      if (d.ai_generated) {
+        msg = `✓ AI-generated quiz assigned!\n${d.ai_questions_created} new questions were created by AI and added to the question bank.\nAssigned to ${d.students_assigned} student(s).`;
+      } else {
+        msg = `✓ Quiz assigned from question bank.\n(AI generation not available — questions selected from existing bank)\nAssigned to ${d.students_assigned} student(s).`;
+      }
+      if (d.mixed_topics) {
+        msg +=
+          '\n(Note: Topic had fewer questions than requested. Questions from other topics were included.)';
+      }
+      setGenerateSuccess(msg);
+      setSelectedTopic('');
+      setSelectedDifficulty('Intermediate');
+      setNumQuestions(10);
+      setSelectedStudentIds([]);
+      setDueDate('');
+      fetchData();
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { detail?: unknown } } };
+      const detail = ax.response?.data?.detail;
+      const msg =
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((x: { msg?: string }) => x.msg || '').join(' ')
+            : 'Request failed';
+      setGenerateError(msg);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleDeleteQuestion = async (id: number) => {
@@ -122,9 +189,19 @@ const InstructorQuizPage: React.FC = () => {
     setLoadingAI(true);
     try {
       const res = await axios.post(`${API_URL}/quizzes/generate-ai-preview`, aiParams, headers);
-      setAiPreview(res.data);
-    } catch (err) { alert("AI Service Failed"); }
-    setLoadingAI(false);
+      setAiPreview(Array.isArray(res.data) ? res.data : []);
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { detail?: unknown } } };
+      const d = ax.response?.data?.detail;
+      const msg =
+        typeof d === 'string'
+          ? d
+          : 'Could not generate preview. Check SERPER_API_KEY or OPENAI_API_KEY, or try again.';
+      alert(msg);
+      setAiPreview([]);
+    } finally {
+      setLoadingAI(false);
+    }
   };
 
   const saveQuestionToBank = async (q: any) => {
@@ -171,6 +248,21 @@ const InstructorQuizPage: React.FC = () => {
     setSelectedUsers(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
+  const topicOptions = [
+    { value: '', label: 'Select a topic...', disabled: true },
+    { value: 'SQL Injection', label: 'SQL Injection' },
+    { value: 'XSS', label: 'XSS' },
+    { value: 'CSRF', label: 'CSRF' },
+    { value: 'Command Injection', label: 'Command Injection' },
+    { value: 'Broken Authentication', label: 'Broken Authentication' },
+    { value: 'Security Misconfiguration', label: 'Security Misconfiguration' },
+    { value: 'Insecure Storage', label: 'Insecure Storage' },
+    { value: 'Directory Traversal', label: 'Directory Traversal' },
+    { value: 'XXE', label: 'XXE' },
+    { value: 'Unvalidated Redirect', label: 'Unvalidated Redirect' },
+    { value: 'Mixed (All Topics)', label: 'Mixed (All Topics)' },
+  ];
+
   return (
     <div className="p-6 bg-gray-900 min-h-screen text-white">
       <h1 className="text-3xl font-bold mb-6 text-purple-400">Admin Quiz Dashboard</h1>
@@ -178,7 +270,12 @@ const InstructorQuizPage: React.FC = () => {
       <div className="flex flex-wrap gap-4 mb-6 border-b border-gray-700 pb-2">
         <button onClick={() => setTab('bank')} className={`px-4 py-2 rounded ${tab === 'bank' ? 'bg-blue-600' : 'bg-gray-800'}`}>Question Bank</button>
         <button onClick={() => setTab('create')} className={`px-4 py-2 rounded ${tab === 'create' ? 'bg-blue-600' : 'bg-gray-800'}`}>+ Add Question</button>
-        <button onClick={() => setTab('ai')} className={`px-4 py-2 rounded ${tab === 'ai' ? 'bg-purple-600' : 'bg-gray-800'}`}>AI Generator</button>
+        <button
+          onClick={() => setTab('ai')}
+          className={`px-4 py-2 rounded inline-flex items-center gap-2 ${tab === 'ai' ? 'bg-purple-600' : 'bg-gray-800'}`}
+        >
+          <FaMagic /> AI Generator
+        </button>
         <button onClick={() => setTab('assign')} className={`px-4 py-2 rounded ${tab === 'assign' ? 'bg-green-600' : 'bg-gray-800'}`}>Assign Quiz</button>
         <button onClick={() => setTab('assign_list')} className={`px-4 py-2 rounded ${tab === 'assign_list' ? 'bg-gray-700' : 'bg-gray-800'}`}>History</button>
       </div>
@@ -282,6 +379,138 @@ const InstructorQuizPage: React.FC = () => {
       {/* --- AI GENERATOR TAB --- */}
       {tab === 'ai' && (
         <div className="space-y-6">
+          <section className="border border-gray-700 rounded-xl p-6 bg-gray-800/40">
+            <h2 className="text-2xl font-bold text-cyan-400 mb-1">Generate and Assign AI Quiz</h2>
+            <p className="text-gray-400 text-sm mb-6">
+              Create a targeted quiz from the question bank (with optional AI-generated questions) and assign it to
+              students in one step.
+            </p>
+
+            <div className="space-y-4 max-w-2xl">
+              <div>
+                <label className="block text-gray-300 text-sm mb-1">Vulnerability Topic</label>
+                <select
+                  className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white"
+                  value={selectedTopic}
+                  onChange={(e) => setSelectedTopic(e.target.value)}
+                >
+                  {topicOptions.map((o) => (
+                    <option key={o.label} value={o.value} disabled={o.disabled}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <span className="block text-gray-300 text-sm mb-2">Difficulty Level</span>
+                <div className="flex flex-wrap gap-2">
+                  {(['Beginner', 'Intermediate', 'Advanced'] as const).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setSelectedDifficulty(d)}
+                      className={`px-4 py-2 rounded-lg text-sm font-semibold border ${
+                        selectedDifficulty === d
+                          ? 'bg-purple-600 border-purple-500 text-white'
+                          : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-gray-300 text-sm mb-1">Number of questions</label>
+                <input
+                  type="number"
+                  min={5}
+                  max={20}
+                  step={1}
+                  value={numQuestions}
+                  onChange={(e) => setNumQuestions(Number(e.target.value))}
+                  className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white"
+                />
+                <p className="text-xs text-gray-500 mt-1">5–20 questions</p>
+              </div>
+
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <label className="block text-gray-300 text-sm">Assign to students</label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600"
+                      onClick={() => setSelectedStudentIds(studentUsers.map((u: { id: number }) => u.id))}
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600"
+                      onClick={() => setSelectedStudentIds([])}
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+                <div className="max-h-[200px] overflow-y-auto border border-gray-600 rounded p-2 bg-gray-800/80 space-y-2">
+                  {studentsLoading ? (
+                    <p className="text-gray-500 text-sm">Loading students…</p>
+                  ) : (
+                    studentUsers.map((u: { id: number; email: string }) => (
+                      <label key={u.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedStudentIds.includes(u.id)}
+                          onChange={() =>
+                            setSelectedStudentIds((prev) =>
+                              prev.includes(u.id) ? prev.filter((x) => x !== u.id) : [...prev, u.id],
+                            )
+                          }
+                        />
+                        <span>{u.email}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-gray-300 text-sm mb-1">Due date (optional)</label>
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white"
+                />
+                <p className="text-xs text-gray-500 mt-1">Leave blank for no deadline</p>
+              </div>
+
+              <button
+                type="button"
+                disabled={!selectedTopic || selectedStudentIds.length === 0 || isGenerating}
+                onClick={handleAiGenerateAssign}
+                className="w-full py-3 rounded-lg font-bold bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed text-white"
+              >
+                {isGenerating ? 'Generating...' : 'Generate and Assign Quiz'}
+              </button>
+            </div>
+
+            {generateSuccess && (
+              <div className="mt-4 p-4 rounded-lg bg-emerald-900/40 border border-emerald-600 text-emerald-100 whitespace-pre-line text-sm">
+                {generateSuccess}
+              </div>
+            )}
+            {generateError && (
+              <div className="mt-4 p-4 rounded-lg bg-red-900/40 border border-red-600 text-red-100 text-sm">
+                {generateError}
+              </div>
+            )}
+          </section>
+
           <div className="bg-gray-800 p-6 rounded border border-purple-900">
             <h2 className="text-xl font-bold mb-4 text-purple-400">AI Question Generator</h2>
             <div className="grid grid-cols-2 gap-4">

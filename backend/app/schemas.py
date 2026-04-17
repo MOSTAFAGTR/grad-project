@@ -115,10 +115,11 @@ class OptionResponse(OptionBase):
 # --- Questions ---
 class QuestionBase(BaseModel):
     text: str
-    type: str 
-    topic: str
-    difficulty: str
-    skill_focus: str
+    # Bank rows (especially AI/Serper-generated) may omit these in the DB.
+    type: Optional[str] = None
+    topic: Optional[str] = None
+    difficulty: Optional[str] = None
+    skill_focus: Optional[str] = None
     explanation: Optional[str] = None
 
 class QuestionCreate(QuestionBase):
@@ -171,6 +172,27 @@ class AssignmentResponse(BaseModel):
     created_at: datetime
     class Config:
         from_attributes = True
+
+
+class AIQuizAssignRequest(BaseModel):
+    topic: str
+    difficulty: str
+    num_questions: int
+    student_ids: list[int]
+    due_date: Optional[str] = None
+
+
+class AIQuizAssignResponse(BaseModel):
+    assignment_id: int
+    title: str
+    topic: str
+    difficulty: str
+    questions_selected: int
+    students_assigned: int
+    mixed_topics: bool
+    message: str
+    ai_generated: bool = False
+    ai_questions_created: int = 0
 
 
 # --- QUIZ ATTEMPTS ---
@@ -271,3 +293,25 @@ class AttackSimulateResponse(BaseModel):
     data_exposed: str
     impact: str
     timeline: List[str]
+
+
+# ===========================
+# RED VS BLUE SCHEMAS
+# ===========================
+class RedBlueGameCreate(BaseModel):
+    challenge_id: int
+    red_team_name: str
+    blue_team_name: str
+    red_member_ids: List[int]
+    blue_member_ids: List[int]
+
+
+class RedBlueAttackBody(BaseModel):
+    challenge_id: int
+    payload_used: str
+    impact_description: str
+
+
+class RedBlueFixBody(BaseModel):
+    challenge_id: int
+    submitted_code: str

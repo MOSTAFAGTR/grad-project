@@ -1,12 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../lib/api';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
 import { FaUserGraduate, FaChalkboardTeacher, FaClipboardCheck, FaSearch, FaTimes, FaChartPie } from 'react-icons/fa';
 import { API_BASE_URL } from '../lib/api';
 
+const RB_CHALLENGE_LABELS: Record<number, string> = {
+  1: 'SQL Injection',
+  2: 'XSS',
+  3: 'CSRF',
+  4: 'Command Injection',
+  5: 'Broken Authentication',
+  6: 'Security Misconfiguration',
+  7: 'Insecure Storage',
+  8: 'Directory Traversal',
+  9: 'XXE',
+  10: 'Unvalidated Redirect',
+};
+
 const InstructorDashboardPage: React.FC = () => {
+  const navigate = useNavigate();
   const [users, setUsers] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [stats, setStats] = useState<any>(null); // State for Real Stats
@@ -16,9 +32,28 @@ const InstructorDashboardPage: React.FC = () => {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [redBlueGames, setRedBlueGames] = useState<any[]>([]);
+  const [rbLoading, setRbLoading] = useState(true);
+  const [rbError, setRbError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
+  }, []);
+
+  useEffect(() => {
+    const loadRb = async () => {
+      try {
+        const res = await api.get('/api/redblue/games');
+        setRedBlueGames(res.data?.games || []);
+        setRbError(null);
+      } catch {
+        setRedBlueGames([]);
+        setRbError('Could not load games. Check server connection.');
+      } finally {
+        setRbLoading(false);
+      }
+    };
+    loadRb();
   }, []);
 
   useEffect(() => {
@@ -323,6 +358,73 @@ const InstructorDashboardPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <section className="mt-12 border-t border-gray-700 pt-8">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <h2 className="text-2xl font-bold text-white">Red vs Blue Games</h2>
+          <button
+            type="button"
+            onClick={() => navigate('/redblue/create')}
+            className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 font-semibold text-white"
+          >
+            Create New Game
+          </button>
+        </div>
+        {rbError && (
+          <p className="text-amber-300 mb-3 text-sm" role="alert">
+            {rbError}
+          </p>
+        )}
+        {rbLoading ? (
+          <p className="text-gray-400">Loading games…</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-gray-700">
+            <table className="min-w-full text-sm text-left text-gray-200">
+              <thead className="bg-gray-800 text-gray-300">
+                <tr>
+                  <th className="px-3 py-2">Game ID</th>
+                  <th className="px-3 py-2">Challenge</th>
+                  <th className="px-3 py-2">Red Team</th>
+                  <th className="px-3 py-2">Blue Team</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Red Score</th>
+                  <th className="px-3 py-2">Blue Score</th>
+                  <th className="px-3 py-2">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {redBlueGames.length === 0 && !rbError && (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-4 text-center text-gray-500">
+                      No games created yet. Click &apos;Create New Game&apos; to start.
+                    </td>
+                  </tr>
+                )}
+                {redBlueGames.map((g) => (
+                  <tr key={g.game_id} className="border-t border-gray-700 bg-gray-900/40">
+                    <td className="px-3 py-2 font-mono">{g.game_id}</td>
+                    <td className="px-3 py-2">{RB_CHALLENGE_LABELS[g.challenge_id] ?? g.challenge_id}</td>
+                    <td className="px-3 py-2">{g.red_team_name}</td>
+                    <td className="px-3 py-2">{g.blue_team_name}</td>
+                    <td className="px-3 py-2 capitalize">{g.status}</td>
+                    <td className="px-3 py-2">{g.red_score}</td>
+                    <td className="px-3 py-2">{g.blue_score}</td>
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/redblue/game/${g.game_id}`)}
+                        className="text-purple-400 hover:text-purple-300 font-semibold"
+                      >
+                        View Game
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {showResetConfirm && selectedStudent && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">

@@ -1,7 +1,11 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import List, Optional
 from pydantic import BaseModel
+from datetime import date
+import json
+import re
 import requests
 import random
 import os
@@ -17,11 +21,28 @@ from ..models import (
     QuizAssignmentStudent,
     QuizAssignmentQuestion,
 )
-from ..schemas import QuestionCreate, QuestionResponse, QuestionUpdate, QuizRequest, AnswerSubmit, AnswerResponse, AIGenerationRequest, AssignmentCreate, AssignmentResponse, QuizAttemptSubmit, QuizAttemptResponse
+from ..schemas import (
+    QuestionCreate,
+    QuestionResponse,
+    QuestionUpdate,
+    QuizRequest,
+    AnswerSubmit,
+    AnswerResponse,
+    AIGenerationRequest,
+    AssignmentCreate,
+    AssignmentResponse,
+    QuizAttemptSubmit,
+    QuizAttemptResponse,
+    AIQuizAssignRequest,
+    AIQuizAssignResponse,
+)
 from .auth import get_current_user, require_role
+from ..ai.serper_helpers import build_quiz_questions_from_serper, serper_configured
 
 router = APIRouter()
-AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://ai_service:8001/generate")
+def _openai_key() -> str:
+    return (os.getenv("OPENAI_API_KEY", "") or "").strip()
+AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://ai_service:8001")
 
 
 class QuizManageRequest(BaseModel):
@@ -106,13 +127,71 @@ def delete_question(
 
 
 
+def _quiz_dicts_to_ai_preview(
+    questions: list[dict],
+    topic: str,
+    difficulty: str,
+    skill_focus: str,
+) -> list[dict]:
+    """Shape Serper/OpenAI quiz dicts like the template ai_service /generate response."""
+    out: list[dict] = []
+    sf = (skill_focus or "General")[:50]
+    for q in questions:
+        opts = q.get("options") or []
+        try:
+            ci = int(q.get("correct_index", 0))
+        except (TypeError, ValueError):
+            ci = 0
+        if len(opts) != 4 or ci not in (0, 1, 2, 3):
+            continue
+        out.append(
+            {
+                "text": (q.get("question") or "")[:8000],
+                "type": "MCQ",
+                "topic": (topic or "General")[:80],
+                "difficulty": difficulty or "Medium",
+                "skill_focus": sf,
+                "explanation": (q.get("explanation") or "").strip()[:2000],
+                "options": [{"text": str(o)[:255], "is_correct": (i == ci)} for i, o in enumerate(opts)],
+            }
+        )
+    return out
+
+
 @router.post("/generate-ai-preview")
-def generate_ai(req: AIGenerationRequest, user: User = Depends(get_current_user)):
+def generate_ai(
+    req: AIGenerationRequest,
+    user: User = Depends(require_role("admin", "instructor")),
+):
+    """
+    Prefer the lightweight template ai_service. If it is down or returns nothing,
+    fall back to the same OpenAI / Serper generator used for ai-generate-and-assign.
+    """
+    payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+    url = f"{AI_SERVICE_URL.rstrip('/')}/generate"
     try:
-        res = requests.post(AI_SERVICE_URL, json=req.dict())
-        if res.status_code == 200: return res.json()
-        raise HTTPException(500, "AI Service Error")
-    except Exception as e: raise HTTPException(500, f"AI Error: {str(e)}")
+        res = requests.post(url, json=payload, timeout=45)
+        if res.status_code == 200:
+            data = res.json()
+            if isinstance(data, list) and len(data) > 0:
+                return data
+    except Exception:
+        pass
+
+    topic = (req.topic or "").strip() or "cybersecurity"
+    n = max(1, min(int(req.count or 3), 10))
+    skill = (req.skill_focus or "General").strip() or "General"
+    generated = _generate_questions_with_ai(topic, req.difficulty or "Medium", n)
+    preview = _quiz_dicts_to_ai_preview(generated, topic, req.difficulty or "Medium", skill)
+    if not preview:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Could not generate preview. Ensure SERPER_API_KEY or OPENAI_API_KEY is set, "
+                "or that the ai_service container is healthy."
+            ),
+        )
+    return preview
 
 @router.post("/assignments", response_model=AssignmentResponse)
 def create_assign(
@@ -155,6 +234,7 @@ def delete_assign(
         raise HTTPException(404, "Not found")
     if user.role != "admin" and a.instructor_id != user.id:
         raise HTTPException(403, "Not authorized to delete this assignment")
+    db.query(QuizAttempt).filter(QuizAttempt.assignment_id == id).delete()
     db.query(QuizAssignmentStudent).filter(QuizAssignmentStudent.assignment_id == id).delete()
     db.query(QuizAssignmentQuestion).filter(QuizAssignmentQuestion.assignment_id == id).delete()
     db.query(QuizAssignment).filter(QuizAssignment.id == id).delete()
@@ -339,3 +419,258 @@ def quiz_manage_mutation(
         return {"ok": True}
 
     raise HTTPException(status_code=400, detail="Unsupported action")
+
+
+def _map_instructor_difficulty_to_bank(difficulty: str) -> str:
+    d = (difficulty or "").strip()
+    return {
+        "Beginner": "Easy",
+        "Intermediate": "Medium",
+        "Advanced": "Hard",
+    }.get(d, d)
+
+
+def _parse_ai_question_json(raw: str) -> list:
+    raw_s = (raw or "").strip()
+    if raw_s.startswith("```"):
+        raw_s = re.sub(r"^```[a-zA-Z0-9]*\s*", "", raw_s)
+        raw_s = re.sub(r"\s*```$", "", raw_s)
+    try:
+        parsed = json.loads(raw_s)
+        return parsed if isinstance(parsed, list) else []
+    except Exception:
+        m = re.search(r"\[[\s\S]*\]", raw_s)
+        if not m:
+            return []
+        parsed = json.loads(m.group(0))
+        return parsed if isinstance(parsed, list) else []
+
+
+def _generate_questions_with_ai(topic: str, difficulty: str, num_questions: int) -> list[dict]:
+    """
+    Prefer OpenAI (OPENAI_API_KEY). If unset or failing, use Serper.dev web search (SERPER_API_KEY).
+    """
+    oa = _openai_key()
+    use_openai = oa and (oa.startswith("sk-") or oa.startswith("sk-proj-"))
+    if use_openai:
+        try:
+            import openai
+
+            openai.api_key = oa
+            model = os.getenv("AI_MENTOR_MODEL", "gpt-4o-mini")
+            prompt = (
+                f"Generate {num_questions} multiple-choice quiz "
+                f"questions about {topic} at {difficulty} level for "
+                f"a cybersecurity course. Each question must have "
+                f"exactly 4 options with exactly 1 correct answer. "
+                f"Return ONLY valid JSON array with this exact schema: "
+                f'[{{"question": "...", "options": ["A","B","C","D"], '
+                f'"correct_index": 0, "explanation": "..."}}]. '
+                f"No markdown, no code blocks, just the JSON array."
+            )
+            response = openai.ChatCompletion.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a cybersecurity instructor. Reply with JSON only, no markdown.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.2,
+                timeout=60,
+            )
+            content = response.choices[0].message["content"]
+            questions = _parse_ai_question_json(content)
+            if not isinstance(questions, list):
+                questions = []
+            out: list[dict] = []
+            for q in questions:
+                if not isinstance(q, dict):
+                    continue
+                opts = q.get("options") or []
+                ci = q.get("correct_index")
+                if len(opts) != 4 or ci not in (0, 1, 2, 3):
+                    continue
+                out.append(q)
+            if out:
+                return out
+        except Exception as e:
+            print(f"OpenAI quiz generation failed: {e}")
+
+    if serper_configured():
+        serp = build_quiz_questions_from_serper(topic, difficulty, num_questions)
+        if serp:
+            return serp
+    return []
+
+
+def _select_from_bank(
+    db: Session,
+    exclude_ids: set[int],
+    bank_diff: str,
+    topic_raw: str,
+    mixed_topic: bool,
+    need: int,
+) -> tuple[list[Question], bool]:
+    mixed_topics = False
+    selected: list[Question] = []
+    base = db.query(Question).filter(Question.difficulty == bank_diff)
+    if exclude_ids:
+        base = base.filter(~Question.id.in_(exclude_ids))
+    if not mixed_topic:
+        term = f"%{topic_raw}%"
+        matched = base.filter(or_(Question.topic.ilike(term), Question.text.ilike(term))).all()
+    else:
+        matched = base.all()
+
+    pool = list(matched)
+    random.shuffle(pool)
+    for q in pool:
+        if len(selected) >= need:
+            break
+        selected.append(q)
+
+    if len(selected) < need:
+        mixed_topics = True
+        have = {q.id for q in selected} | exclude_ids
+        q_same = db.query(Question).filter(Question.difficulty == bank_diff)
+        if have:
+            q_same = q_same.filter(~Question.id.in_(have))
+        rest_same_diff = q_same.all()
+        random.shuffle(rest_same_diff)
+        for q in rest_same_diff:
+            if len(selected) >= need:
+                break
+            selected.append(q)
+
+    if len(selected) < need:
+        have = {q.id for q in selected} | exclude_ids
+        q_any = db.query(Question)
+        if have:
+            q_any = q_any.filter(~Question.id.in_(have))
+        rest_any = q_any.all()
+        random.shuffle(rest_any)
+        for q in rest_any:
+            if len(selected) >= need:
+                break
+            selected.append(q)
+            mixed_topics = True
+
+    return selected, mixed_topics
+
+
+@router.post("/ai-generate-and-assign", response_model=AIQuizAssignResponse)
+def ai_generate_and_assign(
+    body: AIQuizAssignRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "instructor")),
+):
+    if body.num_questions < 5 or body.num_questions > 20:
+        raise HTTPException(status_code=400, detail="num_questions must be between 5 and 20")
+    if not body.student_ids:
+        raise HTTPException(status_code=400, detail="At least one student must be selected")
+
+    rows = db.query(User).filter(User.id.in_(body.student_ids)).all()
+    found_ids = {r.id for r in rows}
+    missing = sorted({i for i in body.student_ids if i not in found_ids})
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Unknown user id(s): {missing}")
+    non_students = sorted({r.id for r in rows if r.role != "user"})
+    if non_students:
+        raise HTTPException(status_code=400, detail=f"These user ids are not students with role 'user': {non_students}")
+
+    bank_diff = _map_instructor_difficulty_to_bank(body.difficulty)
+    topic_raw = (body.topic or "").strip()
+    mixed_topic = topic_raw in ("", "Mixed (All Topics)")
+
+    topic_label = topic_raw or "Mixed (All Topics)"
+    ai_topic = topic_label if topic_label != "Mixed (All Topics)" else "cybersecurity vulnerabilities (mixed topics)"
+
+    ai_questions = _generate_questions_with_ai(ai_topic, body.difficulty, body.num_questions)
+    selected_ids: list[int] = []
+    topic_for_q = topic_label if topic_label != "Mixed (All Topics)" else "Mixed"
+    ai_questions_created = 0
+
+    if ai_questions:
+        for q in ai_questions[: body.num_questions]:
+            qtext = (q.get("question") or "").strip()
+            if not qtext:
+                continue
+            opts = q.get("options") or []
+            ci = int(q.get("correct_index", 0))
+            row = Question(
+                text=qtext,
+                type="mcq",
+                topic=topic_for_q[:50] if topic_for_q else "General",
+                difficulty=bank_diff,
+                explanation=(q.get("explanation") or "").strip(),
+            )
+            db.add(row)
+            db.flush()
+            for oi, opt in enumerate(opts):
+                db.add(
+                    QuestionOption(
+                        question_id=row.id,
+                        text=(str(opt) or "")[:255],
+                        is_correct=(oi == ci),
+                    )
+                )
+            selected_ids.append(row.id)
+            ai_questions_created += 1
+        db.commit()
+
+    ai_used = ai_questions_created > 0
+    need_bank = body.num_questions - len(selected_ids)
+    mixed_topics = False
+    if need_bank > 0:
+        bank_rows, mixed_topics = _select_from_bank(
+            db,
+            exclude_ids=set(selected_ids),
+            bank_diff=bank_diff,
+            topic_raw=topic_raw,
+            mixed_topic=mixed_topic,
+            need=need_bank,
+        )
+        selected_ids.extend(q.id for q in bank_rows)
+
+    if len(selected_ids) < 5:
+        raise HTTPException(
+            status_code=400,
+            detail="Not enough questions in the bank to satisfy at least 5 questions for this quiz.",
+        )
+
+    selected_ids = selected_ids[: body.num_questions]
+
+    today = date.today().isoformat()
+    title = f"AI Generated: {topic_raw or 'Mixed topics'} ({body.difficulty}) — {today}"
+    if body.due_date:
+        title = f"{title} (due {body.due_date})"
+
+    assign = QuizAssignment(
+        title=title,
+        instructor_id=user.id,
+        question_ids=",".join(map(str, selected_ids)),
+        assigned_student_ids=",".join(map(str, body.student_ids)),
+    )
+    db.add(assign)
+    db.flush()
+    for sid in body.student_ids:
+        db.add(QuizAssignmentStudent(assignment_id=assign.id, student_id=sid))
+    for qid in selected_ids:
+        db.add(QuizAssignmentQuestion(assignment_id=assign.id, question_id=qid))
+    db.commit()
+    db.refresh(assign)
+
+    return AIQuizAssignResponse(
+        assignment_id=assign.id,
+        title=title,
+        topic=topic_raw or "Mixed (All Topics)",
+        difficulty=body.difficulty,
+        questions_selected=len(selected_ids),
+        students_assigned=len(body.student_ids),
+        mixed_topics=mixed_topics,
+        message="Quiz generated and assigned successfully.",
+        ai_generated=ai_used,
+        ai_questions_created=ai_questions_created if ai_used else 0,
+    )

@@ -172,6 +172,45 @@ def build_learning_progress_payload(db: Session, user_id: int) -> dict:
     }
 
 
+def build_challenge_progress_detail(db: Session, user_id: int) -> list[dict]:
+    """
+    Returns per-challenge completion status for the
+    enhanced skill chart showing all 10 individual labs.
+    """
+    CHALLENGE_DISPLAY = [
+        {"slug": "sql-injection", "label": "SQL Injection", "category": "Injection", "color": "#ef4444"},
+        {"slug": "xss", "label": "XSS", "category": "Client-Side", "color": "#f97316"},
+        {"slug": "csrf", "label": "CSRF", "category": "Client-Side", "color": "#f59e0b"},
+        {"slug": "command-injection", "label": "Command Injection", "category": "Injection", "color": "#dc2626"},
+        {"slug": "broken-auth", "label": "Broken Auth", "category": "Auth", "color": "#8b5cf6"},
+        {"slug": "security-misc", "label": "Security Misc", "category": "Config", "color": "#06b6d4"},
+        {"slug": "insecure-storage", "label": "Insecure Storage", "category": "Storage", "color": "#10b981"},
+        {"slug": "directory-traversal", "label": "Dir Traversal", "category": "Path", "color": "#3b82f6"},
+        {"slug": "xxe", "label": "XXE", "category": "Injection", "color": "#ec4899"},
+        {"slug": "redirect", "label": "Open Redirect", "category": "Validation", "color": "#84cc16"},
+    ]
+    rows = (
+        db.query(models.UserProgress.challenge_id)
+        .filter(models.UserProgress.user_id == user_id)
+        .all()
+    )
+    solved = {normalize_progress_challenge_id(r[0]) for r in rows}
+    result = []
+    for ch in CHALLENGE_DISPLAY:
+        slug = ch["slug"]
+        result.append(
+            {
+                "slug": slug,
+                "label": ch["label"],
+                "category": ch["category"],
+                "color": ch["color"],
+                "completed": slug in solved,
+                "value": 100 if slug in solved else 0,
+            }
+        )
+    return result
+
+
 def get_learning_recommendations(profile: Optional[models.UserLearningProgress]) -> list[str]:
     if not profile:
         return ["Start with SQL Injection and XSS beginner labs."]
