@@ -275,6 +275,32 @@ class AICodeAnalyzeResponse(BaseModel):
     confidence: Literal["Low", "Medium", "High"]
 
 
+class FileSecurityReviewFinding(BaseModel):
+    category: str
+    severity: Literal["Low", "Medium", "High", "Critical"]
+    location: str
+    issue: str
+    why_it_matters: str
+    improvement: str
+    reference_challenge: Optional[str] = None
+
+
+class FileSecurityReviewResponse(BaseModel):
+    file_name: str
+    language: str
+    lines_analyzed: int
+    overall_risk: Literal["Low", "Medium", "High", "Critical"]
+    overall_score: int
+    executive_summary: str
+    security_strengths: List[str]
+    findings: List[FileSecurityReviewFinding]
+    prioritized_actions: List[str]
+    testing_checklist: List[str]
+    secure_design_notes: List[str]
+    provider: str
+    fallback: bool = False
+
+
 # ===========================
 # ATTACK SIMULATOR SCHEMAS
 # ===========================

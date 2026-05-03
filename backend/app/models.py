@@ -169,6 +169,20 @@ class ScanHistory(Base):
     vuln_summary = Column(Text, nullable=True)
 
 
+class SavedReport(Base):
+    __tablename__ = "saved_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    project_id = Column(String(100), ForeignKey("projects.id"), nullable=False, index=True)
+    project_name = Column(String(255), nullable=False)
+    json_path = Column(String(600), nullable=True)
+    pdf_path = Column(String(600), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    user = relationship("User")
+
+
 # --- RED/BLUE TEAM GAME MODELS ---
 class Team(Base):
     __tablename__ = "teams"

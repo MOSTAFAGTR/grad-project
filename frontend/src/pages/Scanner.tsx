@@ -13,7 +13,18 @@ interface Finding {
   code_snippet?: string;
   code?: string;
   language?: string;
-  fix?: { recommendation?: string };
+  cwe?: string;
+  category?: string;
+  status?: string;
+  detected_at?: string;
+  business_impact?: string;
+  remediation_priority?: string;
+  fix?: {
+    recommendation?: string;
+    explanation?: string;
+    example?: string;
+    copy_fix_snippet?: string;
+  };
 }
 
 interface MentorResponse {
@@ -37,6 +48,39 @@ interface ProjectOverview {
   files_summary: Array<{ path: string; language: string; size: number }>;
   risk_indicators: string[];
   ai_summary?: string | null;
+}
+
+interface ProjectSecurityReport {
+  project_id: string;
+  executive_summary: string;
+  scan_summary?: {
+    total_files_scanned?: number;
+    total_vulnerabilities?: number;
+    risk_score?: number;
+    risk_level?: string;
+  };
+  vulnerability_distribution?: Record<string, number>;
+  severity_distribution?: Record<string, number>;
+  detailed_findings?: Array<{
+    file?: string;
+    line?: number;
+    vulnerability_type?: string;
+    severity?: string;
+    cwe?: string;
+    remediation_priority?: string;
+    business_impact?: string;
+  }>;
+  prioritized_actions?: string[];
+  testing_checklist?: string[];
+}
+
+interface SavedReportItem {
+  report_id: number;
+  project_id: string;
+  project_name: string;
+  created_at: string;
+  has_pdf: boolean;
+  has_json: boolean;
 }
 
 const SEVERITY_ORDER: Record<string, number> = {
@@ -246,6 +290,18 @@ const Scanner: React.FC = () => {
   const [depSeverityFilter, setDepSeverityFilter] = useState<string>('all');
   const [depRefreshTick, setDepRefreshTick] = useState(0);
   const [mentorNoAiNote, setMentorNoAiNote] = useState('');
+  const [securityReport, setSecurityReport] = useState<ProjectSecurityReport | null>(null);
+  const [reportPdfLoading, setReportPdfLoading] = useState(false);
+  const [reportJsonLoading, setReportJsonLoading] = useState(false);
+  const [savedReports, setSavedReports] = useState<SavedReportItem[]>([]);
+  const [savedReportsLoading, setSavedReportsLoading] = useState(false);
+  const [scanStep, setScanStep] = useState<'upload' | 'analyze' | 'report' | 'download'>('upload');
+  const [findingSeverityFilter, setFindingSeverityFilter] = useState('all');
+  const [findingCategoryFilter, setFindingCategoryFilter] = useState('all');
+  const [findingStatusFilter, setFindingStatusFilter] = useState('all');
+  const [findingFileFilter, setFindingFileFilter] = useState('');
+  const [findingDateFilter, setFindingDateFilter] = useState('');
+  const [regeneratingSection, setRegeneratingSection] = useState<string | null>(null);
 
   useEffect(() => {
     if (!scanData) return;
@@ -261,7 +317,7 @@ const Scanner: React.FC = () => {
     api
       .get(`/api/project/${encodeURIComponent(projectId)}`, { signal: controller.signal })
       .then(() => {
-        setMessage('Restored project context. Click "Scan Project" to fetch latest findings.');
+        setMessage('Restored project context. Upload once to regenerate the full security report.');
       })
       .catch((err: any) => {
         if (err?.name === 'AbortError') return;
@@ -291,7 +347,40 @@ const Scanner: React.FC = () => {
     };
   }, [resultTab, projectId, depRefreshTick]);
 
+  const loadSavedReports = async () => {
+    try {
+      setSavedReportsLoading(true);
+      const response = await api.get('/api/project/reports');
+      setSavedReports(response.data?.reports || []);
+    } catch {
+      setSavedReports([]);
+    } finally {
+      setSavedReportsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSavedReports();
+  }, []);
+
   const findings = scanResults?.findings || [];
+  const filteredFindings = findings.filter((item: Finding) => {
+    const severityOk =
+      findingSeverityFilter === 'all' ||
+      String(item.severity || '').toLowerCase() === findingSeverityFilter.toLowerCase();
+    const categoryName = String(item.category || item.vulnerability_type || item.type || 'Unknown');
+    const categoryOk = findingCategoryFilter === 'all' || categoryName === findingCategoryFilter;
+    const statusOk =
+      findingStatusFilter === 'all' || String(item.status || 'open').toLowerCase() === findingStatusFilter.toLowerCase();
+    const fileOk = !findingFileFilter || String(item.file || '').toLowerCase().includes(findingFileFilter.toLowerCase());
+    const dateOk =
+      !findingDateFilter ||
+      (item.detected_at ? String(item.detected_at).slice(0, 10) === findingDateFilter : true);
+    return severityOk && categoryOk && statusOk && fileOk && dateOk;
+  });
+  const findingCategories: string[] = Array.from(
+    new Set<string>(findings.map((f: Finding) => String(f.category || f.vulnerability_type || f.type || 'Unknown'))),
+  ).sort();
   const severitySummary = findings.reduce(
     (acc: { High: number; Medium: number; Low: number }, item: any) => {
       const sev = String(item.severity || '').toLowerCase();
@@ -322,6 +411,10 @@ const Scanner: React.FC = () => {
     try {
       setUploading(true);
       setMessage('');
+      setSecurityReport(null);
+      setScanResults(null);
+      setSelectedFinding(null);
+      setScanStep('upload');
 
       const formData = new FormData();
       formData.append('file', selectedFile);
@@ -340,6 +433,7 @@ const Scanner: React.FC = () => {
       setProjectOverview(null);
 
       if (resolvedProjectId) {
+        setScanStep('analyze');
         const analysisResponse = await api.post(
           `/api/project/analyze-structure?project_id=${encodeURIComponent(resolvedProjectId)}`,
         );
@@ -353,9 +447,10 @@ const Scanner: React.FC = () => {
           findings: [],
           debug: null,
         });
+        await handleScan(resolvedProjectId, analysisData);
+        setScanStep('report');
+        setMessage('Upload completed. Security test report generated.');
       }
-
-      setMessage('Upload successful!');
     } catch (err: any) {
       setMessage(err.message || 'Upload failed.');
       setProjectId('');
@@ -364,31 +459,119 @@ const Scanner: React.FC = () => {
     }
   };
 
-  const handleScan = async () => {
-    if (!projectId) return;
+  const handleScan = async (targetProjectId?: string, targetOverview?: ProjectOverview | null) => {
+    const activeProjectId = targetProjectId || projectId;
+    if (!activeProjectId) return;
     try {
       setScanning(true);
-      setMessage('');
-      setScanResults(null);
-      setSelectedFinding(null);
-
-      const response = await api.post(`/api/project/scan?project_id=${encodeURIComponent(projectId)}`);
+      setScanStep('analyze');
+      const response = await api.post(`/api/project/scan?project_id=${encodeURIComponent(activeProjectId)}`);
       const data = response.data;
       setScanResults(data);
       setScanData({
-        projectId,
+        projectId: activeProjectId,
         results: data,
-        overview: projectOverview,
+        overview: targetOverview ?? projectOverview,
         summary: data.summary || null,
         findings: data.findings || [],
         debug: data.debug || null,
       });
-      if (data.message) setMessage(data.message);
       setSelectedFinding((data.findings || [])[0] || null);
+      const reportResponse = await api.get(`/api/project/report?project_id=${encodeURIComponent(activeProjectId)}`);
+      setSecurityReport(reportResponse.data as ProjectSecurityReport);
+      setScanStep('report');
+      if (data.message) setMessage(data.message);
     } catch (err: any) {
       setMessage(err.message || 'Scan failed.');
     } finally {
       setScanning(false);
+    }
+  };
+
+  const downloadProjectReportPdf = async () => {
+    if (!projectId) return;
+    try {
+      setReportPdfLoading(true);
+      const response = await api.get(`/api/project/report/pdf?project_id=${encodeURIComponent(projectId)}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `security_test_report_${projectId}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setScanStep('download');
+      await loadSavedReports();
+    } catch (err: any) {
+      setMessage(err?.response?.data?.detail || err.message || 'Failed to generate PDF report.');
+    } finally {
+      setReportPdfLoading(false);
+    }
+  };
+
+  const downloadProjectReportJson = async () => {
+    if (!projectId) return;
+    try {
+      setReportJsonLoading(true);
+      const response = await api.get(`/api/project/report?project_id=${encodeURIComponent(projectId)}`);
+      const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `security_test_report_${projectId}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setMessage(err?.response?.data?.detail || err.message || 'Failed to generate JSON report.');
+    } finally {
+      setReportJsonLoading(false);
+    }
+  };
+
+  const downloadSavedReport = async (reportId: number, format: 'pdf' | 'json') => {
+    try {
+      const response = await api.get(`/api/project/reports/${reportId}/${format}`, { responseType: 'blob' });
+      const blob = new Blob([response.data], { type: format === 'pdf' ? 'application/pdf' : 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `saved_report_${reportId}.${format}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setMessage(`Failed to download saved ${format.toUpperCase()} report.`);
+    }
+  };
+
+  const regenerateReportSection = async (section: string) => {
+    if (!projectId) return;
+    try {
+      setRegeneratingSection(section);
+      const response = await api.post(
+        `/api/project/report/regenerate-section?project_id=${encodeURIComponent(projectId)}&section=${encodeURIComponent(section)}`,
+      );
+      if (section === 'executive_summary') {
+        setSecurityReport((prev) => (prev ? { ...prev, executive_summary: response.data?.content || prev.executive_summary } : prev));
+      }
+      if (section === 'prioritized_actions') {
+        setSecurityReport((prev) => (prev ? { ...prev, prioritized_actions: response.data?.content || [] } : prev));
+      }
+      if (section === 'testing_checklist') {
+        setSecurityReport((prev) => (prev ? { ...prev, testing_checklist: response.data?.content || [] } : prev));
+      }
+      setMessage(`Regenerated ${section.replace('_', ' ')} section.`);
+    } catch (err: any) {
+      setMessage(err?.response?.data?.detail || err.message || `Failed to regenerate ${section}.`);
+    } finally {
+      setRegeneratingSection(null);
     }
   };
 
@@ -470,8 +653,30 @@ const Scanner: React.FC = () => {
       <div className="bg-gray-800/80 border border-gray-700 rounded-xl max-w-5xl w-full p-8 shadow-2xl overflow-x-hidden">
         <h1 className="text-2xl font-bold mb-4">Security Scanner</h1>
         <p className="text-sm text-gray-400 mb-6">
-          Upload a compressed project (.zip) to run it through the security training scanner.
+          Upload a compressed project (.zip) to run a full security review with report and PDF export.
         </p>
+        <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-2">
+          {[
+            { id: 'upload', label: 'Upload' },
+            { id: 'analyze', label: 'Analyze' },
+            { id: 'report', label: 'Report' },
+            { id: 'download', label: 'Download' },
+          ].map((step, idx) => {
+            const activeOrder = ['upload', 'analyze', 'report', 'download'].indexOf(scanStep);
+            const currentOrder = idx;
+            const complete = currentOrder <= activeOrder;
+            return (
+              <div
+                key={step.id}
+                className={`rounded-lg border p-2 text-center text-xs font-semibold ${
+                  complete ? 'border-teal-500 bg-teal-900/30 text-teal-200' : 'border-gray-700 bg-gray-900 text-gray-400'
+                }`}
+              >
+                {step.label}
+              </div>
+            );
+          })}
+        </div>
 
         <div className="space-y-4">
           <div>
@@ -493,7 +698,7 @@ const Scanner: React.FC = () => {
                 : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
-            {uploading ? 'Uploading...' : 'Upload Project'}
+            {uploading ? 'Uploading and generating report...' : 'Upload Project and Generate Report'}
           </button>
 
           {message && (
@@ -508,23 +713,47 @@ const Scanner: React.FC = () => {
                 <span className="font-semibold">Project ID:</span> <span className="font-mono">{projectId}</span>
               </p>
               <button
-                onClick={handleScan}
+                onClick={() => handleScan()}
                 disabled={scanning}
                 className={`w-full py-2 rounded-lg font-semibold transition ${
                   scanning ? 'bg-teal-900 text-gray-400 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700'
                 }`}
               >
-                {scanning ? 'Scanning project...' : 'Scan Project'}
+                {scanning ? 'Scanning project...' : 'Re-run Scan'}
+              </button>
+              <button
+                onClick={downloadProjectReportPdf}
+                disabled={!scanResults || reportPdfLoading}
+                className={`w-full py-2 rounded-lg font-semibold transition ${
+                  !scanResults || reportPdfLoading
+                    ? 'bg-indigo-900 text-gray-400 cursor-not-allowed'
+                    : 'bg-indigo-600 hover:bg-indigo-700'
+                }`}
+              >
+                {reportPdfLoading ? 'Generating PDF...' : 'Download Security Test PDF'}
+              </button>
+              <button
+                onClick={downloadProjectReportJson}
+                disabled={!scanResults || reportJsonLoading}
+                className={`w-full py-2 rounded-lg font-semibold transition ${
+                  !scanResults || reportJsonLoading
+                    ? 'bg-gray-800 text-gray-400 cursor-not-allowed'
+                    : 'bg-gray-600 hover:bg-gray-500'
+                }`}
+              >
+                {reportJsonLoading ? 'Generating JSON...' : 'Download Security Test JSON'}
               </button>
               <button
                 onClick={() => {
                   setProjectId('');
                   setScanResults(null);
+                  setSecurityReport(null);
                   setProjectOverview(null);
                   setSelectedFinding(null);
                   setMentorOpen(false);
                   setMentorData(null);
                   setMentorError('');
+                  setScanStep('upload');
                   clearScanData();
                   setMessage('Project state cleared.');
                 }}
@@ -538,6 +767,66 @@ const Scanner: React.FC = () => {
           {scanResults && (
             <div className="mt-8">
               <h2 className="text-xl font-bold mb-2">Scan Results</h2>
+              {securityReport && (
+                <div className="mb-5 border border-gray-700 rounded-xl p-4 bg-gray-900/70 space-y-3">
+                  <h3 className="text-lg font-bold text-indigo-200">Security Test Report</h3>
+                  <p className="text-sm text-gray-300 whitespace-pre-wrap">{securityReport.executive_summary}</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => regenerateReportSection('executive_summary')}
+                      disabled={regeneratingSection === 'executive_summary'}
+                      className="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-xs font-semibold disabled:opacity-50"
+                    >
+                      Regenerate Summary
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => regenerateReportSection('prioritized_actions')}
+                      disabled={regeneratingSection === 'prioritized_actions'}
+                      className="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-xs font-semibold disabled:opacity-50"
+                    >
+                      Regenerate Recommendations
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                    <div className="border border-gray-700 rounded p-2 bg-gray-800">
+                      <p className="text-gray-400">Files Scanned</p>
+                      <p className="font-semibold">{securityReport.scan_summary?.total_files_scanned ?? 0}</p>
+                    </div>
+                    <div className="border border-gray-700 rounded p-2 bg-gray-800">
+                      <p className="text-gray-400">Total Vulnerabilities</p>
+                      <p className="font-semibold">{securityReport.scan_summary?.total_vulnerabilities ?? 0}</p>
+                    </div>
+                    <div className="border border-gray-700 rounded p-2 bg-gray-800">
+                      <p className="text-gray-400">Risk Score</p>
+                      <p className="font-semibold">{securityReport.scan_summary?.risk_score ?? 0}</p>
+                    </div>
+                    <div className="border border-gray-700 rounded p-2 bg-gray-800">
+                      <p className="text-gray-400">Risk Level</p>
+                      <p className="font-semibold">{securityReport.scan_summary?.risk_level ?? 'Unknown'}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <div className="border border-gray-700 rounded p-3 bg-gray-800/70">
+                      <h4 className="text-sm font-semibold text-cyan-300 mb-2">Prioritized Remediation</h4>
+                      <ul className="list-disc pl-5 text-xs text-gray-300 space-y-1">
+                        {(securityReport.prioritized_actions || []).slice(0, 6).map((item, idx) => (
+                          <li key={`action-${idx}`}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="border border-gray-700 rounded p-3 bg-gray-800/70">
+                      <h4 className="text-sm font-semibold text-cyan-300 mb-2">Testing Checklist</h4>
+                      <ul className="list-disc pl-5 text-xs text-gray-300 space-y-1">
+                        {(securityReport.testing_checklist || []).slice(0, 6).map((item, idx) => (
+                          <li key={`check-${idx}`}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="flex gap-2 mb-4">
                 <button
                   type="button"
@@ -607,6 +896,51 @@ const Scanner: React.FC = () => {
                   Export Results (JSON)
                 </button>
               </div>
+              <div className="mb-4 grid grid-cols-1 md:grid-cols-5 gap-2">
+                <select
+                  className="bg-gray-800 border border-gray-700 rounded px-2 py-2 text-xs"
+                  value={findingSeverityFilter}
+                  onChange={(e) => setFindingSeverityFilter(e.target.value)}
+                >
+                  <option value="all">All severities</option>
+                  <option value="Critical">Critical</option>
+                  <option value="High">High</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Low">Low</option>
+                </select>
+                <select
+                  className="bg-gray-800 border border-gray-700 rounded px-2 py-2 text-xs"
+                  value={findingCategoryFilter}
+                  onChange={(e) => setFindingCategoryFilter(e.target.value)}
+                >
+                  <option value="all">All categories</option>
+                  {findingCategories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="bg-gray-800 border border-gray-700 rounded px-2 py-2 text-xs"
+                  value={findingStatusFilter}
+                  onChange={(e) => setFindingStatusFilter(e.target.value)}
+                >
+                  <option value="all">All status</option>
+                  <option value="open">Open</option>
+                </select>
+                <input
+                  className="bg-gray-800 border border-gray-700 rounded px-2 py-2 text-xs"
+                  placeholder="Filter by file"
+                  value={findingFileFilter}
+                  onChange={(e) => setFindingFileFilter(e.target.value)}
+                />
+                <input
+                  type="date"
+                  className="bg-gray-800 border border-gray-700 rounded px-2 py-2 text-xs"
+                  value={findingDateFilter}
+                  onChange={(e) => setFindingDateFilter(e.target.value)}
+                />
+              </div>
 
               {findings.length === 0 && (
                 <div className="mb-4 bg-amber-900/40 border border-amber-600 rounded p-3 text-sm text-amber-200">
@@ -615,7 +949,7 @@ const Scanner: React.FC = () => {
               )}
 
               <div className="space-y-3 max-w-full overflow-x-hidden">
-                {findings.map((item: any, index: number) => {
+                {filteredFindings.map((item: any, index: number) => {
                   const vType = getFindingType(item);
                   const codeSnippet = getFindingCode(item) || '// No code snippet';
                   return (
@@ -636,17 +970,50 @@ const Scanner: React.FC = () => {
                         <span className={`text-xs px-2 py-1 rounded-full border ${severityBadgeClass(item.severity || '')}`}>
                           {item.severity || '-'}
                         </span>
+                        <span className="text-xs px-2 py-1 rounded-full border border-purple-700 bg-purple-900/30 text-purple-200">
+                          {item.cwe || 'CWE-N/A'}
+                        </span>
+                        <span className="text-xs px-2 py-1 rounded-full border border-amber-700 bg-amber-900/30 text-amber-200">
+                          {item.remediation_priority || 'Hardening'}
+                        </span>
                       </div>
 
-                      <pre className="max-h-[200px] overflow-y-auto bg-slate-900 p-3 rounded-xl text-xs text-green-300 font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere] mb-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+                        <div>
+                          <p className="text-[11px] text-red-300 mb-1 font-semibold">Vulnerable Code</p>
+                          <pre className="max-h-[200px] overflow-y-auto bg-slate-900 p-3 rounded-xl text-xs text-green-300 font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
 {codeSnippet}
-                      </pre>
+                          </pre>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-green-300 mb-1 font-semibold">Secure Example</p>
+                          <pre className="max-h-[200px] overflow-y-auto bg-slate-950 p-3 rounded-xl text-xs text-emerald-300 font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+{item.fix?.example || '// No secure example available'}
+                          </pre>
+                        </div>
+                      </div>
 
                       <div className="text-xs text-gray-300 mb-3 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                         <span className="font-semibold text-gray-200">Fix:</span> {item.fix?.recommendation || '—'}
                       </div>
+                      <div className="text-xs text-yellow-100 mb-3 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                        <span className="font-semibold text-yellow-200">Business Impact:</span>{' '}
+                        {item.business_impact || 'Potential security exposure if exploited.'}
+                      </div>
 
                       <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const snippet = item.fix?.copy_fix_snippet || item.fix?.example || '';
+                            if (!snippet) return;
+                            navigator.clipboard.writeText(snippet);
+                            setMessage('Copied secure fix snippet to clipboard.');
+                          }}
+                          className="text-xs px-3 py-2 rounded bg-green-700 hover:bg-green-600 font-semibold"
+                        >
+                          Copy Fix Snippet
+                        </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -685,6 +1052,9 @@ const Scanner: React.FC = () => {
                     <p><span className="font-semibold">File:</span> <span className="font-mono">{selectedFinding.file}</span></p>
                     <p><span className="font-semibold">Line:</span> {selectedFinding.line ?? '-'}</p>
                     <p><span className="font-semibold">Severity:</span> {selectedFinding.severity ?? '-'}</p>
+                    <p><span className="font-semibold">CWE:</span> {selectedFinding.cwe || 'N/A'}</p>
+                    <p><span className="font-semibold">Priority:</span> {selectedFinding.remediation_priority || 'Hardening'}</p>
+                    <p><span className="font-semibold">Status:</span> {selectedFinding.status || 'open'}</p>
                   </div>
                   <pre className="bg-slate-900 border border-gray-800 rounded-xl p-3 text-xs text-green-300 max-h-[200px] overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
 {selectedFinding.code_snippet || selectedFinding.code || '// No code snippet'}
@@ -714,6 +1084,66 @@ const Scanner: React.FC = () => {
               )}
             </div>
           )}
+
+          <div className="mt-8 bg-gray-900 border border-gray-700 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xl font-bold">Saved Reports</h2>
+              <button
+                type="button"
+                onClick={loadSavedReports}
+                className="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm font-semibold"
+              >
+                Refresh
+              </button>
+            </div>
+            {savedReportsLoading ? (
+              <p className="text-sm text-gray-400">Loading reports...</p>
+            ) : savedReports.length === 0 ? (
+              <p className="text-sm text-gray-400">No saved reports yet. Generate a PDF report to create one.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs border border-gray-700 rounded">
+                  <thead className="bg-gray-800 text-gray-300">
+                    <tr>
+                      <th className="p-2 text-left">Project</th>
+                      <th className="p-2 text-left">Project ID</th>
+                      <th className="p-2 text-left">Created</th>
+                      <th className="p-2 text-left">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {savedReports.map((row) => (
+                      <tr key={row.report_id} className="border-t border-gray-700">
+                        <td className="p-2">{row.project_name}</td>
+                        <td className="p-2 font-mono">{row.project_id}</td>
+                        <td className="p-2">{new Date(row.created_at).toLocaleString()}</td>
+                        <td className="p-2">
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              disabled={!row.has_pdf}
+                              onClick={() => downloadSavedReport(row.report_id, 'pdf')}
+                              className="px-2 py-1 rounded bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50"
+                            >
+                              PDF
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!row.has_json}
+                              onClick={() => downloadSavedReport(row.report_id, 'json')}
+                              className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-50"
+                            >
+                              JSON
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
 
           {projectOverview && (
             <div className="mt-8 bg-gray-900 border border-gray-700 rounded-lg p-4">

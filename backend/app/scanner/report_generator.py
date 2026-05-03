@@ -9,6 +9,39 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
 
+def _priority_rank(priority: str) -> int:
+    p = (priority or "").strip().lower()
+    if p == "fix now":
+        return 0
+    if p == "fix soon":
+        return 1
+    return 2
+
+
+def _build_prioritized_actions(findings: List[Dict[str, Any]]) -> List[str]:
+    actions = []
+    seen = set()
+    sorted_findings = sorted(
+        findings,
+        key=lambda f: (
+            _priority_rank(str(f.get("remediation_priority", "Hardening"))),
+            str(f.get("severity", "")),
+        ),
+    )
+    for finding in sorted_findings:
+        vtype = finding.get("vulnerability_type", "Security issue")
+        rec = (finding.get("fix") or {}).get("recommendation") or "Apply secure coding controls for this pattern."
+        priority = finding.get("remediation_priority", "Hardening")
+        msg = f"[{priority}] {vtype}: {rec}"
+        if msg in seen:
+            continue
+        seen.add(msg)
+        actions.append(msg)
+        if len(actions) >= 10:
+            break
+    return actions
+
+
 def generate_security_report(
     project_id: str,
     findings: List[Dict[str, Any]],
@@ -73,6 +106,14 @@ def generate_security_report(
         "vulnerability_distribution": vuln_dist,
         "severity_distribution": sev_dist,
         "detailed_findings": findings,
+        "prioritized_actions": _build_prioritized_actions(findings),
+        "testing_checklist": [
+            "Validate all user-controlled input boundaries and allowed formats.",
+            "Run negative tests for SQLi/XSS/command-injection payloads.",
+            "Verify authN/authZ checks for privileged and sensitive routes.",
+            "Scan dependencies and update vulnerable packages with known fixes.",
+            "Re-test high-priority issues after remediation before release.",
+        ],
     }
 
     return report
@@ -155,14 +196,20 @@ def generate_pdf_report(report_data: Dict[str, Any], output_path: Path) -> None:
     elements.append(Paragraph("<b>Detailed Findings</b>", styles["Heading2"]))
     findings = report_data.get("detailed_findings", [])
     if findings:
-        data = [["File", "Line", "Type", "Severity"]]
+        data = [["File", "Line", "Type", "Severity", "CWE", "Priority", "Business Impact"]]
         for f in findings:
+            impact = str(f.get("business_impact", ""))
+            if len(impact) > 80:
+                impact = f"{impact[:77]}..."
             data.append(
                 [
                     f.get("file", ""),
                     str(f.get("line", "")),
                     f.get("vulnerability_type", ""),
                     f.get("severity", ""),
+                    str(f.get("cwe") or ""),
+                    str(f.get("remediation_priority") or "Hardening"),
+                    impact,
                 ]
             )
         table = Table(data, repeatRows=1, hAlign="LEFT")
@@ -178,6 +225,14 @@ def generate_pdf_report(report_data: Dict[str, Any], output_path: Path) -> None:
             )
         )
         elements.append(table)
+        elements.append(Spacer(1, 12))
+
+    actions = report_data.get("prioritized_actions", [])
+    if actions:
+        elements.append(Paragraph("<b>Prioritized Remediation Plan</b>", styles["Heading2"]))
+        for idx, action in enumerate(actions, start=1):
+            elements.append(Paragraph(f"{idx}. {action}", styles["Normal"]))
+        elements.append(Spacer(1, 8))
 
     doc.build(elements)
 

@@ -1,11 +1,15 @@
 from typing import List, Dict, Any, Optional
 from pathlib import Path
+from datetime import datetime
 
 from .rules import RULES  # not strictly needed, but keeps mapping types consistent
 
 
 FIX_RECOMMENDATIONS = {
     "SQL Injection": {
+        "cwe": "CWE-89",
+        "business_impact": "Attackers may read, modify, or delete sensitive database records.",
+        "priority": "Fix now",
         "explanation": "User input is directly concatenated into SQL query which allows attackers to inject malicious SQL.",
         "recommendation": "Use parameterized queries or prepared statements.",
         "example": {
@@ -14,6 +18,9 @@ FIX_RECOMMENDATIONS = {
         },
     },
     "XSS": {
+        "cwe": "CWE-79",
+        "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+        "priority": "Fix now",
         "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
         "recommendation": "Escape output or use safe DOM methods.",
         "example": {
@@ -22,6 +29,9 @@ FIX_RECOMMENDATIONS = {
         },
     },
     "Command Injection": {
+        "cwe": "CWE-78",
+        "business_impact": "Attackers may execute arbitrary commands and compromise the host.",
+        "priority": "Fix now",
         "explanation": "User input is passed to system commands allowing arbitrary command execution.",
         "recommendation": "Avoid passing raw user input to system calls.",
         "example": {
@@ -29,6 +39,9 @@ FIX_RECOMMENDATIONS = {
         },
     },
     "Hardcoded Secret": {
+        "cwe": "CWE-798",
+        "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+        "priority": "Fix soon",
         "explanation": "Sensitive credentials are hardcoded in source code.",
         "recommendation": "Move secrets to environment variables.",
         "example": {
@@ -36,6 +49,9 @@ FIX_RECOMMENDATIONS = {
         },
     },
     "CSRF": {
+        "cwe": "CWE-352",
+        "business_impact": "Attackers can trigger unauthorized state changes using victim sessions.",
+        "priority": "Fix soon",
         "explanation": "State-changing actions can be triggered without verifying request origin/token.",
         "recommendation": "Use anti-CSRF tokens and validate them on every state-changing request.",
         "example": {
@@ -54,11 +70,32 @@ def _guess_language_from_path(rel_path: str) -> Optional[str]:
     return {
         ".php": "php",
         ".js": "javascript",
+        ".jsx": "javascript",
+        ".ts": "typescript",
+        ".tsx": "typescript",
         ".py": "python",
         ".java": "java",
+        ".go": "go",
+        ".rb": "ruby",
+        ".cs": "csharp",
+        ".kt": "kotlin",
+        ".swift": "swift",
         ".html": "html",
         ".htm": "html",
         ".css": "css",
+        ".rs": "rust",
+        ".scala": "scala",
+        ".lua": "lua",
+        ".r": "r",
+        ".pl": "perl",
+        ".m": "objective-c",
+        ".ps1": "powershell",
+        ".bat": "batch",
+        ".tf": "terraform",
+        ".groovy": "groovy",
+        ".dart": "dart",
+        ".c": "c",
+        ".cpp": "cpp",
     }.get(ext)
 
 
@@ -96,11 +133,18 @@ def attach_fixes(findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "explanation": rec.get("explanation"),
                 "recommendation": rec.get("recommendation"),
                 "example": example_snippet,
+                "copy_fix_snippet": example_snippet,
             }
 
         f_with_fix = {
             **f,
             "fix": fix_block or None,
+            "cwe": (rec or {}).get("cwe"),
+            "business_impact": (rec or {}).get("business_impact", "Potential security and compliance exposure."),
+            "remediation_priority": (rec or {}).get("priority", "Hardening"),
+            "status": "open",
+            "detected_at": datetime.utcnow().isoformat(),
+            "category": vtype,
         }
         enhanced.append(f_with_fix)
 

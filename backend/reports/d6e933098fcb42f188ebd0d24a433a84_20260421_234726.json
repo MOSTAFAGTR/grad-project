@@ -1,0 +1,39 @@
+{
+  "project_id": "d6e933098fcb42f188ebd0d24a433a84",
+  "executive_summary": "The project currently appears to have a relatively low security risk. Continue to follow secure coding practices and monitor for new issues.",
+  "scan_summary": {
+    "total_files_scanned": 1,
+    "total_vulnerabilities": 0,
+    "risk_score": 0,
+    "risk_level": "Low"
+  },
+  "vulnerability_distribution": {},
+  "severity_distribution": {
+    "High": 0,
+    "Medium": 0,
+    "Low": 0
+  },
+  "detailed_findings": [],
+  "prioritized_actions": [],
+  "testing_checklist": [
+    "Validate all user-controlled input boundaries and allowed formats.",
+    "Run negative tests for SQLi/XSS/command-injection payloads.",
+    "Verify authN/authZ checks for privileged and sensitive routes.",
+    "Scan dependencies and update vulnerable packages with known fixes.",
+    "Re-test high-priority issues after remediation before release."
+  ],
+  "debug": {
+    "files_scanned": 1,
+    "files_with_matches": 0,
+    "file_details": [
+      {
+        "file": "sample-db.py",
+        "matches": 0,
+        "lines_scanned": 51
+      }
+    ],
+    "file_errors": [],
+    "root_used_for_scan": "/app/uploads/extracted_projects/d6e933098fcb42f188ebd0d24a433a84",
+    "extracted_file_count": 1
+  }
+}

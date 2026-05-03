@@ -8,6 +8,7 @@ import threading
 from datetime import datetime
 import logging
 from typing import Optional
+import re
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends, Request
 from fastapi.responses import FileResponse
@@ -89,6 +90,8 @@ def extract_zip(zip_path: Path, extract_to: Path) -> None:
         ".html", ".htm", ".css", ".vue", ".svelte",
         ".sql", ".xml", ".json", ".yml", ".yaml", ".env", ".ini", ".cfg",
         ".c", ".cpp", ".h", ".hpp", ".sh", ".dart",
+        ".rs", ".scala", ".lua", ".r", ".m", ".pl", ".ps1", ".bat",
+        ".tf", ".hcl", ".groovy", ".gradle", ".asp", ".aspx", ".jsp",
     }
 
     # Ensure target directory exists
@@ -105,6 +108,7 @@ def extract_zip(zip_path: Path, extract_to: Path) -> None:
                 continue
 
             rel_path = Path(name)
+            lowered_name = rel_path.name.lower()
 
             # Skip large/unwanted trees like node_modules early
             if "node_modules" in rel_path.parts:
@@ -113,7 +117,7 @@ def extract_zip(zip_path: Path, extract_to: Path) -> None:
             # Only allow specific source-code file extensions.
             # This reduces risk from binary payloads (.exe, .dll, etc.)
             # and keeps future scanning focused on code.
-            if rel_path.suffix.lower() not in allowed_exts:
+            if rel_path.suffix.lower() not in allowed_exts and lowered_name not in {"dockerfile", "makefile"}:
                 continue
 
             # Prevent directory traversal / absolute paths:
@@ -207,6 +211,21 @@ def scan_project_files(project_folder: Path):
         ".hpp": "cpp_header",
         ".sh": "shell",
         ".dart": "dart",
+        ".rs": "rust",
+        ".scala": "scala",
+        ".lua": "lua",
+        ".r": "r",
+        ".m": "objective_c",
+        ".pl": "perl",
+        ".ps1": "powershell",
+        ".bat": "batch",
+        ".tf": "terraform",
+        ".hcl": "hcl",
+        ".groovy": "groovy",
+        ".gradle": "gradle",
+        ".asp": "asp",
+        ".aspx": "aspnet",
+        ".jsp": "jsp",
     }
 
     files_info = []
@@ -221,6 +240,12 @@ def scan_project_files(project_folder: Path):
             rel_path = full_path.relative_to(base)
             ext = Path(fname).suffix.lower()
             language = ext_to_lang.get(ext, "unknown")
+            if language == "unknown":
+                low_fname = fname.lower()
+                if low_fname == "dockerfile":
+                    language = "dockerfile"
+                elif low_fname == "makefile":
+                    language = "makefile"
             print("SCANNING FILE:", str(full_path))
             files_info.append(
                 {
@@ -310,6 +335,100 @@ def scan_project_for_vulnerabilities(project_folder: Path, extraction_root: Opti
         "message": message,
         "debug": debug_payload,
     }
+
+
+def _build_project_report(project_id: str, project_dir: Path) -> dict:
+    scan_root = normalize_project_root(project_dir)
+    files = scan_project_files(scan_root)
+    scan_result = scan_project_for_vulnerabilities(scan_root, extraction_root=project_dir)
+    risk = calculate_risk(scan_result["findings"])
+    report = generate_security_report(
+        project_id=project_id,
+        findings=scan_result["findings"],
+        risk_data=risk,
+        files=files,
+    )
+    report["debug"] = scan_result.get("debug", {})
+    return report
+
+
+def _safe_filename(value: str) -> str:
+    text = (value or "").strip()
+    text = re.sub(r"[^A-Za-z0-9_.-]+", "_", text)
+    return text[:120] or "report"
+
+
+def _save_report_artifacts(project_id: str, report: dict) -> tuple[Path, Path]:
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    base_name = f"{_safe_filename(project_id)}_{stamp}"
+    json_path = REPORTS_DIR / f"{base_name}.json"
+    pdf_path = REPORTS_DIR / f"{base_name}.pdf"
+    json_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    generate_pdf_report(report, pdf_path)
+    return json_path, pdf_path
+
+
+def _persist_saved_report(
+    db: Session,
+    current_user: models.User,
+    project: models.Project,
+    json_path: Path,
+    pdf_path: Path,
+) -> models.SavedReport:
+    row = models.SavedReport(
+        user_id=current_user.id,
+        project_id=project.id,
+        project_name=project.name,
+        json_path=str(json_path),
+        pdf_path=str(pdf_path),
+        created_at=datetime.utcnow(),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def _compact_vuln_summary_for_storage(result: dict, risk: dict) -> str:
+    """
+    Keep DB payload small and stable for large projects.
+    """
+    findings = list(result.get("findings") or [])
+    compact_findings = []
+    for f in findings[:60]:
+        compact_findings.append(
+            {
+                "file": f.get("file"),
+                "line": f.get("line"),
+                "vulnerability_type": f.get("vulnerability_type"),
+                "severity": f.get("severity"),
+                "cwe": f.get("cwe"),
+                "remediation_priority": f.get("remediation_priority"),
+                "business_impact": f.get("business_impact"),
+                "fix": {
+                    "recommendation": (f.get("fix") or {}).get("recommendation"),
+                    "example": (f.get("fix") or {}).get("example"),
+                },
+            }
+        )
+
+    payload = {
+        "total_vulnerabilities": int(result.get("total_vulnerabilities", 0)),
+        "vulnerability_counts": result.get("summary", {}),
+        "risk": {
+            "total_score": int(risk.get("total_score", 0)),
+            "risk_level": str(risk.get("risk_level", "Low")),
+        },
+        "findings": compact_findings,
+        "truncated_findings": len(findings) > len(compact_findings),
+    }
+    text = json.dumps(payload)
+    if len(text) > 60000:
+        payload["findings"] = compact_findings[:20]
+        payload["truncated_findings"] = True
+        text = json.dumps(payload)
+    return text
 
 
 @router.post("/project/upload")
@@ -499,7 +618,7 @@ def scan_project(
         total_vulnerabilities=result["total_vulnerabilities"],
         risk_score=risk["total_score"],
         risk_level=risk["risk_level"],
-        vuln_summary=json.dumps(result or {}),
+        vuln_summary=_compact_vuln_summary_for_storage(result, risk),
     )
     db.add(history)
     db.commit()
@@ -555,19 +674,7 @@ def get_project_report(
         raise HTTPException(status_code=404, detail="Project folder does not exist")
     if len(list(project_dir.rglob("*"))) == 0:
         raise HTTPException(status_code=400, detail="Project folder is EMPTY after extraction")
-    scan_root = normalize_project_root(project_dir)
-    files = scan_project_files(scan_root)
-    scan_result = scan_project_for_vulnerabilities(scan_root, extraction_root=project_dir)
-    risk = calculate_risk(scan_result["findings"])
-
-    report = generate_security_report(
-        project_id=project_id,
-        findings=scan_result["findings"],
-        risk_data=risk,
-        files=files,
-    )
-
-    return report
+    return _build_project_report(project_id=project_id, project_dir=project_dir)
 
 
 @router.get("/project/report/pdf")
@@ -588,27 +695,121 @@ def get_project_report_pdf(
         raise HTTPException(status_code=404, detail="Project folder does not exist")
     if len(list(project_dir.rglob("*"))) == 0:
         raise HTTPException(status_code=400, detail="Project folder is EMPTY after extraction")
-    scan_root = normalize_project_root(project_dir)
-    files = scan_project_files(scan_root)
-    scan_result = scan_project_for_vulnerabilities(scan_root, extraction_root=project_dir)
-    risk = calculate_risk(scan_result["findings"])
-
-    report = generate_security_report(
-        project_id=project_id,
-        findings=scan_result["findings"],
-        risk_data=risk,
-        files=files,
-    )
-
-    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    pdf_path = REPORTS_DIR / f"{project_id}_security_report.pdf"
-    generate_pdf_report(report, pdf_path)
+    report = _build_project_report(project_id=project_id, project_dir=project_dir)
+    json_path, pdf_path = _save_report_artifacts(project_id=project_id, report=report)
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if project:
+        _persist_saved_report(
+            db=db,
+            current_user=current_user,
+            project=project,
+            json_path=json_path,
+            pdf_path=pdf_path,
+        )
 
     return FileResponse(
         path=str(pdf_path),
         media_type="application/pdf",
         filename=f"{project_id}_security_report.pdf",
     )
+
+
+@router.post("/project/report/regenerate-section")
+def regenerate_report_section(
+    project_id: str = Query(..., description="ID of extracted project folder"),
+    section: str = Query(..., description="Section to regenerate"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _assert_project_access(db, project_id, current_user)
+    project_dir = EXTRACTED_PROJECTS_DIR / project_id
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project folder does not exist")
+    report = _build_project_report(project_id=project_id, project_dir=project_dir)
+    section_key = (section or "").strip().lower()
+    section_map = {
+        "executive_summary": report.get("executive_summary"),
+        "prioritized_actions": report.get("prioritized_actions", []),
+        "testing_checklist": report.get("testing_checklist", []),
+        "detailed_findings": report.get("detailed_findings", []),
+        "severity_distribution": report.get("severity_distribution", {}),
+    }
+    if section_key not in section_map:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported section. Use one of: executive_summary, prioritized_actions, testing_checklist, detailed_findings, severity_distribution",
+        )
+    return {
+        "project_id": project_id,
+        "section": section_key,
+        "content": section_map[section_key],
+        "generated_at": datetime.utcnow().isoformat(),
+    }
+
+
+@router.get("/project/reports")
+def list_saved_reports(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    rows = (
+        db.query(models.SavedReport)
+        .filter(models.SavedReport.user_id == current_user.id)
+        .order_by(models.SavedReport.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    result = []
+    for row in rows:
+        result.append(
+            {
+                "report_id": row.id,
+                "project_id": row.project_id,
+                "project_name": row.project_name,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "has_pdf": bool(row.pdf_path and Path(row.pdf_path).exists()),
+                "has_json": bool(row.json_path and Path(row.json_path).exists()),
+            }
+        )
+    return {"total_reports": len(result), "reports": result}
+
+
+@router.get("/project/reports/{report_id}/pdf")
+def download_saved_report_pdf(
+    report_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    row = (
+        db.query(models.SavedReport)
+        .filter(models.SavedReport.id == report_id, models.SavedReport.user_id == current_user.id)
+        .first()
+    )
+    if not row or not row.pdf_path:
+        raise HTTPException(status_code=404, detail="Saved PDF report not found.")
+    path = Path(row.pdf_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Saved PDF report file is missing.")
+    return FileResponse(path=str(path), media_type="application/pdf", filename=f"{row.project_id}_security_report.pdf")
+
+
+@router.get("/project/reports/{report_id}/json")
+def download_saved_report_json(
+    report_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    row = (
+        db.query(models.SavedReport)
+        .filter(models.SavedReport.id == report_id, models.SavedReport.user_id == current_user.id)
+        .first()
+    )
+    if not row or not row.json_path:
+        raise HTTPException(status_code=404, detail="Saved JSON report not found.")
+    path = Path(row.json_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Saved JSON report file is missing.")
+    return FileResponse(path=str(path), media_type="application/json", filename=f"{row.project_id}_security_report.json")
 
 
 @router.post("/project/scan/ai")

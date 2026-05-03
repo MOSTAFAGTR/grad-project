@@ -113,6 +113,21 @@ def analyze_project_structure(
         ".xml": "xml",
         ".html": "html",
         ".css": "css",
+        ".rs": "rust",
+        ".scala": "scala",
+        ".lua": "lua",
+        ".r": "r",
+        ".m": "objective_c",
+        ".pl": "perl",
+        ".ps1": "powershell",
+        ".bat": "batch",
+        ".tf": "terraform",
+        ".hcl": "hcl",
+        ".groovy": "groovy",
+        ".gradle": "gradle",
+        ".asp": "asp",
+        ".aspx": "aspnet",
+        ".jsp": "jsp",
     }
     skip_dirs = {".git", "node_modules", "__pycache__", "venv", ".dart_tool"}
 
