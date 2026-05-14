@@ -1,0 +1,2 @@
+# Your API keys belong in `.env` next to docker-compose.yml (not in this file).
+# Copy from `.env.example` if you need a template.

@@ -1,0 +1,734 @@
+﻿\chapter{System Design}
+Containing a comprehensive description of the design chosen, how it addresses the problem, and why it is designed the way it is.
+
+\section{Introduction}
+
+The SCALE platform (Secure Coding Learning Environment) is designed as a secure, role-aware, web-based system for practical cybersecurity education. The core design objective is to let students safely interact with intentionally vulnerable behaviours, verify remediation correctness, and receive structured feedback, without exposing the host infrastructure to untrusted code execution risk.
+
+The implemented architecture uses a hybrid style: service decomposition at deployment level (frontend, backend API, AI service, multiple databases, sandbox image builder), with layered modular organisation inside the backend FastAPI service. This combination was selected to preserve implementation velocity while isolating high-risk operations and keeping interfaces explicit.
+
+Chapter 3 defined 28 functional requirements (FR01--FR28) and 18 non-functional requirements (NFR01--NFR18). This chapter maps those requirements to the implemented design: architectural viewpoints, data model decisions, interfaces, implementation strategy, testing traceability, and deployment blueprint. All descriptions below are aligned with the currently implemented codebase and Docker topology.
+
+\section{Architecture Design viewpoints}
+
+\subsection{Context viewpoint}
+
+The Context viewpoint describes SCALE as a bounded system exposing security-learning services to external actors.
+
+\textbf{Primary actors}
+\begin{itemize}
+    \item \textbf{Student}: authenticates, uploads projects for scanning, executes challenge attacks, submits code fixes, takes quizzes, views progress analytics, and downloads pentest-style reports.
+    \item \textbf{Instructor}: manages quiz content/assignments, monitors class and per-student analytics, communicates with students, and can reset student progress for integrity management.
+    \item \textbf{Administrator}: manages users and roles, approves instructors, reviews security logs/statistics, and supervises overall platform operation.
+    \item \textbf{Docker Engine}: technical actor used by backend sandbox execution to build and run ephemeral containers for fix validation.
+    \item \textbf{AI Service}: externalised assistant endpoint consumed by backend for AI-powered quiz preview and mentor workflows.
+\end{itemize}
+
+\textbf{System boundary services}
+\begin{itemize}
+    \item Authentication and role-based authorization.
+    \item Challenge attack/fix workflows and hint/state tracking.
+    \item Project upload, extraction, static vulnerability scanning, and risk scoring.
+    \item Learning analytics, progress calculations, and dashboards.
+    \item Messaging and security event logging.
+\end{itemize}
+
+\textbf{Design concerns addressed}
+\begin{itemize}
+    \item NFR01 sandbox isolation and NFR02 role-based access control.
+    \item FR03--FR06 deterministic fix validation.
+    \item FR22--FR23 security observability and governance.
+\end{itemize}
+
+\subsection{Composition viewpoint}\label{ss-comp}
+
+SCALE is decomposed into collaborating runtime subsystems:
+
+\begin{itemize}
+    \item \textbf{Frontend subsystem} (React + Vite + TypeScript + Tailwind): role-aware SPA, challenge UI, scanner views, dashboards, messaging screens.
+    \item \textbf{Backend API subsystem} (FastAPI monolith): auth, business logic, scanner orchestration, challenge endpoints, stats, messaging, reporting.
+    \item \textbf{AI subsystem} (separate FastAPI container): AI preview/generation endpoint consumed via HTTP.
+    \item \textbf{Sandbox subsystem} (Docker SDK via backend): ephemeral per-submission image build and test execution.
+    \item \textbf{Database subsystem}: three MySQL instances:
+    \begin{itemize}
+        \item main\_db: core platform data.
+        \item challenge\_db\_sqli: SQL injection lab dataset.
+        \item challenge\_db\_csrf: CSRF lab dataset.
+    \end{itemize}
+\end{itemize}
+
+Inter-subsystem communication occurs through REST APIs and SQL connections; sandbox orchestration uses Docker socket integration from backend.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{images/component.jpeg}
+    \caption{Overall system architecture of SCALE}
+    \label{fig:component_diagram}
+\end{figure}
+
+\textbf{Design rationale}
+\begin{itemize}
+    \item High-risk execution is isolated from application request handling.
+    \item AI workflows are independently deployable and replaceable (NFR11).
+    \item Separate challenge databases prevent accidental coupling with primary application data.
+\end{itemize}
+
+\subsection{Logical viewpoint}
+\label{logical}
+
+The Logical viewpoint captures key domain entities and relationships implemented in SQLAlchemy models.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{images/Class2.jpeg}
+    \caption{System Class Diagram}
+    \label{fig:class_diag}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\caption{User}
+\begin{tabular}{ | l | m{11cm}|}
+\hline
+\textbf{Abstract or Concrete} & Concrete \\
+\hline
+\textbf{Superclasses} & SQLAlchemy Base \\
+\hline
+\textbf{Subclasses} & None \\
+\hline
+\textbf{Purpose} & Represents platform actors and authentication identity. \\
+\hline
+\textbf{Collaborations} & UserProgress, UserAnswer, QuizAttempt, Message, SecurityLog \\
+\hline
+\textbf{Attributes} & id, email, hashed\_password, role, is\_approved \\
+\hline
+\textbf{Operations (implemented)} & register/login via auth router, role update via admin endpoint \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{ChallengeState}
+\begin{tabular}{ | l | m{11cm}|}
+\hline
+\textbf{Abstract or Concrete} & Concrete \\
+\hline
+\textbf{Superclasses} & SQLAlchemy Base \\
+\hline
+\textbf{Subclasses} & None \\
+\hline
+\textbf{Purpose} & Tracks per-user challenge runtime state (stage, attempts, time, hints). \\
+\hline
+\textbf{Collaborations} & User, hint endpoints, progress recalculation \\
+\hline
+\textbf{Attributes} & user\_id, challenge\_id, current\_stage, attempt\_count, time\_spent\_seconds, hints\_used \\
+\hline
+\textbf{Operations (implemented)} & GET/POST state APIs, hint consumption updates \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Project and ScanHistory}
+\begin{tabular}{ | l | m{11cm}|}
+\hline
+\textbf{Abstract or Concrete} & Concrete \\
+\hline
+\textbf{Superclasses} & SQLAlchemy Base \\
+\hline
+\textbf{Subclasses} & None \\
+\hline
+\textbf{Purpose} & Stores uploaded project metadata and persisted scan snapshots. \\
+\hline
+\textbf{Collaborations} & scanner detector/scorer/fixer/report\_generator, dashboard analytics \\
+\hline
+\textbf{Attributes} & project id/name/owner, total\_vulnerabilities, risk\_score, risk\_level, vuln\_summary \\
+\hline
+\textbf{Operations (implemented)} & upload, scan, report JSON/PDF retrieval \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{SecurityLog}
+\begin{tabular}{ | l | m{11cm}|}
+\hline
+\textbf{Abstract or Concrete} & Concrete \\
+\hline
+\textbf{Superclasses} & SQLAlchemy Base \\
+\hline
+\textbf{Subclasses} & None \\
+\hline
+\textbf{Purpose} & Immutable audit stream for security-relevant actions. \\
+\hline
+\textbf{Collaborations} & security logger utility, admin logs API, attack replay data source \\
+\hline
+\textbf{Attributes} & event\_type, severity, endpoint, ip\_address, session\_id, correlation\_id, context\_type, metadata \\
+\hline
+\textbf{Operations (implemented)} & write via log\_security\_event(), query/filter via admin routes \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Patterns use viewpoint}
+
+To satisfy committee guidance, only patterns demonstrably present in implementation are included:
+
+\begin{itemize}
+    \item \textbf{Layered architecture (applied)}: presentation (React SPA), application (FastAPI routers), domain logic (security/scanner/learning modules), infrastructure (MySQL, Docker, ReportLab, OpenAI client).
+    \item \textbf{Dependency Injection (applied)}: FastAPI \texttt{Depends()} usage for DB sessions, authentication, and role checks.
+    \item \textbf{Broker-style API orchestration (applied)}: backend acts as a broker between frontend and downstream services (AI service, sandbox runtime, scanner/report generators).
+\end{itemize}
+
+\textbf{Important note}: classical GoF patterns not represented in the implemented class structure are intentionally omitted.
+
+\subsubsection{Design Rationale}
+
+These patterns were selected to maximize auditability and maintainability while preserving secure boundaries around untrusted operations. Dependency injection centralizes authorization and data access constraints. Layering reduces coupling between UI concerns and execution/security infrastructure.
+
+\subsection{Algorithm viewpoint}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[height=0.8\textheight, width=\textwidth, keepaspectratio]{images/Flow.jpeg}
+    \caption{Sandbox Execution Process Flow}
+    \label{fig:sandbox_flow}
+\end{figure}
+
+\textbf{Sandbox Fix-Validation Algorithm (implemented behaviour)}
+\begin{itemize}
+    \item Receive \texttt{challenge\_dir} and submitted code string.
+    \item Validate \texttt{challenge\_dir} against \texttt{ALLOWED\_CHALLENGE\_DIRS} and enforce \texttt{SANDBOX\_MAX\_CODE\_CHARS}.
+    \item Copy challenge directory to temporary workspace.
+    \item Overwrite \texttt{app.py} with submitted code.
+    \item Generate temporary Dockerfile (Python 3.9 slim, dependency install, CRLF normalization for \texttt{run\_tests.sh}).
+    \item Build image and run container with \texttt{mem\_limit=256m}, \texttt{cpu\_quota=50000}, \texttt{pids\_limit=128} on \texttt{scale\_net}.
+    \item Wait with timeout \texttt{SANDBOX\_RUN\_TIMEOUT}; kill if exceeded.
+    \item Parse unittest summary from logs: \texttt{tests\_run}, \texttt{failures}, \texttt{errors}.
+    \item Compute success if exit code is 0 and both failure/error counts are zero.
+    \item Remove container and temporary image.
+    \item Return structured JSON for frontend modal and progress updates.
+\end{itemize}
+
+\subsection{Interaction viewpoint}
+
+\textbf{Example interaction: Admin approves instructor account (FR20)}
+\begin{itemize}
+    \item Admin opens pending requests list.
+    \item Frontend sends \texttt{POST /api/auth/admin/approve/\{user\_id\}} with admin JWT.
+    \item Backend validates token and role using \texttt{get\_current\_admin}.
+    \item CRUD layer updates \texttt{users.is\_approved = True}.
+    \item Backend returns success response.
+    \item Instructor can now authenticate successfully; prior attempts return HTTP 403.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{images/Seq1.0.png}
+    \caption{Sequence Diagram: Admin Approval Workflow}
+    \label{fig:seq_admin_approval}
+\end{figure}
+
+\subsection{Interface viewpoint}
+
+SCALE exposes RESTful HTTP interfaces grouped by router prefix.
+
+\begin{itemize}
+    \item \texttt{/api/auth}: registration, login/logout, admin user management.
+    \item \texttt{/api/challenges}: attack/fix/state/progress/hints for ten challenge tracks.
+    \item \texttt{/api/project}, \texttt{/api/user/projects}: upload, scan, report, analytics.
+    \item \texttt{/api/quizzes} and \texttt{/api/quiz}: static and dynamic quiz systems.
+    \item \texttt{/api/stats}, \texttt{/api/instructor}: student/instructor/admin analytics.
+    \item \texttt{/api/security}: log query and security statistics.
+    \item \texttt{/api/messages}: threaded messaging and unread count.
+    \item \texttt{/api/report/pdf}: student pentest PDF export.
+\end{itemize}
+
+\textbf{Representative interfaces}
+\begin{itemize}
+    \item \texttt{POST /api/auth/login}: credential verification, JWT issuance, role + approval enforcement.
+    \item \texttt{POST /api/challenges/submit-fix}: sandbox validation and optional annotated code diff.
+    \item \texttt{POST /api/project/scan}: static scan + risk scoring + persistence.
+    \item \texttt{GET /api/stats/admin/dashboard}: aggregate operational metrics for admin panel.
+\end{itemize}
+
+\section{Data Design}
+
+\subsection{Data Description}
+
+The system uses relational persistence with SQLAlchemy models and MySQL storage.
+
+\begin{itemize}
+    \item Main transactional data: users, progress, scans, quizzes, logs, messaging.
+    \item Challenge-specific data isolation: dedicated SQLi and CSRF lab databases.
+    \item Timestamps are UTC (DateTime columns).
+    \item Scan payloads are persisted as JSON-encoded text (\texttt{scan\_history.vuln\_summary}).
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{images/ERD.jpeg}
+    \caption{Entity Relationship Diagram of SCALE}
+    \label{fig:erd_diagram}
+\end{figure}
+
+\subsection{Dataset Description}
+
+\begin{table}[htbp]
+\centering
+\caption{SCALE Quiz Dataset and Sources}
+\label{tab:ds}
+\begin{tabular}{ | l | m{11cm}|}
+\hline
+Dataset Name & SCALE Security Quiz Bank \\
+\hline
+Source & Seeded via \texttt{seed\_db.py} into \texttt{questions} and \texttt{question\_options} tables \\
+\hline
+Size & 200+ seed questions; runtime additions by instructors \\
+\hline
+Question Types & Multiple-choice with topic, difficulty, skill\_focus, explanation \\
+\hline
+Dynamic Dataset & Runtime dynamic quiz generation from project scan findings (\texttt{/api/quiz/generate}) \\
+\hline
+Notes & Static bank and dynamic generator coexist by design \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Database Design}
+
+\textbf{Core relational groups}
+\begin{itemize}
+    \item Identity and access: \texttt{users}.
+    \item Learning progress: \texttt{user\_progress}, \texttt{challenge\_state}, \texttt{user\_learning\_progress}.
+    \item Assessment: \texttt{questions}, \texttt{question\_options}, \texttt{user\_answers}, \texttt{quiz\_attempts}, \texttt{quiz\_assignments}.
+    \item Projects and scanning: \texttt{projects}, \texttt{scan\_history}.
+    \item Security observability: \texttt{security\_logs}.
+    \item Collaboration: \texttt{messages}.
+    \item Competitive mode: \texttt{teams}, \texttt{team\_members}, \texttt{game\_challenges}, \texttt{challenge\_vulnerabilities}, \texttt{red\_team\_actions}, \texttt{blue\_team\_fixes}.
+\end{itemize}
+
+\section{Human Interface Design}
+\label{hid}
+
+\subsection{User Interface}
+
+SCALE provides role-adaptive navigation and workflows.
+
+\begin{itemize}
+    \item \textbf{Student}: dashboard, challenges, scanner, quiz, messaging.
+    \item \textbf{Instructor}: dashboard analytics, quiz manager, scanner, messaging.
+    \item \textbf{Admin}: admin dashboard, security logs, user management, scanner, messaging.
+\end{itemize}
+
+The sidebar unread message badge is updated through periodic polling of \texttt{GET /api/messages/unread-count}, and route-level access is enforced by nested \texttt{ProtectedRoute} wrappers.
+
+\subsection{Screen Images}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{images/home.jpeg}
+    \includegraphics[width=0.45\textwidth]{images/admin.jpeg}
+    \caption{Home and Admin Dashboards}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{images/stdashb.jpeg}
+    \includegraphics[width=0.45\textwidth]{images/streport.jpeg}
+    \caption{Student Progress and Analytics Dashboards}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{images/labs.jpeg}
+    \includegraphics[width=0.45\textwidth]{images/myq.jpeg}
+    \caption{Learning Labs and Quiz Interface}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{images/Fixchall.jpeg}
+    \includegraphics[width=0.45\textwidth]{images/Fixfail.jpeg}
+    \caption{Challenge Interface and Validation Feedback}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{images/req.jpeg}
+    \includegraphics[width=0.45\textwidth]{images/role.jpeg}
+    \caption{Registration and Role Management}
+\end{figure}
+
+\subsection{Screen Objects and Actions}
+
+\begin{itemize}
+    \item Action controls: Submit Fix, Generate Quiz, Approve Instructor, Reset Progress, Send Message.
+    \item Feedback panels: Result modal with logs and annotated code diff, hint panel, replay timeline.
+    \item Data views: vulnerability findings tables, radar skill charts, class analytics, security log list.
+\end{itemize}
+
+\section{Implementation}
+
+\textbf{Backend}: Python 3.9+, FastAPI, SQLAlchemy, MySQL, ReportLab, Docker SDK.
+
+\textbf{Frontend}: React 18, TypeScript, Vite, Tailwind, Axios, Recharts.
+
+\textbf{Key implementation choices}
+\begin{itemize}
+    \item Session token in \texttt{sessionStorage} for tab-level isolation (aligned with Chapter 3 constraints).
+    \item Security logs normalized into \texttt{real} vs \texttt{challenge} context for cleaner analytics.
+    \item Runtime schema guard in startup to add newly required columns when missing.
+    \item Annotated diff generation for successful fix submissions integrated directly into frontend result modal.
+\end{itemize}
+
+\section{Testing Plan}
+
+\subsection{Test Scenario X}\label{sec:TSx}
+
+Scenario: Challenge remediation pipeline with sandbox validation and diff annotations.
+
+\subsubsection{Test Cases}
+
+\begin{table}[H]
+\centering
+\caption{Test Cases for Scenario X}
+\label{tab:TC1}
+\begin{tabular}{|l|l|l|l|l|}
+\hline
+\textbf{Test Case ID} & \textbf{Test Case Description} & \textbf{FR ID(s)} & \textbf{Test Data} & \textbf{Expected Result} \\
+\hline
+TCX-001 & Submit vulnerable SQLi fix code & FR03, FR04 & unsafe query string build & \texttt{success=false}, failures $>$ 0 \\
+\hline
+TCX-002 & Submit secure SQLi fix code & FR03, FR04, FR06 & parameterized query code & \texttt{success=true}, annotated \texttt{code\_diff} returned \\
+\hline
+TCX-003 & Submit oversized fix payload & FR03 & code length $>$ SANDBOX\_MAX\_CODE\_CHARS & rejected with size-validation error \\
+\hline
+TCX-004 & Scan uploaded project and generate risk score & FR08, FR09, FR10 & valid ZIP project & findings persisted, risk level computed \\
+\hline
+TCX-005 & Generate student pentest PDF after scan & FR13 & authenticated user with scan history & downloadable \texttt{application/pdf} \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Test Scenario Y}\label{sec:TSy}
+
+Scenario: Access control, governance workflows, and observability.
+
+\subsubsection{Test Cases}
+
+\begin{table}[H]
+\centering
+\caption{Test Cases for Scenario Y}
+\label{tab:TC2}
+\begin{tabular}{|l|l|l|l|l|}
+\hline
+\textbf{Test Case ID} & \textbf{Test Case Description} & \textbf{FR ID(s)} & \textbf{Test Data} & \textbf{Expected Result} \\
+\hline
+TCY-001 & Instructor login before approval & FR01, FR20 & pending instructor credentials & HTTP 403 forbidden \\
+\hline
+TCY-002 & Admin approves instructor then login succeeds & FR20, FR21 & admin approve action + login retry & instructor authenticated \\
+\hline
+TCY-003 & Student sends message to instructor & FR19 & receiver role instructor & message persisted; unread count increments \\
+\hline
+TCY-004 & Admin filters security logs by context and severity & FR22, FR23 & context=challenge, severity=HIGH & filtered paginated results returned \\
+\hline
+TCY-005 & Instructor resets student progress & FR18, FR17 & target student id & progress/quiz records removed \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Requirements Matrix}
+
+\begin{table}[H]
+\centering
+\caption{Requirements Matrix}
+\label{tab:RM}
+\begin{tabular}{|l|m{5.2cm}|l|l|l|}
+\hline
+\textbf{Req. ID} & \textbf{Requirement Description} & \textbf{Implemented In} & \textbf{Test Case ID(s)} & \textbf{Status} \\
+\hline
+FR01 & JWT authentication and role extraction & auth router + ProtectedRoute & TCY-001, TCY-002 & Implemented \\
+\hline
+FR03/FR04/FR06 & Sandbox fix validation and diff feedback & challenges + sandbox\_runner & TCX-001, TCX-002, TCX-003 & Implemented \\
+\hline
+FR08/FR09/FR10 & Project scanner and risk scoring & projects + scanner modules & TCX-004 & Implemented \\
+\hline
+FR13 & Pentest PDF export & report router & TCX-005 & Implemented \\
+\hline
+FR18 & Instructor reset student progress & instructor router & TCY-005 & Implemented \\
+\hline
+FR19 & Instructor-student messaging & messages router + sidebar polling & TCY-003 & Implemented \\
+\hline
+FR20/FR21 & Admin approval and user management & auth admin endpoints & TCY-002 & Implemented \\
+\hline
+FR22/FR23 & Security event logging and admin filtering & security\_logger + security\_logs router & TCY-004 & Implemented \\
+\hline
+FR24 & Red vs Blue game mode & game\_challenge router + game tables & Planned system tests & Implemented (feature) \\
+\hline
+FR25 & CTF signed flags + leaderboard & ctf endpoints/tables & Planned system tests & Not in current backend routes \\
+\hline
+FR28 & Admin dashboard aggregate metrics & stats router & TCY-004 (partial) & Implemented \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{System Deployment}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{images/Deployment.jpeg}
+    \caption{System Deployment Architecture}
+    \label{fig:deployment}
+\end{figure}
+
+The deployment uses Docker Compose with the \texttt{scale\_net} bridge network. Runtime services include frontend, backend, ai\_service, main\_db, challenge\_db\_sqli, challenge\_db\_csrf, and sandbox\_base image builder.
+
+\subsection{Frameworks}
+\begin{itemize}
+    \item FastAPI for backend APIs and microservice endpoints.
+    \item React + TypeScript for SPA frontend.
+\end{itemize}
+
+\subsection{Tools}
+\begin{itemize}
+    \item Docker and Docker Compose for container orchestration and reproducible runtime.
+    \item Git and GitHub for version control.
+    \item VS Code / Cursor IDE for development.
+\end{itemize}
+
+\subsection{Technologies}
+\begin{itemize}
+    \item JWT and bcrypt for authentication security.
+    \item SQLAlchemy ORM + MySQL persistence.
+    \item ReportLab for PDF generation.
+    \item Recharts for analytics visualizations.
+    \item Docker SDK for isolated sandbox execution.
+\end{itemize}
+
+\section{Summary}
+
+This chapter translated the Chapter 3 specification into a concrete system design for SCALE. The design balances security isolation, practical pedagogy, and operational maintainability through a hybrid architecture, explicit role boundaries, deterministic sandbox validation, traceable analytics, and measurable requirement-to-test mapping.
+
+\section*{Diagram Source Code Bundle (for rendering new Chapter 4 diagrams)}
+
+\textbf{How to use:}
+\begin{itemize}
+    \item Mermaid code blocks can be rendered at \texttt{https://mermaid.live}.
+    \item PlantUML code blocks can be rendered at \texttt{https://www.plantuml.com/plantuml}.
+    \item Export each diagram as PNG/SVG and include in Overleaf using \texttt{\\includegraphics}.
+\end{itemize}
+
+\subsection*{Diagram 4.1 -- Architecture (Mermaid)}
+\begin{verbatim}
+flowchart LR
+  U[Student / Instructor / Admin]:::actor --> FE[Frontend SPA\nReact+Vite]:::front
+  FE -->|REST/JSON| BE[Backend API\nFastAPI]:::api
+  BE -->|SQLAlchemy| MDB[(main_db\nMySQL 8.0)]:::db
+  BE -->|raw SQL| SDB[(challenge_db_sqli)]:::db2
+  BE -->|raw SQL| CDB[(challenge_db_csrf)]:::db3
+  BE -->|HTTP:8001| AI[AI Service]:::ai
+  BE -->|Docker SDK| DKS[(Docker Engine)]:::dock
+  DKS --> SBX[Ephemeral Sandbox\nrun_tests.sh]:::sand
+
+  classDef actor fill:#fff7ed,stroke:#c2410c,stroke-width:2px,color:#7c2d12;
+  classDef front fill:#ecfeff,stroke:#0e7490,stroke-width:2px,color:#164e63;
+  classDef api fill:#eef2ff,stroke:#4338ca,stroke-width:2px,color:#312e81;
+  classDef db fill:#ecfdf5,stroke:#15803d,stroke-width:2px,color:#14532d;
+  classDef db2 fill:#fefce8,stroke:#a16207,stroke-width:2px,color:#713f12;
+  classDef db3 fill:#f0fdfa,stroke:#0f766e,stroke-width:2px,color:#134e4a;
+  classDef ai fill:#f5f3ff,stroke:#7e22ce,stroke-width:2px,color:#581c87;
+  classDef dock fill:#fef2f2,stroke:#b91c1c,stroke-width:2px,color:#7f1d1d;
+  classDef sand fill:#f8fafc,stroke:#334155,stroke-width:2px,color:#0f172a;
+\end{verbatim}
+
+\subsection*{Diagram 4.2 -- Core Class Model (Mermaid classDiagram)}
+\begin{verbatim}
+classDiagram
+  class User {
+    +int id
+    +string email
+    +string hashed_password
+    +string role
+    +bool is_approved
+  }
+  class UserProgress {
+    +int id
+    +int user_id
+    +string challenge_id
+    +datetime completed_at
+  }
+  class ChallengeState {
+    +int id
+    +int user_id
+    +string challenge_id
+    +string current_stage
+    +int attempt_count
+    +int time_spent_seconds
+    +int hints_used
+  }
+  class Project {
+    +string id
+    +string name
+    +int owner_id
+    +datetime created_at
+    +datetime last_scan_date
+  }
+  class ScanHistory {
+    +int id
+    +string project_id
+    +int total_vulnerabilities
+    +int risk_score
+    +string risk_level
+    +text vuln_summary
+  }
+  class SecurityLog {
+    +int id
+    +int user_id
+    +string event_type
+    +string severity
+    +string endpoint
+    +string context_type
+    +json metadata
+  }
+  class Message {
+    +int id
+    +int sender_id
+    +int receiver_id
+    +text content
+    +bool is_read
+  }
+
+  User "1" --> "*" UserProgress : completes
+  User "1" --> "*" ChallengeState : state
+  Project "1" --> "*" ScanHistory : has_scans
+  User "1" --> "*" SecurityLog : emits
+  User "1" --> "*" Message : sends/receives
+\end{verbatim}
+
+\subsection*{Diagram 4.3 -- Sandbox Algorithm Flow (Mermaid)}
+\begin{verbatim}
+flowchart TD
+  A([Receive submission]) --> B{challenge_dir allowed?}
+  B -- No --> X([Reject: invalid challenge])
+  B -- Yes --> C{size <= limit?}
+  C -- No --> Y([Reject: submission too large])
+  C -- Yes --> D[Copy challenge folder\nwrite app.py]
+  D --> E[Build temp Docker image]
+  E --> F[Run container with limits\nmem/cpu/pids + timeout]
+  F --> G{timeout?}
+  G -- Yes --> H[Kill container\ncollect logs]
+  G -- No --> I[Wait exit code\ncollect logs]
+  H --> J[Parse unittest summary]
+  I --> J
+  J --> K{failures==0 && errors==0?}
+  K -- Yes --> L([Success + diff + progress update])
+  K -- No --> M([Failure + logs + score])
+
+  style A fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px
+  style X fill:#fee2e2,stroke:#b91c1c,stroke-width:2px
+  style Y fill:#fee2e2,stroke:#b91c1c,stroke-width:2px
+  style L fill:#dcfce7,stroke:#15803d,stroke-width:2px
+  style M fill:#fef3c7,stroke:#b45309,stroke-width:2px
+\end{verbatim}
+
+\subsection*{Diagram 4.4 -- Sequence: Admin Approval (PlantUML)}
+\begin{verbatim}
+@startuml
+skinparam sequenceArrowThickness 2
+skinparam ParticipantPadding 20
+skinparam BoxPadding 10
+skinparam sequence {
+  LifeLineBorderColor #1e3a8a
+  LifeLineBackgroundColor #eff6ff
+  ParticipantBorderColor #0f172a
+  ParticipantBackgroundColor #e2e8f0
+  ActorBorderColor #7c2d12
+  ActorBackgroundColor #ffedd5
+}
+
+actor Admin
+participant Frontend
+participant "Backend /api/auth" as Auth
+database "main_db.users" as DB
+
+Admin -> Frontend: Click Approve Instructor
+Frontend -> Auth: POST /admin/approve/{id}\nBearer admin JWT
+Auth -> Auth: Validate JWT + role==admin
+Auth -> DB: UPDATE users SET is_approved=true
+DB --> Auth: success
+Auth --> Frontend: {message: approved}
+Frontend --> Admin: UI refresh (pending list updated)
+@enduml
+\end{verbatim}
+
+\subsection*{Diagram 4.5 -- ERD (Mermaid)}
+\begin{verbatim}
+erDiagram
+  USERS ||--o{ USER_PROGRESS : has
+  USERS ||--o{ CHALLENGE_STATE : has
+  USERS ||--o{ USER_ANSWERS : answers
+  USERS ||--o{ QUIZ_ATTEMPTS : attempts
+  USERS ||--o{ SECURITY_LOGS : emits
+  USERS ||--o{ MESSAGES : sends
+  USERS ||--o{ PROJECTS : owns
+  PROJECTS ||--o{ SCAN_HISTORY : produces
+  QUESTIONS ||--o{ QUESTION_OPTIONS : contains
+  QUESTIONS ||--o{ USER_ANSWERS : asked
+  QUIZ_ASSIGNMENTS ||--o{ QUIZ_ASSIGNMENT_STUDENTS : links
+  QUIZ_ASSIGNMENTS ||--o{ QUIZ_ASSIGNMENT_QUESTIONS : links
+
+  USERS {
+    int id PK
+    varchar email UK
+    varchar role
+    bool is_approved
+  }
+  PROJECTS {
+    varchar id PK
+    varchar name
+    int owner_id FK
+  }
+  SCAN_HISTORY {
+    int id PK
+    varchar project_id FK
+    int risk_score
+    text vuln_summary
+  }
+\end{verbatim}
+
+\subsection*{Diagram 4.12 -- Deployment (PlantUML)}
+\begin{verbatim}
+@startuml
+left to right direction
+skinparam shadowing false
+skinparam node {
+  BackgroundColor #f8fafc
+  BorderColor #334155
+  RoundCorner 12
+}
+
+cloud "User Browser" as B
+node "Docker Host" {
+  node "frontend\n:5173" as FE
+  node "backend\n:8000" as BE
+  node "ai_service\n:8001" as AI
+  database "main_db\n3306" as DBM
+  database "challenge_db_sqli\n3307->3306" as DBS
+  database "challenge_db_csrf\n3308->3306" as DBC
+  node "sandbox_base" as SB
+  frame "Ephemeral Sandbox Containers" as ESC
+}
+
+B --> FE : HTTP
+FE --> BE : REST/JSON
+BE --> AI : internal HTTP
+BE --> DBM : SQLAlchemy
+BE --> DBS : raw SQL
+BE --> DBC : raw SQL
+BE --> ESC : Docker SDK via socket
+@enduml
+\end{verbatim}
