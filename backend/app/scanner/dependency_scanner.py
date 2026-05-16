@@ -11,8 +11,8 @@ from typing import Any
 
 import requests
 
-MAX_DEPS_TO_QUERY = 50
-MAX_WORKERS = 10
+MAX_DEPS_TO_QUERY = 30
+MAX_WORKERS = 15
 
 # --- manifest parsers ---
 
@@ -184,6 +184,14 @@ def _map_severity_rating(rating: str) -> str:
     return "Unknown"
 
 
+def _is_valid_package(name: str, ecosystem: str) -> bool:
+    if not name or len(name) < 2 or len(name) > 100:
+        return False
+    if ecosystem == "npm" and name.startswith("@types/"):
+        return False
+    return True
+
+
 def query_osv(package: str, version: str, ecosystem: str) -> list[dict[str, Any]]:
     if not version or version == "latest":
         return []
@@ -192,7 +200,7 @@ def query_osv(package: str, version: str, ecosystem: str) -> list[dict[str, Any]
         r = requests.post(
             "https://api.osv.dev/v1/query",
             json=payload,
-            timeout=4,
+            timeout=2.5,
             headers={"Content-Type": "application/json"},
         )
         if r.status_code != 200:
@@ -312,6 +320,12 @@ def scan_dependencies(extracted_root: str) -> dict[str, Any]:
             deps = []
 
         all_deps.extend(deps)
+
+    all_deps = [
+        d
+        for d in all_deps
+        if _is_valid_package(str(d.get("package") or ""), str(d.get("ecosystem") or ""))
+    ]
 
     if len(all_deps) > MAX_DEPS_TO_QUERY:
         all_deps = all_deps[:MAX_DEPS_TO_QUERY]

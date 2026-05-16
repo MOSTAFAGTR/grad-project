@@ -11,6 +11,37 @@ function looksLikeSensitiveFileLeak(content: string): boolean {
   return content.includes('root:') || content.includes('/bin/bash') || content.includes('/bin/sh');
 }
 
+function normalizeTraversalPayload(raw: string): string {
+  const input = (raw || '').trim();
+  if (!input) return '';
+
+  // If user pasted full request line: GET /...?... HTTP/1.1
+  const getLine = input.match(/^GET\s+(\S+)\s+HTTP\/\d(?:\.\d)?$/i);
+  if (getLine?.[1]) {
+    try {
+      const parsed = new URL(getLine[1], 'http://local');
+      const fromQuery = parsed.searchParams.get('file') || parsed.searchParams.get('name') || parsed.searchParams.get('path');
+      if (fromQuery) return fromQuery;
+    } catch {
+      // fall through
+    }
+  }
+
+  // If user pasted query fragment or URL with file/name/path.
+  for (const key of ['file', 'name', 'path']) {
+    const m = input.match(new RegExp(`[?&]${key}=([^&]+)`));
+    if (m?.[1]) {
+      try {
+        return decodeURIComponent(m[1]);
+      } catch {
+        return m[1];
+      }
+    }
+  }
+
+  return input;
+}
+
 const DirectoryTraversalAttackPage: React.FC = () => {
   const [payload, setPayload] = useState('');
   const [result, setResult] = useState<any>(null);
@@ -20,9 +51,14 @@ const DirectoryTraversalAttackPage: React.FC = () => {
   const runAttack = async () => {
     setError('');
     setResult(null);
+    const normalizedPayload = normalizeTraversalPayload(payload);
+    if (!normalizedPayload) {
+      setError('Please enter a path payload.');
+      return;
+    }
     try {
       const res = await axios.get(`${API_URL}/api/challenges/traversal/read`, {
-        params: { file: payload, secure: false },
+        params: { file: normalizedPayload, secure: false },
       });
       setResult(res.data);
       if (looksLikeSensitiveFileLeak(res.data?.content || '')) {
@@ -59,7 +95,7 @@ const DirectoryTraversalAttackPage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
           <div className="bg-gray-900 border border-gray-700 rounded p-3 text-xs">
             <h3 className="font-bold text-gray-200 mb-2">Request</h3>
-            <pre className="text-green-300 whitespace-pre-wrap">{JSON.stringify({ file: payload }, null, 2)}</pre>
+            <pre className="text-green-300 whitespace-pre-wrap">{JSON.stringify({ file: normalizeTraversalPayload(payload) }, null, 2)}</pre>
           </div>
           <div className="bg-gray-900 border border-gray-700 rounded p-3 text-xs">
             <h3 className="font-bold text-gray-200 mb-2">Execution</h3>

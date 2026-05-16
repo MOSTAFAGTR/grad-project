@@ -3,18 +3,26 @@ from uuid import uuid4
 import shutil
 import zipfile
 import os
+import re
 import json
+import subprocess
+import tempfile
+import asyncio
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import logging
-from typing import Optional
+from typing import Optional, Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends, Request
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from ..scanner.detector import scan_file_for_vulnerabilities_detailed
+from ..scanner.semgrep_scanner import run_semgrep_scan
 from ..scanner.scorer import calculate_risk
 from ..scanner.fixer import attach_fixes
 from ..scanner.report_generator import generate_security_report, generate_pdf_report
@@ -29,6 +37,11 @@ from ..ai.serper_helpers import serper_configured
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+SCAN_EXECUTOR = ThreadPoolExecutor(
+    max_workers=2,
+    thread_name_prefix="scale_scan",
+)
 
 
 def _openai_key() -> str:
@@ -70,6 +83,22 @@ def _assert_project_access(
         return
     if project.owner_id and project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized for this project")
+
+
+def _count_by_type(findings: list[dict]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for f in findings:
+        v = str(f.get("vulnerability_type") or f.get("type") or "Unknown")
+        out[v] = out.get(v, 0) + 1
+    return out
+
+
+def _count_by_severity(findings: list[dict]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for f in findings:
+        s = str(f.get("severity") or "Unknown")
+        out[s] = out.get(s, 0) + 1
+    return out
 
 
 def extract_zip(zip_path: Path, extract_to: Path) -> None:
@@ -239,19 +268,79 @@ def scan_project_files(project_folder: Path):
     return files_info
 
 
-def scan_project_for_vulnerabilities(project_folder: Path, extraction_root: Optional[Path] = None):
+def _merge_findings(semgrep: list[dict], legacy: list[dict]) -> list[dict]:
     """
-    Run the rule-based detector over all discovered source files in a project.
+    Merge Semgrep and legacy regex findings.
+    Deduplicate by (file, line, vulnerability_type).
+    Semgrep findings take priority when there is a collision.
+    """
+    seen: set[tuple] = set()
+    merged: list[dict] = []
 
-    This aggregates per-line findings into a single structure that higher
-    layers (API) can return to clients. It does *not* do any scoring yet.
-    """
+    for f in semgrep:
+        key = (
+            str(f.get("file", "")),
+            int(f.get("line") or 0),
+            str(f.get("vulnerability_type", "")),
+        )
+        if key not in seen:
+            seen.add(key)
+            merged.append(f)
+
+    for f in legacy:
+        key = (
+            str(f.get("file", "")),
+            int(f.get("line") or 0),
+            str(f.get("vulnerability_type", "")),
+        )
+        if key not in seen:
+            seen.add(key)
+            fc = dict(f)
+            fc["engine"] = "regex"
+            merged.append(fc)
+
+    return merged
+
+
+def _legacy_regex_findings_raw(project_folder: Path) -> list[dict]:
     files = scan_project_files(project_folder)
-    all_findings = []
+    all_findings: list[dict] = []
+    for entry in files:
+        rel_path = entry["file"]
+        full_path = project_folder / rel_path
+        detailed = scan_file_for_vulnerabilities_detailed(full_path)
+        for f in detailed["findings"]:
+            all_findings.append({"file": rel_path, **f})
+    return all_findings
+
+
+def run_merged_scan(
+    project_folder: Path,
+    extraction_root: Optional[Path] = None,
+    semgrep_timeout_seconds: int = 45,
+) -> dict:
+    """
+    Run Semgrep plus legacy regex scanner, merge findings, attach fixes.
+    """
+    semgrep_result = run_semgrep_scan(
+        str(project_folder.resolve()),
+        timeout_seconds=semgrep_timeout_seconds,
+    )
+    semgrep_findings = list(semgrep_result.get("findings") or [])
+    semgrep_available = bool(semgrep_result.get("available", False))
+    legacy_raw = _legacy_regex_findings_raw(project_folder)
+    merged_findings = _merge_findings(semgrep_findings, legacy_raw)
+    enhanced_findings = attach_fixes(merged_findings)
+
     summary: dict[str, int] = {}
+    for f in enhanced_findings:
+        vtype = f.get("vulnerability_type", "Unknown")
+        summary[vtype] = summary.get(vtype, 0) + 1
+
+    files = scan_project_files(project_folder)
     file_debug = []
     file_errors = []
-
+    files_with_matches = 0
     for entry in files:
         rel_path = entry["file"]
         full_path = project_folder / rel_path
@@ -259,6 +348,8 @@ def scan_project_for_vulnerabilities(project_folder: Path, extraction_root: Opti
         file_findings = detailed["findings"]
         if detailed.get("error"):
             file_errors.append({"file": rel_path, "error": detailed["error"]})
+        if file_findings:
+            files_with_matches += 1
         file_debug.append(
             {
                 "file": rel_path,
@@ -266,25 +357,12 @@ def scan_project_for_vulnerabilities(project_folder: Path, extraction_root: Opti
                 "lines_scanned": detailed.get("lines_scanned", 0),
             }
         )
-        logger.info("scanner: file=%s matches=%s", rel_path, len(file_findings))
 
-        for f in file_findings:
-            f_with_file = {
-                "file": rel_path,
-                **f,
-            }
-            all_findings.append(f_with_file)
-            vtype = f["vulnerability_type"]
-            summary[vtype] = summary.get(vtype, 0) + 1
-
-    # Attach secure-coding recommendations to each finding before returning.
-    enhanced_findings = attach_fixes(all_findings)
-    files_with_matches = sum(1 for d in file_debug if d["matches"] > 0)
     logger.info(
-        "scanner: files_scanned=%s files_with_matches=%s findings=%s",
-        len(files),
-        files_with_matches,
-        len(enhanced_findings),
+        "scanner merged: semgrep=%s regex_raw=%s merged=%s",
+        len(semgrep_findings),
+        len(legacy_raw),
+        len(merged_findings),
     )
 
     message = (
@@ -299,9 +377,17 @@ def scan_project_for_vulnerabilities(project_folder: Path, extraction_root: Opti
         "file_details": file_debug,
         "file_errors": file_errors,
         "root_used_for_scan": str(project_folder.resolve()),
+        "semgrep_errors": semgrep_result.get("errors") or [],
     }
     if extraction_root is not None:
         debug_payload["extracted_file_count"] = sum(1 for p in extraction_root.rglob("*") if p.is_file())
+
+    scanner_engines = {
+        "semgrep": semgrep_available,
+        "semgrep_findings": len(semgrep_findings),
+        "regex_findings": len(legacy_raw),
+        "total_after_dedup": len(merged_findings),
+    }
 
     return {
         "total_vulnerabilities": len(enhanced_findings),
@@ -309,7 +395,16 @@ def scan_project_for_vulnerabilities(project_folder: Path, extraction_root: Opti
         "summary": summary,
         "message": message,
         "debug": debug_payload,
+        "scanner_engines": scanner_engines,
     }
+
+
+def scan_project_for_vulnerabilities(project_folder: Path, extraction_root: Optional[Path] = None):
+    """
+    Run Semgrep (when available) plus the legacy rule-based detector, merge results,
+    and attach fix guidance.
+    """
+    return run_merged_scan(project_folder, extraction_root, semgrep_timeout_seconds=45)
 
 
 @router.post("/project/upload")
@@ -421,119 +516,462 @@ def list_project_files(
     }
 
 
-def _run_dep_scan_background(extracted_root: str, project_id: str) -> None:
+def _run_dep_scan_background(
+    extracted_root: str,
+    project_id: str,
+    scan_id: Optional[int] = None,
+) -> None:
     try:
         from ..scanner.dependency_scanner import scan_dependencies
 
         dep_result = scan_dependencies(extracted_root)
         db = SessionLocal()
         try:
-            scan_row = (
-                db.query(models.ScanHistory)
-                .filter(models.ScanHistory.project_id == project_id)
-                .order_by(models.ScanHistory.scan_date.desc())
-                .first()
-            )
+            if scan_id is not None:
+                scan_row = (
+                    db.query(models.ScanHistory)
+                    .filter(models.ScanHistory.id == scan_id)
+                    .first()
+                )
+            else:
+                scan_row = (
+                    db.query(models.ScanHistory)
+                    .filter(models.ScanHistory.project_id == project_id)
+                    .order_by(models.ScanHistory.scan_date.desc())
+                    .first()
+                )
             if scan_row:
                 existing = json.loads(scan_row.vuln_summary or "{}")
                 existing["dependency_scan"] = dep_result
-                existing["total_vulnerabilities"] = int(existing.get("total_vulnerabilities", 0)) + int(
-                    dep_result.get("total_dependency_vulns", 0)
-                )
                 scan_row.vuln_summary = json.dumps(existing)
-                scan_row.total_vulnerabilities = int(existing.get("total_vulnerabilities", 0))
                 db.commit()
         finally:
             db.close()
     except Exception as e:
-        print(f"Background dep scan error: {e}")
+        logger.warning("Background dep scan error: %s", e)
+
+
+def _run_full_scan_background(
+    scan_id: int,
+    project_id: str,
+    extracted_root_str: str,
+    user_id: int,
+) -> None:
+    """Runs in a thread pool worker; opens its own DB session."""
+    db = SessionLocal()
+    scan_root = Path(extracted_root_str)
+    project_dir = EXTRACTED_PROJECTS_DIR / project_id
+    try:
+        result = run_merged_scan(
+            scan_root,
+            extraction_root=project_dir,
+            semgrep_timeout_seconds=45,
+        )
+        risk = calculate_risk(result["findings"])
+        enhanced = result["findings"]
+        type_counts = result["summary"]
+
+        vuln_blob: dict[str, Any] = {
+            "status": "complete",
+            "project_id": project_id,
+            "findings": enhanced,
+            "summary": type_counts,
+            "summary_detail": {
+                "vulnerability_counts": _count_by_type(enhanced),
+                "severity_counts": _count_by_severity(enhanced),
+                "scanner_engines": result.get("scanner_engines", {}),
+                "root_used_for_scan": str(scan_root.resolve()),
+            },
+            "debug": result.get("debug", {}),
+            "message": result.get("message"),
+            "scanner_engines": result.get("scanner_engines", {}),
+        }
+
+        scan_row = db.query(models.ScanHistory).filter(models.ScanHistory.id == scan_id).first()
+        if scan_row:
+            scan_row.total_vulnerabilities = len(enhanced)
+            scan_row.vuln_summary = json.dumps(vuln_blob)
+            scan_row.risk_score = risk["total_score"]
+            scan_row.risk_level = risk["risk_level"]
+            db.commit()
+
+        proj = db.query(models.Project).filter(models.Project.id == project_id).first()
+        if proj:
+            proj.last_scan_date = datetime.utcnow()
+            proj.latest_risk_score = risk["total_score"]
+            proj.latest_risk_level = risk["risk_level"]
+            proj.total_scans = (proj.total_scans or 0) + 1
+            db.commit()
+
+        recalculate_learning_progress(db, user_id)
+
+        dep_thread = threading.Thread(
+            target=_run_dep_scan_background,
+            args=(str(scan_root), project_id, scan_id),
+            daemon=True,
+        )
+        dep_thread.start()
+
+    except Exception as e:
+        logger.exception("Background scan failed")
+        try:
+            scan_row = db.query(models.ScanHistory).filter(models.ScanHistory.id == scan_id).first()
+            if scan_row:
+                scan_row.vuln_summary = json.dumps(
+                    {
+                        "status": "error",
+                        "error": str(e)[:500],
+                        "findings": [],
+                    }
+                )
+                scan_row.risk_level = "Unknown"
+                scan_row.risk_score = 0
+                scan_row.total_vulnerabilities = 0
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        db.close()
 
 
 @router.post("/project/scan")
-def scan_project(
+async def scan_project(
     project_id: str = Query(..., description="ID of extracted project folder"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
     request: Request = None,
 ):
     """
-    Run Phase 1, rule-based static analysis over an extracted project.
-
-    This uses simple regex-based rules to flag potentially vulnerable lines.
-    It is limited: it cannot model taint flow, sanitization, or framework
-    behavior, but it provides a starting point for highlighting risky spots.
+    Start static analysis in a background thread. Returns immediately with scan_id.
+    Poll GET /api/project/scan-status/{scan_id} for results.
     """
     _assert_project_access(db, project_id, current_user)
-    project_dir = EXTRACTED_PROJECTS_DIR / project_id
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project folder does not exist")
-    if len(list(project_dir.rglob("*"))) == 0:
-        raise HTTPException(status_code=400, detail="Project folder is EMPTY after extraction")
-    scan_root = normalize_project_root(project_dir)
-    result = scan_project_for_vulnerabilities(scan_root, extraction_root=project_dir)
-    risk = calculate_risk(result["findings"])
 
-    # Persist scan results for multi-project analytics and trend tracking.
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
-        # We do not yet capture a friendly name or owner here; those can be
-        # set by a separate project management endpoint in the future.
-        project = models.Project(
-            id=project_id,
-            name=f"Project {project_id}",
-            owner_id=current_user.id,
-            created_at=datetime.utcnow(),
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project_dir = EXTRACTED_PROJECTS_DIR / project_id
+    if not project_dir.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="Project files not found. Re-upload the project.",
         )
-        db.add(project)
-        db.flush()
-    elif not project.owner_id:
+    if len(list(project_dir.rglob("*"))) == 0:
+        raise HTTPException(status_code=400, detail="Project folder is EMPTY after extraction")
+
+    scan_root = normalize_project_root(project_dir)
+
+    if not project.owner_id:
         project.owner_id = current_user.id
+        db.flush()
 
-    project.last_scan_date = datetime.utcnow()
-    project.latest_risk_score = risk["total_score"]
-    project.latest_risk_level = risk["risk_level"]
-    project.total_scans = (project.total_scans or 0) + 1
-
-    history = models.ScanHistory(
+    pending_summary = {"status": "pending", "findings": [], "summary": {}}
+    scan_row = models.ScanHistory(
         project_id=project_id,
-        total_vulnerabilities=result["total_vulnerabilities"],
-        risk_score=risk["total_score"],
-        risk_level=risk["risk_level"],
-        vuln_summary=json.dumps(result or {}),
+        total_vulnerabilities=0,
+        risk_score=0,
+        risk_level="Unknown",
+        vuln_summary=json.dumps(pending_summary),
     )
-    db.add(history)
+    db.add(scan_row)
     db.commit()
-    recalculate_learning_progress(db, current_user.id)
+    db.refresh(scan_row)
+    scan_id = scan_row.id
 
-    t = threading.Thread(
-        target=_run_dep_scan_background,
-        args=(str(scan_root), project_id),
-        daemon=True,
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(
+        SCAN_EXECUTOR,
+        _run_full_scan_background,
+        scan_id,
+        project_id,
+        str(scan_root.resolve()),
+        current_user.id,
     )
-    t.start()
 
     log_security_event(
         db=db,
         event_type=SecurityEventType.PROJECT_SCAN,
         severity=SecuritySeverity.LOW,
-        payload={"project_id": project_id},
+        payload={"project_id": project_id, "scan_id": scan_id},
         request=request,
         user_id=current_user.id,
-        metadata={
-            "total_vulnerabilities": result["total_vulnerabilities"],
-            "risk_level": risk["risk_level"],
-            "risk_score": risk["total_score"],
-        },
+        metadata={"status": "pending_async"},
     )
 
     return {
+        "scan_id": scan_id,
         "project_id": project_id,
-        "total_vulnerabilities": result["total_vulnerabilities"],
-        "findings": result["findings"],
-        "summary": result["summary"],
-        "risk": risk,
-        "message": result.get("message"),
-        "debug": result.get("debug", {}),
+        "status": "pending",
+        "message": "Scan started. Poll GET /api/project/scan-status/{scan_id} for results.",
+        "estimated_seconds": 30,
+    }
+
+
+@router.get("/project/scan-status/{scan_id}")
+def get_scan_status(
+    scan_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    scan_row = db.query(models.ScanHistory).filter(models.ScanHistory.id == scan_id).first()
+    if not scan_row:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    _assert_project_access(db, scan_row.project_id, current_user)
+
+    summary = json.loads(scan_row.vuln_summary or "{}")
+    status = summary.get("status", "pending")
+
+    if status == "pending":
+        return {
+            "scan_id": scan_id,
+            "status": "pending",
+            "message": "Scan is running...",
+            "progress": None,
+        }
+
+    if status == "error":
+        return {
+            "scan_id": scan_id,
+            "status": "error",
+            "error": summary.get("error", "Unknown error"),
+        }
+
+    dep_scan = summary.get("dependency_scan")
+    dep_status = "complete" if dep_scan is not None else "pending"
+    dep_note = (
+        None
+        if dep_status == "complete"
+        else "Dependency scan is still running. Refresh in 15 seconds for dependency results."
+    )
+
+    scanner_engines = summary.get("scanner_engines") or (
+        (summary.get("summary_detail") or {}).get("scanner_engines") or {}
+    )
+
+    return {
+        "scan_id": scan_id,
+        "status": "complete",
+        "project_id": scan_row.project_id,
+        "total_vulnerabilities": scan_row.total_vulnerabilities,
+        "risk_level": scan_row.risk_level,
+        "risk": {
+            "total_score": scan_row.risk_score,
+            "risk_level": scan_row.risk_level,
+        },
+        "findings": summary.get("findings", []),
+        "summary": summary.get("summary", {}),
+        "debug": summary.get("debug", {}),
+        "scanner_engines": scanner_engines,
+        "dependency_scan": dep_scan if dep_scan is not None else {},
+        "dependency_scan_status": dep_status,
+        "dependency_scan_note": dep_note,
+        "message": summary.get("message"),
+    }
+
+
+class ScanFromGitBody(BaseModel):
+    repo_url: str = Field(..., min_length=1)
+    branch: str = "main"
+
+
+def _validate_git_repo_url(repo_url: str) -> str:
+    u = (repo_url or "").strip()
+    forbidden = [";", "&&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r", "\\"]
+    for ch in forbidden:
+        if ch in u:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid repository URL. Only HTTPS URLs to public repositories are supported.",
+            )
+    if not (u.startswith("https://") or u.startswith("git@")):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid repository URL. Only HTTPS URLs to public repositories are supported.",
+        )
+    host = ""
+    if u.startswith("https://"):
+        parsed = urlparse(u)
+        host = (parsed.hostname or "").lower()
+    else:
+        m = re.match(r"^git@([^:]+):", u)
+        host = (m.group(1).lower() if m else "")
+    allowed_hosts = {"github.com", "gitlab.com", "bitbucket.org"}
+    if host in allowed_hosts:
+        return u
+    if host and re.search(r"\.[a-z]{2,}$", host):
+        return u
+    raise HTTPException(
+        status_code=400,
+        detail="Invalid repository URL. Only HTTPS URLs to public repositories are supported.",
+    )
+
+
+def _count_repo_files_and_size(repo_path: str) -> tuple[int, int]:
+    total_size = 0
+    nfiles = 0
+    for dirpath, _, filenames in os.walk(repo_path):
+        for fname in filenames:
+            fp = os.path.join(dirpath, fname)
+            try:
+                total_size += os.path.getsize(fp)
+            except OSError:
+                pass
+            nfiles += 1
+    return nfiles, total_size
+
+
+@router.post("/project/scan-from-git")
+async def scan_from_git(
+    body: ScanFromGitBody,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+    request: Request = None,
+):
+    repo_url = _validate_git_repo_url(body.repo_url)
+    branch_requested = (body.branch or "main").strip() or "main"
+    branch_used = branch_requested
+
+    temp_dir = tempfile.mkdtemp(prefix="scale_git_")
+    repo_dest = os.path.join(temp_dir, "repo")
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+
+    def _clone(br: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [
+                "git",
+                "clone",
+                "--depth",
+                "1",
+                "--single-branch",
+                "--branch",
+                br,
+                "--no-tags",
+                repo_url,
+                repo_dest,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=env,
+        )
+
+    result = _clone(branch_requested)
+    if result.returncode != 0:
+        err = ((result.stderr or "") + (result.stdout or "")).lower()
+        if branch_requested == "main" and (
+            "not found" in err or "does not exist" in err
+        ):
+            branch_used = "master"
+            result = _clone("master")
+        if result.returncode != 0:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            error_msg = (result.stderr or result.stdout or "unknown error")[:300]
+            raise HTTPException(status_code=400, detail=f"Git clone failed: {error_msg}")
+
+    files_cloned, total_size = _count_repo_files_and_size(repo_dest)
+    if total_size > 100 * 1024 * 1024:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Repository is too large (>100MB). Please upload a specific subdirectory as a ZIP instead."
+            ),
+        )
+
+    git_dir = os.path.join(repo_dest, ".git")
+    if os.path.isdir(git_dir):
+        shutil.rmtree(git_dir, ignore_errors=True)
+
+    PROJECTS_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    zip_name = f"{uuid4().hex}.zip"
+    zip_path = PROJECTS_UPLOAD_DIR / zip_name
+    zip_base = str(zip_path.with_suffix(""))
+    shutil.make_archive(zip_base, "zip", temp_dir, "repo")
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
+    project_id = zip_name[:-4]
+    project_extract_dir = EXTRACTED_PROJECTS_DIR / project_id
+    try:
+        extract_zip(zip_path, project_extract_dir)
+    except HTTPException:
+        if zip_path.exists():
+            zip_path.unlink(missing_ok=True)
+        if project_extract_dir.exists():
+            shutil.rmtree(project_extract_dir, ignore_errors=True)
+        raise
+
+    repo_name = repo_url.rstrip("/").split("/")[-1]
+    if repo_name.endswith(".git"):
+        repo_name = repo_name[:-4]
+    if repo_name.startswith("git@"):
+        repo_name = repo_name.split(":")[-1].split("/")[-1]
+    display_name = f"{repo_name} (git)"
+
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        project = models.Project(
+            id=project_id,
+            name=display_name,
+            owner_id=current_user.id,
+            created_at=datetime.utcnow(),
+        )
+        db.add(project)
+        db.commit()
+
+    scan_root = normalize_project_root(project_extract_dir)
+
+    pending_summary = {"status": "pending", "findings": [], "summary": {}}
+    scan_row = models.ScanHistory(
+        project_id=project_id,
+        total_vulnerabilities=0,
+        risk_score=0,
+        risk_level="Unknown",
+        vuln_summary=json.dumps(pending_summary),
+    )
+    db.add(scan_row)
+    db.commit()
+    db.refresh(scan_row)
+    new_scan_id = scan_row.id
+
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(
+        SCAN_EXECUTOR,
+        _run_full_scan_background,
+        new_scan_id,
+        project_id,
+        str(scan_root.resolve()),
+        current_user.id,
+    )
+
+    log_security_event(
+        db=db,
+        event_type=SecurityEventType.FILE_UPLOAD,
+        severity=SecuritySeverity.LOW,
+        payload={
+            "repo_url": repo_url[:200],
+            "project_id": project_id,
+            "branch": branch_used,
+            "scan_id": new_scan_id,
+        },
+        request=request,
+        user_id=current_user.id,
+        metadata={"status": "git_clone_scan_async"},
+    )
+
+    return {
+        "scan_id": new_scan_id,
+        "project_id": project_id,
+        "project_name": display_name,
+        "repo_url": repo_url,
+        "branch": branch_used,
+        "files_cloned": files_cloned,
+        "total_size_kb": max(1, total_size // 1024),
+        "scan_started": True,
+        "status": "pending",
+        "message": "Repository cloned and scan initiated. Poll GET /api/project/scan-status/{scan_id} for results.",
+        "estimated_seconds": 30,
     }
 
 

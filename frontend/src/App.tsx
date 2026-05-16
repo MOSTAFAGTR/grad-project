@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-d
 
 // Import Pages
 import LandingPage from './pages/LandingPage';
+import TrailerPage from './pages/TrailerPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardHomePage from './pages/DashboardHomePage';
@@ -54,6 +55,7 @@ const App: React.FC = () => {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/trailer" element={<TrailerPage />} />
 
         {/* --- STUDENT ROUTES --- */}
         <Route element={<ProtectedRoute allowedRoles={['user', 'instructor', 'admin']} />}>

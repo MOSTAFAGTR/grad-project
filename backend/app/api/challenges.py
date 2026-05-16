@@ -394,14 +394,18 @@ def _safe_ping_with_simulated_injection(host_input: str) -> tuple[str, bool]:
     if not host_target:
         raise HTTPException(status_code=400, detail="Host is required")
 
-    result = subprocess.run(
-        ["ping", "-c", "1", host_target],
-        shell=False,
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    output = (result.stdout or "") + (result.stderr or "")
+    try:
+        result = subprocess.run(
+            ["ping", "-c", "1", host_target],
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        output = (result.stdout or "") + (result.stderr or "")
+    except subprocess.TimeoutExpired:
+        # Keep challenge flow deterministic even when ICMP is blocked in the environment.
+        output = "[simulated] ping timed out\n"
 
     simulated_success = False
     if injected:

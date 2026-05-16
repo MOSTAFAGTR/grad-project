@@ -1,4 +1,4 @@
-import React, { useState, ChangeEvent, useEffect } from 'react';
+import React, { useState, ChangeEvent, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
 import { useNavigate } from 'react-router-dom';
 import { useScanContext } from '../context/ScanContext';
@@ -13,6 +13,7 @@ interface Finding {
   code_snippet?: string;
   code?: string;
   language?: string;
+  engine?: string;
   fix?: { recommendation?: string };
 }
 
@@ -39,6 +40,27 @@ interface ProjectOverview {
   ai_summary?: string | null;
 }
 
+const SCAN_PROGRESS_MESSAGES: string[] = [
+  'Extracting project files...',
+  'Starting Semgrep SAST engine...',
+  'Scanning Python files for injection patterns...',
+  'Scanning JavaScript for XSS vectors...',
+  'Checking for hardcoded secrets...',
+  'Running OWASP Top 10 ruleset...',
+  'Analyzing CSRF patterns...',
+  'Scanning dependency manifests...',
+  'Querying OSV.dev for CVEs...',
+  'Calculating risk scores...',
+  'Generating findings report...',
+];
+
+function scanLogTimestamp(elapsedMs: number): string {
+  const totalSec = Math.floor(elapsedMs / 1000);
+  const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
+  const ss = String(totalSec % 60).padStart(2, '0');
+  return `[${mm}:${ss}]`;
+}
+
 const SEVERITY_ORDER: Record<string, number> = {
   Critical: 0,
   High: 1,
@@ -53,12 +75,16 @@ function DependenciesPanel({
   depError,
   depSeverityFilter,
   setDepSeverityFilter,
+  dependencyScanPending = false,
+  onRefreshDependencies,
 }: {
   depData: any;
   depLoading: boolean;
   depError: string;
   depSeverityFilter: string;
   setDepSeverityFilter: (v: string) => void;
+  dependencyScanPending?: boolean;
+  onRefreshDependencies?: () => void;
 }) {
   if (depLoading) {
     return (
@@ -74,7 +100,32 @@ function DependenciesPanel({
   const manifests: string[] = depData?.manifests_scanned || [];
   const totalV = depData?.total_dependency_vulns ?? 0;
 
+  const pendingBanner = dependencyScanPending ? (
+    <div className="p-3 rounded border border-amber-600 bg-amber-900/25 text-amber-100 text-sm">
+      <span>
+        Dependency scan is running in the background. Results will appear here within 30 seconds.
+      </span>
+      {onRefreshDependencies && (
+        <button
+          type="button"
+          className="ml-3 px-3 py-1 rounded bg-amber-800 hover:bg-amber-700 text-xs font-semibold text-white"
+          onClick={onRefreshDependencies}
+        >
+          Refresh Dependencies
+        </button>
+      )}
+    </div>
+  ) : null;
+
   if (totalV === 0 && manifests.length === 0) {
+    if (dependencyScanPending) {
+      return (
+        <div className="space-y-3">
+          {pendingBanner}
+          <p className="text-gray-400 text-sm">Dependency results are still being collected.</p>
+        </div>
+      );
+    }
     return (
       <p className="text-gray-400 text-sm">
         No dependency manifest files found in this project. Upload a project containing package.json or requirements.txt
@@ -100,6 +151,7 @@ function DependenciesPanel({
   if (manifests.length > 0 && totalV === 0) {
     return (
       <div className="space-y-4">
+        {pendingBanner}
         <div className="p-3 rounded border border-green-700 bg-green-900/30 text-green-200 text-sm">
           No known vulnerabilities found across {manifests.length} manifest file{manifests.length === 1 ? '' : 's'}.
         </div>
@@ -118,6 +170,7 @@ function DependenciesPanel({
 
   return (
     <div className="space-y-4">
+      {pendingBanner}
       <div
         className={`p-3 rounded border text-sm ${
           hasCritHigh ? 'border-red-700 bg-red-900/30 text-red-100' : mediumOnly ? 'border-amber-600 bg-amber-900/30 text-amber-100' : 'border-gray-600 bg-gray-800/60 text-gray-200'
@@ -246,6 +299,21 @@ const Scanner: React.FC = () => {
   const [depSeverityFilter, setDepSeverityFilter] = useState<string>('all');
   const [depRefreshTick, setDepRefreshTick] = useState(0);
   const [mentorNoAiNote, setMentorNoAiNote] = useState('');
+  const [scannerMode, setScannerMode] = useState<'upload' | 'git'>('upload');
+  const [gitUrl, setGitUrl] = useState('');
+  const [gitBranch, setGitBranch] = useState('main');
+  const [isCloning, setIsCloning] = useState(false);
+  const [cloneError, setCloneError] = useState<string | null>(null);
+  const [showGitExamples, setShowGitExamples] = useState(false);
+  const [cloningMessage, setCloningMessage] = useState('');
+  const [scanLogLines, setScanLogLines] = useState<string[]>([]);
+  const [scanProgressPct, setScanProgressPct] = useState(0);
+  const scanLogRef = useRef<HTMLDivElement | null>(null);
+  const cloneTimersRef = useRef<number[]>([]);
+  const progressAnimRef = useRef<number | null>(null);
+  const pollIntervalRef = useRef<number | null>(null);
+  const scanSafetyRef = useRef<number | null>(null);
+  const scanPollStatusRef = useRef<'idle' | 'pending' | 'complete' | 'error'>('idle');
 
   useEffect(() => {
     if (!scanData) return;
@@ -290,6 +358,126 @@ const Scanner: React.FC = () => {
       cancelled = true;
     };
   }, [resultTab, projectId, depRefreshTick]);
+
+  useEffect(() => {
+    const el = scanLogRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [scanLogLines]);
+
+  useEffect(() => {
+    if (!isCloning) {
+      cloneTimersRef.current.forEach(clearTimeout);
+      cloneTimersRef.current = [];
+      return;
+    }
+    setCloningMessage('Connecting to repository...');
+    const t1 = window.setTimeout(() => setCloningMessage('Cloning repository...'), 3000);
+    const t2 = window.setTimeout(() => setCloningMessage('Extracting files...'), 10000);
+    const t3 = window.setTimeout(() => setCloningMessage('Starting security scan...'), 20000);
+    cloneTimersRef.current = [t1, t2, t3];
+    return () => {
+      cloneTimersRef.current.forEach(clearTimeout);
+      cloneTimersRef.current = [];
+    };
+  }, [isCloning]);
+
+  const clearProgressAnim = () => {
+    if (progressAnimRef.current != null) {
+      window.clearInterval(progressAnimRef.current);
+      progressAnimRef.current = null;
+    }
+  };
+
+  const clearScanPollers = () => {
+    if (pollIntervalRef.current != null) {
+      window.clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    if (scanSafetyRef.current != null) {
+      window.clearTimeout(scanSafetyRef.current);
+      scanSafetyRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      clearProgressAnim();
+      clearScanPollers();
+    };
+  }, []);
+
+  const beginScanPolling = (scanId: number, overview: ProjectOverview | null) => {
+    clearScanPollers();
+    scanPollStatusRef.current = 'pending';
+    pollIntervalRef.current = window.setInterval(async () => {
+      try {
+        const statusRes = await api.get(`/api/project/scan-status/${scanId}`);
+        const data = statusRes.data;
+        if (data.status === 'complete') {
+          clearScanPollers();
+          clearProgressAnim();
+          scanPollStatusRef.current = 'complete';
+          setScanning(false);
+          const n = data.total_vulnerabilities ?? 0;
+          setScanLogLines((prev) => [...prev, `[done] Scan complete. ${n} findings.`]);
+          setScanProgressPct(100);
+          const resultsPayload = {
+            project_id: data.project_id,
+            total_vulnerabilities: data.total_vulnerabilities,
+            findings: data.findings,
+            summary: data.summary,
+            risk: data.risk,
+            debug: data.debug,
+            scanner_engines: data.scanner_engines,
+            message: data.message,
+            dependency_scan_status: data.dependency_scan_status,
+            dependency_scan_note: data.dependency_scan_note,
+            dependency_scan: data.dependency_scan,
+          };
+          setScanResults(resultsPayload);
+          setScanData({
+            projectId: data.project_id,
+            results: resultsPayload,
+            overview,
+            summary: data.summary || null,
+            findings: data.findings || [],
+            debug: data.debug || null,
+          });
+          setSelectedFinding((data.findings || [])[0] || null);
+          setResultTab('findings');
+          if (data.message) setMessage(data.message);
+          if (data.dependency_scan && Object.keys(data.dependency_scan).length > 0) {
+            setDepData(data.dependency_scan);
+          }
+        } else if (data.status === 'error') {
+          clearScanPollers();
+          clearProgressAnim();
+          scanPollStatusRef.current = 'error';
+          setScanning(false);
+          setMessage(data.error || 'Scan failed');
+          setScanProgressPct(0);
+        }
+      } catch {
+        clearScanPollers();
+        clearProgressAnim();
+        scanPollStatusRef.current = 'error';
+        setScanning(false);
+        setMessage('Lost connection to scan service');
+        setScanProgressPct(0);
+      }
+    }, 3000);
+
+    scanSafetyRef.current = window.setTimeout(() => {
+      if (scanPollStatusRef.current === 'pending') {
+        clearScanPollers();
+        clearProgressAnim();
+        setScanning(false);
+        setMessage('Scan timed out after 3 minutes');
+        scanPollStatusRef.current = 'error';
+        setScanProgressPct(0);
+      }
+    }, 180000);
+  };
 
   const findings = scanResults?.findings || [];
   const severitySummary = findings.reduce(
@@ -366,29 +554,98 @@ const Scanner: React.FC = () => {
 
   const handleScan = async () => {
     if (!projectId) return;
+    clearProgressAnim();
+    clearScanPollers();
+    setScanning(true);
+    setMessage('');
+    setScanResults(null);
+    setSelectedFinding(null);
+    setScanLogLines([]);
+    setScanProgressPct(0);
+    const scanStart = Date.now();
+    let msgIndex = 0;
+    progressAnimRef.current = window.setInterval(() => {
+      if (msgIndex < SCAN_PROGRESS_MESSAGES.length) {
+        const line = `${scanLogTimestamp(Date.now() - scanStart)} ${SCAN_PROGRESS_MESSAGES[msgIndex]}`;
+        setScanLogLines((prev) => [...prev, line]);
+        setScanProgressPct((p) => Math.min(90, p + 10));
+        msgIndex += 1;
+      }
+    }, 1800);
     try {
-      setScanning(true);
-      setMessage('');
+      const startRes = await api.post(`/api/project/scan?project_id=${encodeURIComponent(projectId)}`);
+      const sid = startRes.data.scan_id;
+      if (!sid) throw new Error('No scan_id returned from server');
+      beginScanPolling(Number(sid), projectOverview);
+    } catch (err: any) {
+      clearProgressAnim();
+      clearScanPollers();
+      setScanning(false);
+      setMessage(err?.response?.data?.detail || err?.message || 'Scan failed to start');
+      setScanProgressPct(0);
+    }
+  };
+
+  const handleCloneFromGit = async () => {
+    if (!gitUrl.trim()) return;
+    setIsCloning(true);
+    setCloneError(null);
+    setMessage('');
+    try {
+      const res = await api.post('/api/project/scan-from-git', {
+        repo_url: gitUrl.trim(),
+        branch: (gitBranch || 'main').trim() || 'main',
+      });
+      const d = res.data;
+      const sid = d.scan_id;
+      if (!sid) {
+        setCloneError('No scan_id returned from server');
+        return;
+      }
+
+      setProjectId(d.project_id);
       setScanResults(null);
       setSelectedFinding(null);
+      setResultTab('findings');
 
-      const response = await api.post(`/api/project/scan?project_id=${encodeURIComponent(projectId)}`);
-      const data = response.data;
-      setScanResults(data);
-      setScanData({
-        projectId,
-        results: data,
-        overview: projectOverview,
-        summary: data.summary || null,
-        findings: data.findings || [],
-        debug: data.debug || null,
-      });
-      if (data.message) setMessage(data.message);
-      setSelectedFinding((data.findings || [])[0] || null);
-    } catch (err: any) {
-      setMessage(err.message || 'Scan failed.');
-    } finally {
+      let overviewData: ProjectOverview | null = null;
+      try {
+        const ar = await api.post(
+          `/api/project/analyze-structure?project_id=${encodeURIComponent(d.project_id)}`,
+        );
+        overviewData = ar.data;
+        setProjectOverview(ar.data);
+      } catch {
+        setProjectOverview(null);
+      }
+
+      setMessage(`Repository '${d.project_name}' cloned successfully. Scan is running...`);
+
+      clearProgressAnim();
+      clearScanPollers();
+      setScanning(true);
+      setScanLogLines([]);
+      setScanProgressPct(0);
+      const scanStart = Date.now();
+      let msgIndex = 0;
+      progressAnimRef.current = window.setInterval(() => {
+        if (msgIndex < SCAN_PROGRESS_MESSAGES.length) {
+          const line = `${scanLogTimestamp(Date.now() - scanStart)} ${SCAN_PROGRESS_MESSAGES[msgIndex]}`;
+          setScanLogLines((prev) => [...prev, line]);
+          setScanProgressPct((p) => Math.min(90, p + 10));
+          msgIndex += 1;
+        }
+      }, 1800);
+
+      beginScanPolling(Number(sid), overviewData);
+    } catch (e: any) {
+      const det = e?.response?.data?.detail;
+      setCloneError(typeof det === 'string' ? det : e?.message || 'Clone failed');
+      clearProgressAnim();
+      clearScanPollers();
       setScanning(false);
+    } finally {
+      setIsCloning(false);
     }
   };
 
@@ -469,10 +726,33 @@ const Scanner: React.FC = () => {
     <div className="min-h-screen bg-gray-900 text-white flex items-start justify-center p-6 overflow-x-hidden max-w-full">
       <div className="bg-gray-800/80 border border-gray-700 rounded-xl max-w-5xl w-full p-8 shadow-2xl overflow-x-hidden">
         <h1 className="text-2xl font-bold mb-4">Security Scanner</h1>
-        <p className="text-sm text-gray-400 mb-6">
-          Upload a compressed project (.zip) to run it through the security training scanner.
+        <p className="text-sm text-gray-400 mb-4">
+          Upload a ZIP or clone a public Git repository to run the security training scanner.
         </p>
 
+        <div className="flex gap-2 mb-6">
+          <button
+            type="button"
+            onClick={() => setScannerMode('upload')}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+              scannerMode === 'upload' ? 'bg-teal-600 text-white' : 'bg-gray-700 text-gray-300'
+            }`}
+          >
+            Upload ZIP
+          </button>
+          <button
+            type="button"
+            onClick={() => setScannerMode('git')}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+              scannerMode === 'git' ? 'bg-teal-600 text-white' : 'bg-gray-700 text-gray-300'
+            }`}
+          >
+            Clone from Git
+          </button>
+        </div>
+
+        {scannerMode === 'upload' && (
+        <>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">Project ZIP file</label>
@@ -495,6 +775,103 @@ const Scanner: React.FC = () => {
           >
             {uploading ? 'Uploading...' : 'Upload Project'}
           </button>
+        </div>
+        </>
+        )}
+
+        {scannerMode === 'git' && (
+          <div className="space-y-4 bg-gray-900/50 border border-gray-700 rounded-xl p-6">
+            <h2 className="text-lg font-bold text-white">Scan a Git Repository</h2>
+            <p className="text-sm text-gray-400">
+              Paste a public GitHub, GitLab, or any Git repository URL. SCALE will clone it and run the full
+              security scan automatically.
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Repository URL</label>
+              <input
+                type="url"
+                className="w-full rounded-lg bg-gray-900 border border-gray-700 px-3 py-2 text-sm text-white"
+                placeholder="https://github.com/username/repository"
+                value={gitUrl}
+                onChange={(e) => setGitUrl(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Branch (optional)</label>
+              <input
+                type="text"
+                className="w-full rounded-lg bg-gray-900 border border-gray-700 px-3 py-2 text-sm text-white"
+                placeholder="main (default)"
+                value={gitBranch}
+                onChange={(e) => setGitBranch(e.target.value)}
+              />
+              <p className="text-xs text-gray-500 mt-1">Leave blank to use main or master</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowGitExamples((s) => !s)}
+              className="text-xs text-cyan-400 hover:underline"
+            >
+              {showGitExamples ? 'Hide examples' : 'Try an example'}
+            </button>
+            {showGitExamples && (
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  className="text-left text-sm px-3 py-2 rounded bg-gray-800 border border-gray-600 hover:bg-gray-700"
+                  onClick={() =>
+                    setGitUrl('https://github.com/digininja/DVWA')
+                  }
+                >
+                  DVWA (PHP vulnerabilities)
+                </button>
+                <button
+                  type="button"
+                  className="text-left text-sm px-3 py-2 rounded bg-gray-800 border border-gray-600 hover:bg-gray-700"
+                  onClick={() =>
+                    setGitUrl('https://github.com/WebGoat/WebGoat')
+                  }
+                >
+                  WebGoat (Java vulnerabilities)
+                </button>
+                <button
+                  type="button"
+                  className="text-left text-sm px-3 py-2 rounded bg-gray-800 border border-gray-600 hover:bg-gray-700"
+                  onClick={() =>
+                    setGitUrl('https://github.com/juice-shop/juice-shop')
+                  }
+                >
+                  Juice Shop (Node.js vulnerabilities)
+                </button>
+              </div>
+            )}
+            <div className="p-3 rounded border border-amber-600 bg-amber-900/20 text-amber-100 text-sm">
+              Only scan repositories you own or have permission to test. Do not scan repositories without authorization.
+            </div>
+            {cloneError && (
+              <div className="p-3 rounded border border-red-700 bg-red-900/30 text-red-200 text-sm">
+                {cloneError}
+              </div>
+            )}
+            {isCloning && (
+              <p className="text-sm text-cyan-300">{cloningMessage}</p>
+            )}
+            <button
+              type="button"
+              disabled={isCloning || !gitUrl.trim()}
+              onClick={handleCloneFromGit}
+              className={`w-full py-2 rounded-lg font-semibold ${
+                isCloning || !gitUrl.trim()
+                  ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                  : 'bg-teal-600 hover:bg-teal-700 text-white'
+              }`}
+            >
+              {isCloning ? 'Working…' : 'Clone and Scan'}
+            </button>
+          </div>
+        )}
+
+        <div className="space-y-4 mt-6">
 
           {message && (
             <div className="mt-2 text-sm">
@@ -516,8 +893,34 @@ const Scanner: React.FC = () => {
               >
                 {scanning ? 'Scanning project...' : 'Scan Project'}
               </button>
+              {(scanning || scanLogLines.length > 0) && (
+                <div className="mt-3 space-y-2">
+                  <div className="h-2 bg-gray-900 rounded overflow-hidden border border-gray-700">
+                    <div
+                      className="h-full bg-teal-500 transition-all duration-500 ease-out"
+                      style={{ width: `${scanProgressPct}%` }}
+                    />
+                  </div>
+                  <div
+                    ref={scanLogRef}
+                    className="rounded-lg p-4 text-left overflow-y-auto max-h-[220px] text-xs font-mono"
+                    style={{
+                      background: '#0d1117',
+                      color: '#7ee787',
+                      border: '1px solid #30363d',
+                      minHeight: 200,
+                    }}
+                  >
+                    {scanLogLines.map((line, i) => (
+                      <div key={`${i}-${line.slice(0, 24)}`}>{line}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <button
                 onClick={() => {
+                  clearProgressAnim();
+                  clearScanPollers();
                   setProjectId('');
                   setScanResults(null);
                   setProjectOverview(null);
@@ -525,6 +928,8 @@ const Scanner: React.FC = () => {
                   setMentorOpen(false);
                   setMentorData(null);
                   setMentorError('');
+                  setScanLogLines([]);
+                  setScanProgressPct(0);
                   clearScanData();
                   setMessage('Project state cleared.');
                 }}
@@ -588,6 +993,18 @@ const Scanner: React.FC = () => {
                   {scanResults.risk?.total_score ?? 'N/A'} ({scanResults.risk?.risk_level ?? 'Unknown'})
                 </span>
               </p>
+              {scanResults.scanner_engines && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {scanResults.scanner_engines.semgrep && (
+                    <span className="text-[10px] px-2 py-1 rounded-full bg-green-900/60 text-green-200 border border-green-700 font-semibold">
+                      Semgrep SAST Engine
+                    </span>
+                  )}
+                  <span className="text-[10px] px-2 py-1 rounded-full bg-blue-900/60 text-blue-200 border border-blue-700 font-semibold">
+                    SCALE Regex Engine
+                  </span>
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-2 mb-4 text-xs">
                 <div className="bg-red-900/40 border border-red-700 rounded p-2">
                   <span className="text-red-300 font-bold">High:</span> {severitySummary.High}
@@ -636,6 +1053,15 @@ const Scanner: React.FC = () => {
                         <span className={`text-xs px-2 py-1 rounded-full border ${severityBadgeClass(item.severity || '')}`}>
                           {item.severity || '-'}
                         </span>
+                        {item.engine === 'semgrep' ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-900/70 text-purple-100 border border-purple-600">
+                            Semgrep
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-700 text-gray-200 border border-gray-500">
+                            Pattern Match
+                          </span>
+                        )}
                       </div>
 
                       <pre className="max-h-[200px] overflow-y-auto bg-slate-900 p-3 rounded-xl text-xs text-green-300 font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere] mb-3">
@@ -710,6 +1136,8 @@ const Scanner: React.FC = () => {
                   depError={depError}
                   depSeverityFilter={depSeverityFilter}
                   setDepSeverityFilter={setDepSeverityFilter}
+                  dependencyScanPending={scanResults?.dependency_scan_status === 'pending'}
+                  onRefreshDependencies={() => setDepRefreshTick((t) => t + 1)}
                 />
               )}
             </div>

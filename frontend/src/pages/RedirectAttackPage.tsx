@@ -91,8 +91,21 @@ const RedirectAttackPage: React.FC = () => {
           appendLog('Exploit failed: redirect stayed within the trusted app or did not occur.');
         }
       } catch {
-        setVerified('failed');
-        appendLog('Unable to inspect victim location (cross-origin).');
+        // If browser blocks location inspection, the iframe likely navigated
+        // to an external origin (which is exactly the open-redirect success case).
+        setVerified('success');
+        appendLog('Cross-origin navigation detected: redirect escaped trusted origin.');
+        const token = sessionStorage.getItem('token');
+        if (token) {
+          axios
+            .post(
+              `${API_BASE}/mark-attack-complete?challenge_type=redirect`,
+              {},
+              { headers: { Authorization: `Bearer ${token}` } },
+            )
+            .catch(() => {});
+        }
+        navigate('/challenges/attack-success?type=redirect');
       }
       try {
         document.body.removeChild(iframe);
