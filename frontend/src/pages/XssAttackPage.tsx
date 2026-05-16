@@ -24,10 +24,12 @@ const XssAttackPage: React.FC = () => {
   const [author, setAuthor] = useState('Guest');
   const [message, setMessage] = useState('');
   const [isNavigating, setIsNavigating] = useState(false);
+  const [attackArmed, setAttackArmed] = useState(false);
   
   const navigate = useNavigate();
 
   const markAttackSuccess = async () => {
+    if (!attackArmed) return;
     if (isNavigating || window.__xssChallengeDetected) return;
     window.__xssChallengeDetected = true;
     setIsNavigating(true);
@@ -75,6 +77,7 @@ const XssAttackPage: React.FC = () => {
         author: author,
         content: newComment
       });
+      setAttackArmed(true);
       setNewComment('');
       fetchComments();
       setMessage('Comment posted. If payload executes in the sandbox view, challenge will auto-complete.');
@@ -85,6 +88,9 @@ const XssAttackPage: React.FC = () => {
 
   const handleClear = async () => {
     await axios.delete(`${API_URL}/api/challenges/xss/comments`);
+    setAttackArmed(false);
+    setIsNavigating(false);
+    window.__xssChallengeDetected = false;
     fetchComments();
     setMessage('Comments cleared.');
   };
@@ -106,16 +112,6 @@ const XssAttackPage: React.FC = () => {
     .comment { background:#1f2937; border:1px solid #374151; border-radius:8px; padding:12px; margin-bottom:10px; }
     .author { color:#93c5fd; font-weight:700; margin-bottom:6px; font-size:12px; }
   </style>
-</head>
-<body>
-  ${comments
-    .map(
-      (c) => `<div class="comment">
-  <div class="author">${escapeHtml(c.author)} says:</div>
-  <div>${c.content}</div>
-</div>`,
-    )
-    .join('')}
   <script>
     (function() {
       const notify = (source, detail) => {
@@ -135,6 +131,16 @@ const XssAttackPage: React.FC = () => {
       };
     })();
   </script>
+</head>
+<body>
+  ${comments
+    .map(
+      (c) => `<div class="comment">
+  <div class="author">${escapeHtml(c.author)} says:</div>
+  <div>${c.content}</div>
+</div>`,
+    )
+    .join('')}
 </body>
 </html>`;
 
@@ -194,6 +200,11 @@ const XssAttackPage: React.FC = () => {
         <p className="text-gray-400 text-sm">
           Comments are rendered unsafely inside a sandboxed iframe. Payload execution is real, but isolated from platform session storage.
         </p>
+        {!attackArmed && (
+          <p className="text-amber-400 text-xs mt-2">
+            Detection is armed after you post a payload from this session. This prevents old stored payloads from auto-completing immediately.
+          </p>
+        )}
         <iframe
           title="xss-sandbox"
           sandbox="allow-scripts allow-forms"

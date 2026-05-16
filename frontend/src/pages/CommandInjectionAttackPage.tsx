@@ -28,7 +28,7 @@ const CommandInjectionAttackPage: React.FC = () => {
       const res = await axios.post<{ output: string; success?: boolean }>(`${API_BASE}/ping`, { host: host.trim() });
       const out = res.data.output || '';
       setOutput(out);
-      const executed = Boolean(res.data.success);
+      const executed = Boolean(res.data.success) || out.includes(SUCCESS_MARKER);
       setVerified(executed ? 'success' : 'failed');
       if (executed) {
         const token = sessionStorage.getItem('token');

@@ -21,6 +21,7 @@ interface AttackRow {
   payload_used: string;
   timestamp: string;
   impact_description: string;
+  status?: string;
 }
 
 interface BlueFixRow {
@@ -49,6 +50,16 @@ const RedBlueGamePage: React.FC = () => {
   const [attackPayload, setAttackPayload] = useState('');
   const [attackImpact, setAttackImpact] = useState('');
   const [attackSubmitting, setAttackSubmitting] = useState(false);
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [originalVulnerableCode, setOriginalVulnerableCode] = useState('');
+  const [challengeCodeName, setChallengeCodeName] = useState('');
+  const [attackHint, setAttackHint] = useState('');
+  const [attackFeedback, setAttackFeedback] = useState<{
+    kind: 'success' | 'fail';
+    message: string;
+    hint?: string;
+    preview?: string;
+  } | null>(null);
 
   const role = sessionStorage.getItem('role');
   const myUserId = Number(sessionStorage.getItem('user_id') || '0');
@@ -68,6 +79,7 @@ const RedBlueGamePage: React.FC = () => {
         payload_used: a.payload_used || '',
         timestamp: a.timestamp,
         impact_description: a.impact_description || '',
+        status: a.status || 'confirmed',
       }));
       setAttacks(initial);
       const maxId = initial.reduce((m, a) => Math.max(m, a.id), 0);
@@ -99,6 +111,7 @@ const RedBlueGamePage: React.FC = () => {
           payload_used: a.payload_used || '',
           timestamp: a.timestamp,
           impact_description: a.impact_description || '',
+          status: a.status || 'confirmed',
         }));
         if (newOnes.length) {
           const ordered = [...newOnes].reverse();
@@ -118,6 +131,24 @@ const RedBlueGamePage: React.FC = () => {
     return () => clearInterval(id);
   }, [pollingActive, gid, gameId]);
 
+  useEffect(() => {
+    if (!gameData) return;
+    setCodeLoading(true);
+    api
+      .get(`/api/redblue/game/${gid}/challenge-code`)
+      .then((res) => {
+        setOriginalVulnerableCode(res.data.vulnerable_code);
+        setFixCode(res.data.vulnerable_code);
+        setChallengeCodeName(res.data.challenge_name || '');
+        setAttackHint(res.data.attack_hint || '');
+        setCodeLoading(false);
+      })
+      .catch(() => {
+        setFixCode("# Could not load challenge source.\n# Please ask your instructor.");
+        setCodeLoading(false);
+      });
+  }, [gameData?.game_id, gid]);
+
   const formatTime = (iso: string) => {
     try {
       const d = new Date(iso.replace(/Z$/, ''));
@@ -132,10 +163,15 @@ const RedBlueGamePage: React.FC = () => {
     return `${s.slice(0, 100)}...`;
   };
 
-  const challengeName = gameData?.challenge_id != null ? CHALLENGE_TITLES[gameData.challenge_id] || 'Challenge' : 'Challenge';
+  const challengeName =
+    challengeCodeName ||
+    (gameData?.challenge_id != null ? CHALLENGE_TITLES[gameData.challenge_id] || 'Challenge' : 'Challenge');
   const status = gameData?.status || '';
   const isRedTeam = (gameData?.red_team?.members || []).some((m: { user_id: number }) => m.user_id === myUserId);
   const isBlueTeam = (gameData?.blue_team?.members || []).some((m: { user_id: number }) => m.user_id === myUserId);
+  const redInstr = gameData?.challenge_instructions?.red_team || '';
+  const blueInstr = gameData?.challenge_instructions?.blue_team || '';
+  const totalAttempts = gameData?.total_red_attempts ?? null;
 
   const submitFix = async () => {
     if (!gameData) return;
@@ -159,14 +195,31 @@ const RedBlueGamePage: React.FC = () => {
   const submitAttack = async () => {
     if (!gameData || !attackPayload.trim()) return;
     setAttackSubmitting(true);
+    setAttackFeedback(null);
     try {
-      await api.post(`/api/redblue/game/${gid}/attack`, {
+      const res = await api.post(`/api/redblue/game/${gid}/attack`, {
         challenge_id: gameData.challenge_id,
         payload_used: attackPayload,
         impact_description: attackImpact,
       });
-      setAttackPayload('');
-      setAttackImpact('');
+      const data = res.data;
+      if (data.confirmed === true) {
+        setAttackFeedback({
+          kind: 'success',
+          message:
+            '✓ Attack confirmed! Your payload exploited the vulnerability. +1 point for Red Team.',
+          preview: data.response_preview,
+        });
+        setAttackPayload('');
+        setAttackImpact('');
+      } else {
+        setAttackFeedback({
+          kind: 'fail',
+          message: '✗ Attack failed. The payload did not work.',
+          hint: data.hint,
+          preview: data.response_preview,
+        });
+      }
       await loadGame();
     } catch (e: any) {
       const d = e?.response?.data?.detail;
@@ -201,6 +254,8 @@ const RedBlueGamePage: React.FC = () => {
 
   const redScore = gameData.red_team?.score ?? 0;
   const blueScore = gameData.blue_team?.score ?? 0;
+  const lineCount = fixCode.split('\n').length;
+  const showAttackPanel = isRedTeam || isInstructor;
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4">
@@ -220,6 +275,11 @@ const RedBlueGamePage: React.FC = () => {
               {status === 'active' ? 'ACTIVE' : status === 'completed' ? 'COMPLETED' : status.toUpperCase()}
             </span>
             <span className="text-gray-300">{challengeName}</span>
+            {totalAttempts != null && (
+              <span className="block text-xs text-gray-500 mt-1">
+                Red attempts: {totalAttempts} · Hits: {redScore}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <span className="text-gray-400">Blue Team:</span>
@@ -230,34 +290,63 @@ const RedBlueGamePage: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 flex flex-col min-h-[400px]">
-            <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
+            <h2 className="text-lg font-bold mb-1 flex items-center gap-2">
               <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
               Live Attack Feed
             </h2>
-            {isRedTeam && status === 'active' && (
+            {redInstr && (
+              <p className="text-xs text-red-200/90 mb-3 border-b border-red-900/50 pb-2">{redInstr}</p>
+            )}
+            {attackFeedback && attackFeedback.kind === 'success' && (
+              <div className="mb-3 p-3 rounded border border-green-600 bg-green-900/30 text-green-100 text-sm">
+                {attackFeedback.message}
+                {attackFeedback.preview != null && (
+                  <span className="block mt-2 font-mono text-xs opacity-90">
+                    Response preview: {attackFeedback.preview}
+                  </span>
+                )}
+              </div>
+            )}
+            {attackFeedback && attackFeedback.kind === 'fail' && (
+              <div className="mb-3 p-3 rounded border border-red-600 bg-red-900/30 text-red-100 text-sm">
+                {attackFeedback.message}
+                {attackFeedback.hint && (
+                  <span className="block mt-2">Hint: {attackFeedback.hint}</span>
+                )}
+                {attackFeedback.preview != null && (
+                  <span className="block mt-2 font-mono text-xs opacity-90">
+                    Response: {attackFeedback.preview}
+                  </span>
+                )}
+              </div>
+            )}
+            {showAttackPanel && status === 'active' && (
               <div className="mb-4 p-3 bg-gray-900/80 border border-red-800 rounded-lg space-y-2">
-                <p className="text-xs font-semibold text-red-300">Log attack (Red Team)</p>
+                <p className="text-sm font-semibold text-red-300">Submit Attack Payload</p>
                 <textarea
-                  className="w-full font-mono text-xs bg-black/50 border border-gray-600 rounded p-2 text-green-200"
-                  rows={3}
-                  placeholder="Payload used"
+                  className="w-full font-mono text-xs border border-gray-600 rounded p-2 min-h-[100px]"
+                  style={{ background: '#0d1117', color: '#e6edf3' }}
+                  placeholder="Enter your attack payload here… (e.g. for SQL injection: ' OR 1=1 --)"
                   value={attackPayload}
                   onChange={(e) => setAttackPayload(e.target.value)}
                 />
                 <textarea
                   className="w-full text-xs bg-black/50 border border-gray-600 rounded p-2 text-gray-200"
                   rows={2}
-                  placeholder="Impact description"
+                  placeholder="Impact description (optional)"
                   value={attackImpact}
                   onChange={(e) => setAttackImpact(e.target.value)}
                 />
+                {attackHint && (
+                  <p className="text-xs text-amber-200/90">Hint: {attackHint}</p>
+                )}
                 <button
                   type="button"
                   disabled={attackSubmitting}
                   onClick={submitAttack}
                   className="w-full py-2 rounded bg-red-700 hover:bg-red-600 text-sm font-semibold disabled:opacity-50"
                 >
-                  {attackSubmitting ? 'Logging…' : 'Log Attack'}
+                  {attackSubmitting ? 'Submitting…' : 'Submit Payload'}
                 </button>
               </div>
             )}
@@ -265,7 +354,14 @@ const RedBlueGamePage: React.FC = () => {
               {attacks.length === 0 && <p className="text-gray-500 text-sm">No attacks yet.</p>}
               {attacks.map((a) => (
                 <div key={a.id} className="bg-gray-900 border border-gray-700 rounded p-3 text-sm">
-                  <div className="text-gray-500 text-xs mb-1">{formatTime(a.timestamp)} · {challengeName}</div>
+                  <div className="text-gray-500 text-xs mb-1 flex flex-wrap items-center gap-2">
+                    <span>{formatTime(a.timestamp)} · {challengeName}</span>
+                    {a.status === 'failed' ? (
+                      <span className="text-red-400 font-semibold">✗ MISS</span>
+                    ) : (
+                      <span className="text-green-400 font-semibold">✓ HIT</span>
+                    )}
+                  </div>
                   <pre className="text-xs font-mono text-green-300 whitespace-pre-wrap break-all mb-2 bg-black/40 p-2 rounded">
                     {truncatePayload(a.payload_used)}
                   </pre>
@@ -276,15 +372,56 @@ const RedBlueGamePage: React.FC = () => {
           </div>
 
           <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 flex flex-col">
-            <h2 className="text-lg font-bold mb-3">Defense Console</h2>
-            <textarea
-              className="w-full font-mono text-sm bg-gray-950 border border-gray-600 rounded p-3 text-green-200"
-              style={{ minHeight: 300 }}
-              value={fixCode}
-              onChange={(e) => setFixCode(e.target.value)}
-              placeholder="Paste fixed code here…"
-              disabled={!isBlueTeam || status !== 'active'}
-            />
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+              <h2 className="text-lg font-bold">
+                Defense Console — {challengeName}
+              </h2>
+              {!codeLoading &&
+                originalVulnerableCode !== '' &&
+                fixCode !== originalVulnerableCode && (
+                  <button
+                    type="button"
+                    onClick={() => setFixCode(originalVulnerableCode)}
+                    className="text-xs px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 border border-gray-600"
+                  >
+                    Reset to Original
+                  </button>
+                )}
+            </div>
+            {blueInstr && (
+              <p className="text-xs text-blue-200/90 mb-3 border-b border-blue-900/50 pb-2">{blueInstr}</p>
+            )}
+            {!codeLoading && originalVulnerableCode !== '' && fixCode !== '# Could not load challenge source.\n# Please ask your instructor.' && (
+              <div className="mb-3 p-3 rounded border border-red-800 bg-red-950/40 text-red-100 text-sm">
+                ⚠ This is the vulnerable version of app.py for {challengeName}. The red team is exploiting it.
+                Fix the vulnerability and submit to score a defensive point.
+              </div>
+            )}
+            {codeLoading ? (
+              <div className="py-16 text-center text-gray-400">Loading challenge source…</div>
+            ) : (
+              <>
+                <textarea
+                  className="w-full rounded box-border"
+                  style={{
+                    minHeight: 400,
+                    width: '100%',
+                    fontFamily: 'monospace',
+                    fontSize: 13,
+                    background: '#0d1117',
+                    color: '#e6edf3',
+                    border: '1px solid #30363d',
+                    padding: 16,
+                    tabSize: 4,
+                  }}
+                  value={fixCode}
+                  onChange={(e) => setFixCode(e.target.value)}
+                  placeholder="Paste fixed code here…"
+                  disabled={!isBlueTeam || status !== 'active'}
+                />
+                <p className="text-xs text-gray-500 mt-1">{lineCount} lines</p>
+              </>
+            )}
             <button
               type="button"
               disabled={fixSubmitting || !isBlueTeam || status !== 'active'}
