@@ -1073,3 +1073,55 @@ def use_hint(
     db.refresh(state)
     recalculate_learning_progress(db, current_user.id)
     return state
+
+
+# ---------------------------------------------------------
+# CHALLENGE TUTORIALS - Get challenges with video URLs
+# ---------------------------------------------------------
+
+@router.get("/list", response_model=list)
+def get_all_challenges_with_videos(db: Session = Depends(get_db)):
+    """
+    Get all security challenges with their tutorial videos
+    
+    Returns a list of all 10 security challenges including their video URLs.
+    """
+    from ..models import Challenge
+    
+    challenges = db.query(Challenge).order_by(Challenge.id).all()
+    return [
+        {
+            "id": c.id,
+            "title": c.title,
+            "description": c.description
+        }
+        for c in challenges
+    ]
+
+
+@router.get("/tutorial/{challenge_id}")
+def get_challenge_tutorial(challenge_id: int, db: Session = Depends(get_db)):
+    """
+    Get a specific challenge with its tutorial video by ID
+    
+    Args:
+        challenge_id: The ID of the challenge (1-10)
+    
+    Returns:
+        Challenge details including title, description, and tutorial video URL
+    """
+    from ..models import Challenge
+    
+    challenge = db.query(Challenge).filter(Challenge.id == challenge_id).first()
+    
+    if not challenge:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Challenge with ID {challenge_id} not found"
+        )
+    
+    return {
+        "id": challenge.id,
+        "title": challenge.title,
+        "description": challenge.description
+    }

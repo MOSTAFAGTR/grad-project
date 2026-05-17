@@ -13,17 +13,6 @@ const CsrfTutorialPage: React.FC = () => {
         and how protection mechanisms like CSRF tokens prevent these attacks.
       </p>
 
-      {/* VIDEO PLAYER */}
-      <div className="w-full max-w-4xl mx-auto rounded-lg overflow-hidden border-2 border-gray-700">
-        <video
-          className="w-full h-full"
-          controls
-          src="/WhatsApp Video 2025-11-12 at 19.31.45_ab683d15.mp4"
-        >
-          Your browser does not support the video tag.
-        </video>
-      </div>
-
       {/* ACTION BUTTONS */}
       <div className="mt-8 flex gap-4">
         {/* Use slug-based routing (consistent with backend) */}
