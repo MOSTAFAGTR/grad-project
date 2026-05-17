@@ -1,6 +1,7 @@
 import React, { useState, ChangeEvent, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
 import { useNavigate } from 'react-router-dom';
+import { FaFileDownload } from 'react-icons/fa';
 import { useScanContext } from '../context/ScanContext';
 import { DEFAULT_PAYLOADS, getDefaultPayload } from '../utils/payloads';
 
@@ -77,6 +78,7 @@ function DependenciesPanel({
   setDepSeverityFilter,
   dependencyScanPending = false,
   onRefreshDependencies,
+  footerExtra,
 }: {
   depData: any;
   depLoading: boolean;
@@ -85,6 +87,7 @@ function DependenciesPanel({
   setDepSeverityFilter: (v: string) => void;
   dependencyScanPending?: boolean;
   onRefreshDependencies?: () => void;
+  footerExtra?: React.ReactNode;
 }) {
   if (depLoading) {
     return (
@@ -270,6 +273,7 @@ function DependenciesPanel({
           ))}
         </ul>
       </details>
+      {footerExtra ? <div className="mt-6 pt-4 border-t border-gray-700">{footerExtra}</div> : null}
     </div>
   );
 }
@@ -308,6 +312,8 @@ const Scanner: React.FC = () => {
   const [cloningMessage, setCloningMessage] = useState('');
   const [scanLogLines, setScanLogLines] = useState<string[]>([]);
   const [scanProgressPct, setScanProgressPct] = useState(0);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const scanLogRef = useRef<HTMLDivElement | null>(null);
   const cloneTimersRef = useRef<number[]>([]);
   const progressAnimRef = useRef<number | null>(null);
@@ -435,6 +441,7 @@ const Scanner: React.FC = () => {
             dependency_scan: data.dependency_scan,
           };
           setScanResults(resultsPayload);
+          if (data.project_id) setProjectId(data.project_id);
           setScanData({
             projectId: data.project_id,
             results: resultsPayload,
@@ -478,6 +485,58 @@ const Scanner: React.FC = () => {
       }
     }, 180000);
   };
+
+  const reportProjectId = projectId || scanData?.projectId || scanResults?.project_id || '';
+
+  const handleDownloadPentestPdf = async () => {
+    const pid = reportProjectId;
+    if (!pid) {
+      setPdfError('No project id for this scan.');
+      window.setTimeout(() => setPdfError(null), 5000);
+      return;
+    }
+    setIsDownloadingPdf(true);
+    setPdfError(null);
+    try {
+      const response = await api.get(`/api/report/pdf/scan?project_id=${encodeURIComponent(pid)}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = href;
+      a.download = `technical_pentest_${pid}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(href);
+    } catch (e: unknown) {
+      const ax = e as { response?: { status?: number } };
+      if (ax.response?.status === 404) {
+        setPdfError('Scan data not found. Try rescanning.');
+      } else {
+        setPdfError('PDF generation failed. Try again.');
+      }
+      window.setTimeout(() => setPdfError(null), 5000);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
+  const pentestPdfButton = (
+    <div>
+      <button
+        type="button"
+        onClick={handleDownloadPentestPdf}
+        disabled={isDownloadingPdf || !reportProjectId}
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-blue-500 text-blue-300 bg-gray-900/80 hover:bg-blue-950/50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
+      >
+        <FaFileDownload className="shrink-0" aria-hidden />
+        {isDownloadingPdf ? 'Generating...' : 'Download Technical Pentest Report (PDF)'}
+      </button>
+      {pdfError && <p className="text-red-400 text-sm mt-2">{pdfError}</p>}
+    </div>
+  );
 
   const findings = scanResults?.findings || [];
   const severitySummary = findings.reduce(
@@ -1016,6 +1075,7 @@ const Scanner: React.FC = () => {
                   <span className="text-green-300 font-bold">Low:</span> {severitySummary.Low}
                 </div>
               </div>
+              <div className="mb-4">{pentestPdfButton}</div>
               <div className="mb-4 flex flex-wrap gap-2">
                 <button
                   onClick={exportResultsAsJson}
@@ -1138,6 +1198,7 @@ const Scanner: React.FC = () => {
                   setDepSeverityFilter={setDepSeverityFilter}
                   dependencyScanPending={scanResults?.dependency_scan_status === 'pending'}
                   onRefreshDependencies={() => setDepRefreshTick((t) => t + 1)}
+                  footerExtra={pentestPdfButton}
                 />
               )}
             </div>

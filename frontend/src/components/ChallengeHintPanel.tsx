@@ -18,9 +18,10 @@ type HintState = {
 
 interface Props {
   challengeId: string;
+  assignmentMode?: boolean;
 }
 
-const ChallengeHintPanel: React.FC<Props> = ({ challengeId }) => {
+const ChallengeHintPanel: React.FC<Props> = ({ challengeId, assignmentMode = false }) => {
   const [items, setItems] = useState<HintState[]>([]);
   const [completed, setCompleted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -91,6 +92,24 @@ const ChallengeHintPanel: React.FC<Props> = ({ challengeId }) => {
       setMentorLoading(false);
     }
   };
+
+  if (assignmentMode) {
+    return (
+      <div
+        className="mt-4 rounded-lg p-8 border border-amber-800/50 text-center max-w-lg mx-auto"
+        style={{ background: 'rgba(245, 158, 11, 0.05)' }}
+      >
+        <div className="flex justify-center mb-4 text-amber-400">
+          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <rect x="5" y="11" width="14" height="10" rx="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+        </div>
+        <p className="text-gray-200 font-semibold mb-2">Hints are disabled during challenge assignments.</p>
+        <p className="text-sm text-gray-400">Work through the challenge independently.</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ position: 'relative' }}>

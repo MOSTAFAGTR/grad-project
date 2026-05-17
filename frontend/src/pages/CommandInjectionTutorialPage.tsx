@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { Link } from 'react-router-dom';
+import ChallengeTutorialVideo from '../components/ChallengeTutorialVideo';
 
 const CommandInjectionTutorialPage: React.FC = () => {
   return (
@@ -9,6 +10,7 @@ const CommandInjectionTutorialPage: React.FC = () => {
         When user input is passed into shell commands (e.g. <code>ping</code>, <code>nslookup</code>) without validation,
         attackers can inject extra commands (e.g. <code>; id</code>, <code>| cat /etc/passwd</code>) and run arbitrary code.
       </p>
+      <ChallengeTutorialVideo challengeId={4} className="mb-6" />
       <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 max-w-4xl mb-6">
         <h2 className="text-xl font-bold mb-2 text-purple-400">How to fix</h2>
         <ul className="list-disc list-inside text-gray-300 space-y-1">

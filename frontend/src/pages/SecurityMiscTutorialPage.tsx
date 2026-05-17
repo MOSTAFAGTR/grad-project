@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
+import ChallengeTutorialVideo from '../components/ChallengeTutorialVideo';
 
 const SecurityMiscTutorialPage: React.FC = () => {
   const navigate = useNavigate();
@@ -105,9 +106,7 @@ if not SECRET_KEY:
           exposes. In the fix phase, you will add proper authentication checks and remove sensitive data from the response
           entirely.
         </p>
-        <div className="w-full max-w-4xl mx-auto rounded-lg overflow-hidden border-2 border-gray-700 border-dashed mb-6 min-h-[120px] flex items-center justify-center text-gray-500 text-sm">
-          Tutorial video placeholder — content planned for a future phase
-        </div>
+        <ChallengeTutorialVideo challengeId={6} className="mb-6" />
         <button
           type="button"
           onClick={() => navigate('/challenges/6/attack')}

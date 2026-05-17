@@ -406,6 +406,9 @@ def _safe_ping_with_simulated_injection(host_input: str) -> tuple[str, bool]:
     except subprocess.TimeoutExpired:
         # Keep challenge flow deterministic even when ICMP is blocked in the environment.
         output = "[simulated] ping timed out\n"
+    except Exception:
+        # ping binary may be absent in minimal container images; still run injection simulation.
+        output = "[simulated] ping unavailable\n"
 
     simulated_success = False
     if injected:
@@ -911,6 +914,26 @@ def update_challenge_state(
 
 
 _HINTS: dict[str, list[dict[str, object]]] = {
+    "sql-injection": [
+        {"level": 1, "text": "The login query is built by concatenating your input directly into a SQL string.", "penalty": 0},
+        {"level": 2, "text": "A single quote (') in the username field can break out of the string literal and alter the query.", "penalty": 5},
+        {"level": 3, "text": "Try: ' OR 1=1 -- as the username. The OR 1=1 always evaluates to true; -- comments out the rest.", "penalty": 10},
+    ],
+    "xss": [
+        {"level": 1, "text": "Comments are stored and rendered without any HTML escaping.", "penalty": 0},
+        {"level": 2, "text": "Try injecting an HTML tag that executes JavaScript when the page loads (e.g. an img with onerror).", "penalty": 5},
+        {"level": 3, "text": "Use: <img src=x onerror=\"window.__xssChallengeSuccess('owned')\"> as your comment payload.", "penalty": 10},
+    ],
+    "command-injection": [
+        {"level": 1, "text": "The host field is passed unsanitized to a shell ping command.", "penalty": 0},
+        {"level": 2, "text": "Shell separators like ; or && let you chain a second command after the ping.", "penalty": 5},
+        {"level": 3, "text": "Try: 127.0.0.1; echo COMMAND_INJECTION_SUCCESS — the success marker in the output unlocks the challenge.", "penalty": 10},
+    ],
+    "redirect": [
+        {"level": 1, "text": "The redirect endpoint takes a url parameter and forwards the user without any validation.", "penalty": 0},
+        {"level": 2, "text": "Try passing an external URL as the url parameter — the server will redirect you there blindly.", "penalty": 5},
+        {"level": 3, "text": "Use: /api/challenges/redirect?url=https://evil.example.com — the server issues a 302 to that domain.", "penalty": 10},
+    ],
     "csrf": [
         {"level": 1, "text": "Look for an action that changes server state without validation.", "penalty": 0},
         {"level": 2, "text": "Think about how a victim's browser might send a request without them clicking a bank button.", "penalty": 5},
@@ -1054,6 +1077,22 @@ def get_hints(
         HintEntry(id=i, text=h["text"] if i < unlock_count else "Locked hint", unlocked=i < unlock_count)
         for i, h in enumerate(hints, start=1)
     ]
+
+
+@router.get("/source/{challenge_slug}")
+def get_challenge_source(
+    challenge_slug: str,
+    current_user: User = Depends(get_current_user),
+):
+    slug = _challenge_slug_from_dir(challenge_slug) if challenge_slug.startswith("challenge-") else (challenge_slug or "").strip().lower()
+    if not slug:
+        raise HTTPException(status_code=400, detail="Invalid challenge slug")
+    path = _challenge_source_file(f"challenge-{slug}")
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Challenge source not found")
+    with open(path, "r", encoding="utf-8", errors="replace") as fp:
+        content = fp.read()
+    return {"slug": slug, "vulnerable_code": content}
 
 
 @router.post("/hints/use", response_model=ChallengeStateResponse)

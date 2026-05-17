@@ -53,6 +53,7 @@ class Question(Base):
     difficulty = Column(String(20))
     skill_focus = Column(String(50))
     explanation = Column(Text)
+    targets_mistake = Column(String(500), nullable=True)
     
     options = relationship("QuestionOption", back_populates="question", cascade="all, delete-orphan")
     answers = relationship("UserAnswer", back_populates="question")
@@ -167,6 +168,33 @@ class ScanHistory(Base):
     # Store vulnerability type distribution as JSON-encoded text so we can
     # aggregate top vulnerability types for admin analytics.
     vuln_summary = Column(Text, nullable=True)
+
+
+class ChallengeAssignment(Base):
+    __tablename__ = "challenge_assignments"
+    id = Column(Integer, primary_key=True, index=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    challenge_slug = Column(String(100), nullable=False)
+    title = Column(String(255), nullable=False)
+    instructions = Column(Text, nullable=True)
+    time_limit_minutes = Column(Integer, nullable=False)
+    due_date = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
+
+
+class ChallengeAssignmentStudent(Base):
+    __tablename__ = "challenge_assignment_students"
+    id = Column(Integer, primary_key=True, index=True)
+    assignment_id = Column(Integer, ForeignKey("challenge_assignments.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    started_at = Column(DateTime, nullable=True)
+    submitted_at = Column(DateTime, nullable=True)
+    time_used_seconds = Column(Integer, default=0)
+    status = Column(String(50), default="assigned")
+    score = Column(Integer, nullable=True)
+    fix_code_submitted = Column(Text, nullable=True)
+    sandbox_passed = Column(Boolean, nullable=True)
 
 
 # --- RED/BLUE TEAM GAME MODELS ---

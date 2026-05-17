@@ -12,13 +12,22 @@ const InsecureStorageAttackPage: React.FC = () => {
   const [registerResult, setRegisterResult] = useState<any>(null);
   const [dumpResult, setDumpResult] = useState<any>(null);
   const [error, setError] = useState('');
+  // Track that the learner has registered at least one account this session.
+  // Without this, the pre-seeded users (alice, bob, admin) would immediately
+  // pass the challenge on the very first "Dump Storage" click.
+  const [hasRegistered, setHasRegistered] = useState(false);
   const navigate = useNavigate();
 
   const register = async () => {
     setError('');
+    if (!username.trim() || !password.trim()) {
+      setError('Enter a username and password to register.');
+      return;
+    }
     try {
       const res = await axios.post(`${API_URL}/api/challenges/storage/register`, { username, password, secure: false });
       setRegisterResult(res.data);
+      setHasRegistered(true);
     } catch (e: any) {
       setError(e.response?.data?.detail || 'Register failed');
     }
@@ -26,11 +35,18 @@ const InsecureStorageAttackPage: React.FC = () => {
 
   const dump = async () => {
     setError('');
+    if (!hasRegistered) {
+      setError('Register an account first — then dump storage to see your plaintext password exposed.');
+      return;
+    }
     try {
       const res = await axios.get(`${API_URL}/api/challenges/storage/dump`, { params: { secure: false } });
       setDumpResult(res.data);
-      const hasPlaintext = (res.data?.users || []).some((u: any) => typeof u.password === 'string');
-      if (hasPlaintext) {
+      // Confirm that the user we just registered is in the dump with a plaintext password
+      const registeredUser = (res.data?.users || []).find(
+        (u: any) => u.username === username && typeof u.password === 'string',
+      );
+      if (registeredUser) {
         const token = sessionStorage.getItem('token');
         if (token) {
           axios.post(
@@ -51,16 +67,48 @@ const InsecureStorageAttackPage: React.FC = () => {
       <h1 className="text-3xl font-bold mb-2">Insecure Storage Attack</h1>
       <p className="text-gray-400 mb-6">Goal: prove passwords are stored in plaintext and exposed via dump.</p>
 
-      <div className="bg-gray-900 border border-gray-700 rounded p-4 mb-4">
-        <label className="block text-sm font-bold mb-2">Register Payload</label>
+      {/* Step 1 — Register */}
+      <div className={`bg-gray-900 border rounded p-4 mb-4 ${hasRegistered ? 'border-green-600' : 'border-blue-600'}`}>
+        <p className="text-xs font-semibold uppercase tracking-wide text-blue-400 mb-2">
+          Step 1 — Register an account (stores password in plaintext)
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-          <input value={username} onChange={(e) => setUsername(e.target.value)} className="bg-gray-800 border border-gray-700 rounded p-2 text-sm" />
-          <input value={password} onChange={(e) => setPassword(e.target.value)} className="bg-gray-800 border border-gray-700 rounded p-2 text-sm" />
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Username (e.g. victim)"
+            className="bg-gray-800 border border-gray-700 rounded p-2 text-sm placeholder-gray-500"
+          />
+          <input
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password (e.g. supersecret)"
+            className="bg-gray-800 border border-gray-700 rounded p-2 text-sm placeholder-gray-500"
+          />
         </div>
-        <div className="flex gap-2">
-          <button onClick={register} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded font-bold">Register</button>
-          <button onClick={dump} className="bg-red-700 hover:bg-red-600 px-4 py-2 rounded font-bold">Dump Storage</button>
-        </div>
+        <button onClick={register} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded font-bold text-sm">
+          Register
+        </button>
+        {hasRegistered && (
+          <span className="ml-3 text-green-400 text-sm">✓ Account registered — proceed to Step 2</span>
+        )}
+      </div>
+
+      {/* Step 2 — Dump */}
+      <div className={`bg-gray-900 border rounded p-4 mb-4 ${!hasRegistered ? 'border-gray-700 opacity-60' : 'border-red-600'}`}>
+        <p className="text-xs font-semibold uppercase tracking-wide text-red-400 mb-2">
+          Step 2 — Dump storage and expose plaintext credentials
+        </p>
+        <button
+          onClick={dump}
+          disabled={!hasRegistered}
+          className="bg-red-700 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 rounded font-bold text-sm"
+        >
+          Dump Storage
+        </button>
+        {!hasRegistered && (
+          <span className="ml-3 text-gray-500 text-xs">Complete Step 1 first</span>
+        )}
       </div>
 
       <ChallengeHintPanel challengeId="insecure-storage" />

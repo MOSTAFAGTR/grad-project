@@ -25,11 +25,13 @@ const XssAttackPage: React.FC = () => {
   const [message, setMessage] = useState('');
   const [isNavigating, setIsNavigating] = useState(false);
   const [attackArmed, setAttackArmed] = useState(false);
+  // Ref keeps the armed flag readable inside the stale useEffect closure.
+  const attackArmedRef = React.useRef(false);
   
   const navigate = useNavigate();
 
   const markAttackSuccess = async () => {
-    if (!attackArmed) return;
+    if (!attackArmedRef.current) return;
     if (isNavigating || window.__xssChallengeDetected) return;
     window.__xssChallengeDetected = true;
     setIsNavigating(true);
@@ -78,6 +80,7 @@ const XssAttackPage: React.FC = () => {
         content: newComment
       });
       setAttackArmed(true);
+      attackArmedRef.current = true;
       setNewComment('');
       fetchComments();
       setMessage('Comment posted. If payload executes in the sandbox view, challenge will auto-complete.');
@@ -89,6 +92,7 @@ const XssAttackPage: React.FC = () => {
   const handleClear = async () => {
     await axios.delete(`${API_URL}/api/challenges/xss/comments`);
     setAttackArmed(false);
+    attackArmedRef.current = false;
     setIsNavigating(false);
     window.__xssChallengeDetected = false;
     fetchComments();

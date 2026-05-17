@@ -5,10 +5,16 @@ import json
 import re
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from xml.sax.saxutils import escape
+
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import Table, TableStyle
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.platypus import Paragraph, Table, TableStyle
 from reportlab.pdfgen import canvas
 from sqlalchemy.orm import Session
 
@@ -191,12 +197,90 @@ def _derive_risk_level(findings: list[dict]) -> str:
     return "LOW"
 
 
-@router.get("/pdf")
-def generate_pentest_report_pdf(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    # STEP 1: Collect scan data.
+def _severity_sort_key(severity: str | None) -> int:
+    s = str(severity or "").strip().lower()
+    order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    return order.get(s, 4)
+
+
+def _line_sort_key(line: object) -> int:
+    try:
+        return int(line)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0
+
+
+def _priority_label(severity: str | None) -> str:
+    s = str(severity or "").strip().lower()
+    if s == "critical":
+        return "P1 — Critical"
+    if s == "high":
+        return "P2 — High"
+    if s == "medium":
+        return "P3 — Medium"
+    if s == "low":
+        return "P4 — Low"
+    return "P5 — Unknown"
+
+
+def _technical_findings_from_summary(vuln_summary: dict) -> list[dict]:
+    """
+    Findings for a technical pentest-style report: includes code context and fix guidance.
+    """
+    if not isinstance(vuln_summary, dict):
+        return []
+    items = vuln_summary.get("findings")
+    if not isinstance(items, list) or not items:
+        return list(_flatten_vulnerability_summary(vuln_summary))
+    results: list[dict] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        fix = item.get("fix") if isinstance(item.get("fix"), dict) else {}
+        snippet = item.get("code_snippet") or item.get("code") or ""
+        results.append(
+            {
+                "vulnerability_type": (
+                    item.get("vulnerability_type") or item.get("type") or "Unknown"
+                ),
+                "severity": item.get("severity", "Medium"),
+                "file": item.get("file"),
+                "line": item.get("line"),
+                "description": (
+                    (fix.get("explanation") if isinstance(fix, dict) else None)
+                    or (str(snippet)[:500] if snippet else "")
+                    or "No description available."
+                ),
+                "recommendation": (fix.get("recommendation", "") if isinstance(fix, dict) else "") or "",
+                "cwe": item.get("cwe"),
+                "code_snippet": str(snippet)[:1200] if snippet else "",
+                "engine": item.get("engine"),
+                "rule_id": item.get("rule_id"),
+            }
+        )
+    return results
+
+
+def _resolve_owned_scan(
+    db: Session,
+    current_user: models.User,
+    project_id: Optional[str],
+) -> tuple[models.ScanHistory, models.Project]:
+    if project_id:
+        row = (
+            db.query(models.ScanHistory, models.Project)
+            .join(models.Project, models.Project.id == models.ScanHistory.project_id)
+            .filter(models.ScanHistory.project_id == project_id)
+            .filter(models.Project.owner_id == current_user.id)
+            .order_by(models.ScanHistory.scan_date.desc())
+            .first()
+        )
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail="No scan found for this project or you do not own this project.",
+            )
+        return row
     latest_scan = (
         db.query(models.ScanHistory, models.Project)
         .join(models.Project, models.Project.id == models.ScanHistory.project_id)
@@ -206,8 +290,334 @@ def generate_pentest_report_pdf(
     )
     if not latest_scan:
         raise HTTPException(status_code=404, detail="No scan found. Please scan a project first.")
+    return latest_scan
 
-    scan_row, project_row = latest_scan
+
+@router.get("/pdf/scan")
+def generate_technical_scan_pentest_pdf(
+    project_id: Optional[str] = Query(
+        None,
+        description="Project id for the scan export (latest completed scan for that project)",
+    ),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Technical penetration-test style PDF: prioritized findings from static analysis only,
+    with severity, affected location, evidence, and remediation — distinct from the
+    platform learning/certificate report at GET /api/report/pdf.
+    """
+    scan_row, project_row = _resolve_owned_scan(db, current_user, project_id)
+    vuln_summary = _safe_json_loads(scan_row.vuln_summary)
+    findings = _technical_findings_from_summary(vuln_summary)
+    findings.sort(
+        key=lambda f: (
+            _severity_sort_key(str(f.get("severity"))),
+            str(f.get("file") or ""),
+            _line_sort_key(f.get("line")),
+        )
+    )
+    overall_risk = _derive_risk_level(findings)
+    total = len(findings)
+
+    sev_counts: dict[str, int] = {}
+    for f in findings:
+        sk = str(f.get("severity") or "Unknown").strip() or "Unknown"
+        sev_counts[sk] = sev_counts.get(sk, 0) + 1
+
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    c.setTitle("Technical Penetration Test Report — SAST")
+    c.setFont("Helvetica-Bold", 24)
+    c.drawCentredString(width / 2, height - 100, "Technical Penetration Test Report")
+    c.setFont("Helvetica-Bold", 12)
+    c.drawCentredString(width / 2, height - 130, "Static Application Security Testing (SAST) — Findings & Remediation")
+    c.setFont("Helvetica", 11)
+    y = height - 180
+    c.drawString(72, y, f"Engagement target: {project_row.name}")
+    y -= 18
+    c.drawString(72, y, f"Project / artifact ID: {project_row.id}")
+    y -= 18
+    c.drawString(72, y, f"Scan completed: {_fmt_date(scan_row.scan_date)}")
+    y -= 18
+    c.drawString(72, y, f"Report generated: {_fmt_date(datetime.utcnow())}")
+    y -= 18
+    c.drawString(72, y, f"Analyst / owner: {current_user.email}")
+    y -= 18
+    c.drawString(72, y, f"Total findings: {total}  |  Inferred risk posture: {overall_risk}")
+    y -= 18
+    c.drawString(
+        72,
+        y,
+        f"SCAN risk score: {scan_row.risk_score} ({scan_row.risk_level})",
+    )
+    y -= 24
+    c.setFont("Helvetica", 9)
+    c.setFillColor(colors.HexColor("#374151"))
+    scope = (
+        "This document summarises automated static analysis results (e.g. Semgrep and SCALE rules) "
+        "for the assessed codebase. It is scoped to the latest stored scan for this project and does "
+        "not include separate challenge completion or quiz history (see the dashboard learning report for that)."
+    )
+    y = _draw_wrapped(c, scope, 72, y, max_chars=95, leading=12)
+    c.setFillColor(colors.black)
+    y -= 16
+    c.line(72, y, width - 72, y)
+    c.showPage()
+
+    # Executive summary + severity distribution
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(60, height - 60, "1. Executive summary")
+    c.setFont("Helvetica", 10)
+    y = height - 92
+    intro = (
+        f"The assessment identified {total} distinct finding(s) across the scanned source tree. "
+        f"Findings are prioritised below by severity (Critical through Low). "
+        "Each item includes remediation guidance suitable for developers."
+    )
+    y = _draw_wrapped(c, intro, 60, y, max_chars=100, leading=14)
+    y -= 12
+    if sev_counts:
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(60, y, "Findings by severity")
+        y -= 16
+        c.setFont("Helvetica", 10)
+        for sev in sorted(sev_counts.keys(), key=lambda s: _severity_sort_key(s)):
+            c.drawString(72, y, f"• {sev}: {sev_counts[sev]}")
+            y -= 14
+    y -= 24
+    c.showPage()
+
+    # Section 2 — priority index on its own page(s); wraps text; splits if tall.
+    idx_margin_x = 52
+    idx_table_w = width - 2 * idx_margin_x
+    idx_page_top = height - 80
+    idx_page_bottom = 52
+    idx_usable_h = idx_page_top - idx_page_bottom
+    _cw0, _cw1, _cw2, _cw3 = 22, 77, 94, 230
+    col_widths = [_cw0, _cw1, _cw2, _cw3, idx_table_w - (_cw0 + _cw1 + _cw2 + _cw3)]
+
+    hdr_par_style = ParagraphStyle(
+        name="idx_hdr",
+        fontName="Helvetica-Bold",
+        fontSize=8,
+        leading=10,
+        textColor=colors.white,
+        alignment=TA_LEFT,
+    )
+    cell_par_style = ParagraphStyle(
+        name="idx_cell",
+        fontName="Helvetica",
+        fontSize=7,
+        leading=9,
+        textColor=colors.HexColor("#0f172a"),
+        alignment=TA_LEFT,
+    )
+
+    def _idx_cell(text: object, *, header: bool = False) -> Paragraph:
+        st = hdr_par_style if header else cell_par_style
+        return Paragraph(escape(str(text) if text is not None else "—"), st)
+
+    idx_rows: list[list[Paragraph]] = [
+        [
+            _idx_cell("#", header=True),
+            _idx_cell("Priority", header=True),
+            _idx_cell("Vulnerability", header=True),
+            _idx_cell("Location", header=True),
+            _idx_cell("Severity", header=True),
+        ]
+    ]
+    for i, f in enumerate(findings[:80], start=1):
+        loc = f.get("file") or "—"
+        ln = f.get("line")
+        if ln is not None and str(ln).strip() != "":
+            loc = f"{loc}:{ln}"
+        idx_rows.append(
+            [
+                _idx_cell(str(i)),
+                _idx_cell(_priority_label(f.get("severity"))),
+                _idx_cell(f.get("vulnerability_type") or "Unknown"),
+                _idx_cell(loc),
+                _idx_cell(f.get("severity") or "—"),
+            ]
+        )
+    if len(idx_rows) == 1:
+        idx_rows.append(
+            [
+                _idx_cell("—"),
+                _idx_cell("—"),
+                _idx_cell("No findings in scan"),
+                _idx_cell("—"),
+                _idx_cell("—"),
+            ]
+        )
+
+    idx_tbl = Table(idx_rows, colWidths=col_widths, repeatRows=1)
+    idx_tbl.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1e3a5f")),
+                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("GRID", (0, 0), (-1, -1), 0.75, colors.HexColor("#94a3b8")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f1f5f9")]),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(idx_margin_x, height - 52, "2. Finding priority index")
+
+    parts = idx_tbl.split(idx_table_w, idx_usable_h)
+    if not parts:
+        parts = [idx_tbl]
+
+    for pi, part in enumerate(parts):
+        if pi > 0:
+            c.showPage()
+            c.setFont("Helvetica-Bold", 14)
+            c.drawString(idx_margin_x, height - 52, "2. Finding priority index (continued)")
+            idx_page_top = height - 80
+            idx_usable_h = idx_page_top - idx_page_bottom
+
+        _, part_h = part.wrapOn(c, idx_table_w, idx_usable_h)
+        y_table_bottom = idx_page_top - part_h
+        if y_table_bottom < idx_page_bottom:
+            c.showPage()
+            c.setFont("Helvetica-Bold", 14)
+            c.drawString(idx_margin_x, height - 52, "2. Finding priority index (continued)")
+            idx_page_top = height - 80
+            idx_usable_h = idx_page_top - idx_page_bottom
+            _, part_h = part.wrapOn(c, idx_table_w, idx_usable_h)
+            y_table_bottom = idx_page_top - part_h
+        part.drawOn(c, idx_margin_x, y_table_bottom)
+
+    c.showPage()
+
+    # Detailed findings
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(60, height - 55, "3. Detailed findings & remediation")
+    y = height - 82
+
+    for i, f in enumerate(findings, start=1):
+        if y < 140:
+            c.showPage()
+            y = height - 55
+        vuln_type = str(f.get("vulnerability_type") or "Unknown")
+        sev = str(f.get("severity") or "Unknown")
+        pr = _priority_label(sev)
+        file_path = str(f.get("file")) if f.get("file") else "N/A"
+        line_num = str(f.get("line")) if f.get("line") not in (None, "") else "—"
+        cwe = str(f.get("cwe")) if f.get("cwe") else "Not mapped"
+        desc = str(f.get("description") or "—")
+        rem = str(f.get("recommendation") or "").strip()
+        snippet = str(f.get("code_snippet") or "").strip()
+        eng = str(f.get("engine") or "").strip()
+        rule_id = str(f.get("rule_id") or "").strip()
+
+        c.setFont("Helvetica-Bold", 12)
+        c.setFillColor(colors.HexColor("#0f172a"))
+        c.drawString(60, y, f"Finding {i} — {vuln_type}")
+        y -= 16
+        c.setFont("Helvetica", 10)
+        c.setFillColor(colors.HexColor("#b91c1c") if sev.lower() in ("critical", "high") else colors.HexColor("#c2410c"))
+        c.drawString(60, y, f"Priority: {pr}  |  Severity: {sev.upper()}")
+        c.setFillColor(colors.black)
+        y -= 14
+        c.drawString(60, y, f"Location: {file_path}  |  Line: {line_num}  |  CWE: {cwe}")
+        y -= 14
+        if rule_id:
+            c.setFont("Helvetica-Oblique", 8)
+            c.drawString(60, y, f"Scanner rule: {rule_id}")
+            c.setFont("Helvetica", 10)
+            y -= 11
+        if eng:
+            c.setFont("Helvetica-Oblique", 9)
+            c.drawString(60, y, f"Detection engine: {eng}")
+            c.setFont("Helvetica", 10)
+            y -= 12
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(60, y, "Observation")
+        y -= 12
+        c.setFont("Helvetica", 9)
+        y = _draw_wrapped(c, desc, 60, y, max_chars=100, leading=11)
+        y -= 8
+        if snippet:
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(60, y, "Evidence (code excerpt)")
+            y -= 12
+            c.setFont("Courier", 8)
+            y = _draw_wrapped(c, snippet.replace("\r", ""), 60, y, max_chars=95, leading=10)
+            c.setFont("Helvetica", 10)
+            y -= 6
+            c.setFont("Helvetica-Oblique", 7.5)
+            c.setFillColor(colors.HexColor("#64748b"))
+            y = _draw_wrapped(
+                c,
+                "Note: Excerpt is the scanner-matched source range; if it diverges from the title, rely on rule id and path above.",
+                60,
+                y,
+                max_chars=100,
+                leading=10,
+            )
+            c.setFillColor(colors.black)
+            y -= 6
+        c.setFont("Helvetica-Bold", 9)
+        c.setFillColor(colors.HexColor("#15803d"))
+        c.drawString(60, y, "Remediation (how to fix)")
+        c.setFillColor(colors.black)
+        y -= 12
+        c.setFont("Helvetica", 9)
+        fix_text = rem if rem else (
+            "Apply secure coding patterns for this vulnerability class: validate and encode untrusted input, "
+            "use safe APIs (parameterised queries, safe HTML serialisation, etc.), and retest with the scanner."
+        )
+        y = _draw_wrapped(c, fix_text, 60, y, max_chars=100, leading=11)
+        y -= 10
+        c.setStrokeColor(colors.HexColor("#cbd5e1"))
+        c.line(60, y, width - 60, y)
+        y -= 18
+
+    if total == 0:
+        c.setFont("Helvetica-Oblique", 11)
+        c.drawString(60, y, "No vulnerabilities were reported for this scan.")
+
+    c.setFont("Helvetica", 8)
+    c.setFillColor(colors.grey)
+    foot = (
+        "Confidential — technical SAST output. Educational use on SCALE. "
+        "Verify fixes in your environment before production release."
+    )
+    _draw_wrapped(c, foot, 60, 72, max_chars=105, leading=10)
+
+    c.save()
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+
+    pid_frag = re.sub(r"[^a-zA-Z0-9._-]+", "_", project_row.id or "project")
+    date_fragment = datetime.utcnow().strftime("%Y%m%d")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=technical_pentest_{pid_frag}_{date_fragment}.pdf",
+        },
+    )
+
+
+@router.get("/pdf")
+def generate_pentest_report_pdf(
+    project_id: Optional[str] = Query(None, description="Optional project id for a specific scan (latest for that project)"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    scan_row, project_row = _resolve_owned_scan(db, current_user, project_id)
     vuln_summary = _safe_json_loads(scan_row.vuln_summary)
     findings = _flatten_vulnerability_summary(vuln_summary)
     overall_risk_level = _derive_risk_level(findings)

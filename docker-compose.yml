@@ -73,6 +73,8 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+      # Voiced tutorials playback in /challenges/*/tutorial (see frontend/vite.config.ts)
+      - ./Web-Videos:/app/web-videos:ro
     networks:
       - scale_net
     command: npm run dev -- --host

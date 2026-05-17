@@ -315,3 +315,21 @@ class RedBlueAttackBody(BaseModel):
 class RedBlueFixBody(BaseModel):
     challenge_id: int
     submitted_code: str
+
+
+class ChallengeAssignmentCreate(BaseModel):
+    challenge_slug: str
+    title: str
+    instructions: Optional[str] = None
+    time_limit_minutes: int
+    due_date: Optional[str] = None
+    student_ids: List[int]
+
+
+class AssignmentFixSubmit(BaseModel):
+    submitted_code: str
+
+
+class MistakesQuizAssignRequest(BaseModel):
+    student_id: int
+    num_questions: int = 10

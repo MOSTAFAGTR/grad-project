@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
 const CHALLENGE_TITLES: Record<number, string> = {
@@ -34,6 +34,7 @@ interface BlueFixRow {
 
 const RedBlueGamePage: React.FC = () => {
   const { gameId } = useParams<{ gameId: string }>();
+  const navigate = useNavigate();
   const gid = Number(gameId);
 
   const [gameData, setGameData] = useState<any>(null);
@@ -46,6 +47,7 @@ const RedBlueGamePage: React.FC = () => {
   const [gameLoading, setGameLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [endLoading, setEndLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [endResult, setEndResult] = useState<{ red: number; blue: number } | null>(null);
   const [attackPayload, setAttackPayload] = useState('');
   const [attackImpact, setAttackImpact] = useState('');
@@ -60,6 +62,13 @@ const RedBlueGamePage: React.FC = () => {
     hint?: string;
     preview?: string;
   } | null>(null);
+  const [bluePanelToast, setBluePanelToast] = useState<string | null>(null);
+  const [redPulse, setRedPulse] = useState(false);
+  const [bluePulse, setBluePulse] = useState(false);
+
+  const prevRedRef = useRef<number | null>(null);
+  const prevBlueRef = useRef<number | null>(null);
+  const isBlueTeamRef = useRef(false);
 
   const role = sessionStorage.getItem('role');
   const myUserId = Number(sessionStorage.getItem('user_id') || '0');
@@ -99,6 +108,32 @@ const RedBlueGamePage: React.FC = () => {
   }, [loadGame]);
 
   useEffect(() => {
+    if (!gameData) return;
+    const r = gameData.red_team?.score ?? 0;
+    const b = gameData.blue_team?.score ?? 0;
+    if (prevRedRef.current !== null && prevRedRef.current !== r) {
+      setRedPulse(true);
+      window.setTimeout(() => setRedPulse(false), 400);
+    }
+    if (prevBlueRef.current !== null && prevBlueRef.current !== b) {
+      setBluePulse(true);
+      window.setTimeout(() => setBluePulse(false), 400);
+    }
+    prevRedRef.current = r;
+    prevBlueRef.current = b;
+  }, [gameData?.red_team?.score, gameData?.blue_team?.score, gameData]);
+
+  useEffect(() => {
+    if (!gameData) {
+      isBlueTeamRef.current = false;
+      return;
+    }
+    isBlueTeamRef.current = (gameData.blue_team?.members || []).some(
+      (m: { user_id: number }) => m.user_id === myUserId,
+    );
+  }, [gameData, myUserId]);
+
+  useEffect(() => {
     if (!pollingActive || !gameId || Number.isNaN(gid)) return;
     const tick = async () => {
       try {
@@ -114,6 +149,12 @@ const RedBlueGamePage: React.FC = () => {
           status: a.status || 'confirmed',
         }));
         if (newOnes.length) {
+          for (const a of newOnes) {
+            if (isBlueTeamRef.current && a.status === 'failed') {
+              setBluePanelToast('🛡 Attack blocked! +1 defensive point');
+              window.setTimeout(() => setBluePanelToast(null), 2000);
+            }
+          }
           const ordered = [...newOnes].reverse();
           setAttacks((prev) => {
             const seen = new Set(prev.map((p) => p.id));
@@ -215,7 +256,9 @@ const RedBlueGamePage: React.FC = () => {
       } else {
         setAttackFeedback({
           kind: 'fail',
-          message: '✗ Attack failed. The payload did not work.',
+          message: data.patched_by_blue
+            ? '🛡 Blocked — the blue team has patched this vulnerability. Your payload was rejected.'
+            : '✗ Attack failed. The payload did not work.',
           hint: data.hint,
           preview: data.response_preview,
         });
@@ -244,6 +287,26 @@ const RedBlueGamePage: React.FC = () => {
     }
   };
 
+  const deleteGame = async () => {
+    if (
+      !window.confirm(
+        'Permanently delete this game? All attacks, fixes, scores, and team assignments for this session will be removed. This cannot be undone.',
+      )
+    ) {
+      return;
+    }
+    setDeleteLoading(true);
+    try {
+      await api.post(`/api/redblue/game/${gid}/delete`);
+      navigate('/instructor/dashboard');
+    } catch (e: any) {
+      const d = e?.response?.data?.detail;
+      alert(typeof d === 'string' ? d : 'Failed to delete game');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   if (gameLoading && !gameData) {
     return <div className="p-8 text-white bg-gray-900 min-h-screen">Loading game…</div>;
   }
@@ -256,6 +319,7 @@ const RedBlueGamePage: React.FC = () => {
   const blueScore = gameData.blue_team?.score ?? 0;
   const lineCount = fixCode.split('\n').length;
   const showAttackPanel = isRedTeam || isInstructor;
+  const vulnerabilityPatched: boolean = gameData?.vulnerability_patched === true;
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4">
@@ -264,7 +328,12 @@ const RedBlueGamePage: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="text-gray-400">Red Team:</span>
             <span className="font-semibold">{gameData.red_team?.name}</span>
-            <span className="px-2 py-0.5 rounded bg-red-700 text-sm font-bold">{redScore}</span>
+            <span
+              className={`px-2 py-0.5 rounded bg-red-700 text-sm font-bold transition-transform duration-200 ${redPulse ? 'scale-125' : 'scale-100'}`}
+              style={redPulse ? { boxShadow: '0 0 12px rgba(248, 113, 113, 0.6)' } : undefined}
+            >
+              {redScore}
+            </span>
           </div>
           <div className="text-center flex-1 min-w-[200px]">
             <span
@@ -284,7 +353,23 @@ const RedBlueGamePage: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="text-gray-400">Blue Team:</span>
             <span className="font-semibold">{gameData.blue_team?.name}</span>
-            <span className="px-2 py-0.5 rounded bg-blue-700 text-sm font-bold">{blueScore}</span>
+            <span
+              title={
+                gameData.blue_score_breakdown
+                  ? `${gameData.blue_score_breakdown.real_fixes} fixes + ${gameData.blue_score_breakdown.defensive_blocks} blocks`
+                  : undefined
+              }
+              className={`px-2 py-0.5 rounded bg-blue-700 text-sm font-bold transition-transform duration-200 ${bluePulse ? 'scale-125' : 'scale-100'}`}
+              style={bluePulse ? { boxShadow: '0 0 12px rgba(96, 165, 250, 0.7)' } : undefined}
+            >
+              {blueScore} pts
+            </span>
+            {gameData.blue_score_breakdown && (
+              <span className="text-[10px] text-blue-300/90 max-w-[120px] leading-tight hidden sm:inline">
+                {gameData.blue_score_breakdown.real_fixes} fixes + {gameData.blue_score_breakdown.defensive_blocks}{' '}
+                blocks
+              </span>
+            )}
           </div>
         </header>
 
@@ -320,15 +405,35 @@ const RedBlueGamePage: React.FC = () => {
                 )}
               </div>
             )}
+            {/* Patched banner — shown to red team and instructors */}
+            {vulnerabilityPatched && showAttackPanel && (
+              <div className="mb-4 p-3 rounded-lg border border-green-500 bg-green-950/60 flex items-start gap-2">
+                <span className="text-green-400 text-lg mt-0.5">🛡</span>
+                <div>
+                  <p className="text-green-300 font-semibold text-sm">Vulnerability Patched</p>
+                  <p className="text-green-200/80 text-xs mt-0.5">
+                    The blue team has submitted a working fix. All further attack payloads will be
+                    automatically rejected.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {showAttackPanel && status === 'active' && (
-              <div className="mb-4 p-3 bg-gray-900/80 border border-red-800 rounded-lg space-y-2">
-                <p className="text-sm font-semibold text-red-300">Submit Attack Payload</p>
+              <div className={`mb-4 p-3 bg-gray-900/80 border rounded-lg space-y-2 ${vulnerabilityPatched ? 'border-gray-600 opacity-50 pointer-events-none select-none' : 'border-red-800'}`}>
+                <p className="text-sm font-semibold text-red-300">
+                  Submit Attack Payload
+                  {vulnerabilityPatched && (
+                    <span className="ml-2 text-xs text-gray-400 font-normal">(disabled — vulnerability patched)</span>
+                  )}
+                </p>
                 <textarea
                   className="w-full font-mono text-xs border border-gray-600 rounded p-2 min-h-[100px]"
                   style={{ background: '#0d1117', color: '#e6edf3' }}
-                  placeholder="Enter your attack payload here… (e.g. for SQL injection: ' OR 1=1 --)"
+                  placeholder="Enter your attack payload here…"
                   value={attackPayload}
                   onChange={(e) => setAttackPayload(e.target.value)}
+                  disabled={vulnerabilityPatched}
                 />
                 <textarea
                   className="w-full text-xs bg-black/50 border border-gray-600 rounded p-2 text-gray-200"
@@ -336,13 +441,14 @@ const RedBlueGamePage: React.FC = () => {
                   placeholder="Impact description (optional)"
                   value={attackImpact}
                   onChange={(e) => setAttackImpact(e.target.value)}
+                  disabled={vulnerabilityPatched}
                 />
                 {attackHint && (
                   <p className="text-xs text-amber-200/90">Hint: {attackHint}</p>
                 )}
                 <button
                   type="button"
-                  disabled={attackSubmitting}
+                  disabled={attackSubmitting || vulnerabilityPatched}
                   onClick={submitAttack}
                   className="w-full py-2 rounded bg-red-700 hover:bg-red-600 text-sm font-semibold disabled:opacity-50"
                 >
@@ -353,19 +459,39 @@ const RedBlueGamePage: React.FC = () => {
             <div className="flex-1 overflow-y-auto space-y-3 max-h-[500px] pr-1">
               {attacks.length === 0 && <p className="text-gray-500 text-sm">No attacks yet.</p>}
               {attacks.map((a) => (
-                <div key={a.id} className="bg-gray-900 border border-gray-700 rounded p-3 text-sm">
+                <div
+                  key={a.id}
+                  className={`rounded p-3 text-sm border ${
+                    a.status === 'failed'
+                      ? 'bg-blue-950/40 border-blue-600/80'
+                      : 'bg-gray-900 border border-gray-700'
+                  }`}
+                >
                   <div className="text-gray-500 text-xs mb-1 flex flex-wrap items-center gap-2">
-                    <span>{formatTime(a.timestamp)} · {challengeName}</span>
+                    <span>
+                      {formatTime(a.timestamp)} · {challengeName}
+                    </span>
                     {a.status === 'failed' ? (
-                      <span className="text-red-400 font-semibold">✗ MISS</span>
+                      <span className="text-blue-400 font-semibold">✗ BLOCKED</span>
                     ) : (
-                      <span className="text-green-400 font-semibold">✓ HIT</span>
+                      <span className="text-red-400 font-semibold">⚡ ✓ HIT</span>
                     )}
                   </div>
-                  <pre className="text-xs font-mono text-green-300 whitespace-pre-wrap break-all mb-2 bg-black/40 p-2 rounded">
+                  <pre
+                    className={`text-xs font-mono whitespace-pre-wrap break-all mb-2 p-2 rounded ${
+                      a.status === 'failed' ? 'bg-blue-950/50 text-blue-100' : 'text-green-300 bg-black/40'
+                    }`}
+                  >
                     {truncatePayload(a.payload_used)}
                   </pre>
-                  <p className="text-gray-300">{a.impact_description}</p>
+                  <p className={a.status === 'failed' ? 'text-blue-200 text-sm' : 'text-red-200/90 text-sm'}>
+                    {a.status === 'failed'
+                      ? 'Payload rejected — Blue team +1'
+                      : 'Exploit confirmed — Red team +1'}
+                  </p>
+                  {a.impact_description ? (
+                    <p className="text-gray-400 text-xs mt-1">{a.impact_description}</p>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -391,7 +517,25 @@ const RedBlueGamePage: React.FC = () => {
             {blueInstr && (
               <p className="text-xs text-blue-200/90 mb-3 border-b border-blue-900/50 pb-2">{blueInstr}</p>
             )}
-            {!codeLoading && originalVulnerableCode !== '' && fixCode !== '# Could not load challenge source.\n# Please ask your instructor.' && (
+            {bluePanelToast && (
+              <div className="mb-3 p-3 rounded border border-green-600 bg-green-900/50 text-green-100 text-sm font-semibold animate-pulse">
+                {bluePanelToast}
+              </div>
+            )}
+            {/* Patch-is-holding banner — shown to blue team after a successful fix */}
+            {vulnerabilityPatched && (
+              <div className="mb-3 p-3 rounded-lg border border-green-500 bg-green-950/60 flex items-start gap-2">
+                <span className="text-green-400 text-lg mt-0.5">✅</span>
+                <div>
+                  <p className="text-green-300 font-semibold text-sm">Patch Is Holding!</p>
+                  <p className="text-green-200/80 text-xs mt-0.5">
+                    Your fix passed all sandbox tests. Red team attacks are now blocked. You can still
+                    improve your solution.
+                  </p>
+                </div>
+              </div>
+            )}
+            {!vulnerabilityPatched && !codeLoading && originalVulnerableCode !== '' && fixCode !== '# Could not load challenge source.\n# Please ask your instructor.' && (
               <div className="mb-3 p-3 rounded border border-red-800 bg-red-950/40 text-red-100 text-sm">
                 ⚠ This is the vulnerable version of app.py for {challengeName}. The red team is exploiting it.
                 Fix the vulnerability and submit to score a defensive point.
@@ -467,7 +611,7 @@ const RedBlueGamePage: React.FC = () => {
                 Game ended. Final — Red: {endResult.red}, Blue: {endResult.blue}
               </p>
             )}
-            <div className="flex justify-center">
+            <div className="flex flex-wrap justify-center gap-3">
               <button
                 type="button"
                 disabled={endLoading || status === 'completed'}
@@ -475,6 +619,14 @@ const RedBlueGamePage: React.FC = () => {
                 className="px-6 py-3 rounded bg-amber-700 hover:bg-amber-600 disabled:opacity-40 font-semibold"
               >
                 {endLoading ? 'Ending…' : 'End Game'}
+              </button>
+              <button
+                type="button"
+                disabled={deleteLoading}
+                onClick={deleteGame}
+                className="px-6 py-3 rounded bg-red-900 hover:bg-red-800 border border-red-700 disabled:opacity-40 font-semibold"
+              >
+                {deleteLoading ? 'Deleting…' : 'Delete Game'}
               </button>
             </div>
           </div>

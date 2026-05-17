@@ -81,6 +81,19 @@ const DashboardHomePage: React.FC = () => {
       my_team: string;
     }>
   >([]);
+  const [challengeAssignments, setChallengeAssignments] = useState<
+    Array<{
+      assignment_id: number;
+      title: string;
+      challenge_name: string;
+      challenge_slug: string;
+      time_limit_minutes: number;
+      due_date: string | null;
+      status: string;
+      score: number | null;
+      is_past_due: boolean;
+    }>
+  >([]);
 
   useEffect(() => {
     const email = sessionStorage.getItem('user_email') || sessionStorage.getItem('role') || 'Student';
@@ -125,6 +138,10 @@ const DashboardHomePage: React.FC = () => {
         setActiveRbGames(games);
       })
       .catch(() => {});
+    api
+      .get('/api/challenge-assignments/my')
+      .then((res) => setChallengeAssignments(res.data || []))
+      .catch(() => setChallengeAssignments([]));
   }, []);
 
   const totalLabs = learning?.total_challenges ?? TOTAL_CHALLENGES;
@@ -520,6 +537,62 @@ const DashboardHomePage: React.FC = () => {
               Retention score: <span className="text-blue-300">{learning?.retention_score ?? 0}</span>
             </p>
           </div>
+
+          {sessionStorage.getItem('role') === 'user' && challengeAssignments.length > 0 && (
+            <div id="my-assignments-section" className="lg:col-span-2 bg-gray-800/50 p-8 rounded-xl border border-gray-700">
+              <h2 className="text-2xl font-bold mb-4 text-amber-200">My Assignments</h2>
+              <div className="grid gap-4 md:grid-cols-2">
+                {challengeAssignments.map((a) => (
+                  <div key={a.assignment_id} className="bg-gray-900/70 border border-gray-600 rounded-lg p-4">
+                    <p className="text-teal-300 font-semibold">{a.challenge_name}</p>
+                    <p className="text-white font-bold mt-1">{a.title}</p>
+                    <div className="flex flex-wrap gap-2 mt-2 text-xs">
+                      <span className="px-2 py-0.5 rounded bg-gray-800 border border-gray-600">
+                        {a.time_limit_minutes} min limit
+                      </span>
+                      {a.due_date && (
+                        <span
+                          className={`px-2 py-0.5 rounded border ${a.is_past_due ? 'border-red-600 text-red-300' : 'border-gray-600 text-gray-300'}`}
+                        >
+                          Due {new Date(a.due_date).toLocaleString()}
+                        </span>
+                      )}
+                      <span className="px-2 py-0.5 rounded bg-gray-800 border border-amber-700 text-amber-200 uppercase">
+                        {a.status}
+                      </span>
+                    </div>
+                    <div className="mt-3">
+                      {a.status === 'assigned' && (
+                        <Link
+                          to={`/assignment/${a.assignment_id}`}
+                          className="inline-block px-3 py-1.5 rounded bg-teal-600 text-sm font-bold hover:bg-teal-500"
+                        >
+                          Start Challenge
+                        </Link>
+                      )}
+                      {a.status === 'in_progress' && (
+                        <Link
+                          to={`/assignment/${a.assignment_id}`}
+                          className="inline-block px-3 py-1.5 rounded bg-blue-600 text-sm font-bold hover:bg-blue-500"
+                        >
+                          Continue Challenge
+                        </Link>
+                      )}
+                      {a.status === 'passed' && (
+                        <span className="text-green-400 text-sm font-semibold">View Result — Score: {a.score ?? 100}/100</span>
+                      )}
+                      {a.status === 'failed' && (
+                        <span className="text-red-400 text-sm font-semibold">Assignment Failed</span>
+                      )}
+                      {a.status === 'expired' && (
+                        <span className="text-gray-500 text-sm font-semibold">Expired</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -12,6 +12,7 @@ from typing import Any, Callable, Optional
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..db.database import get_db
@@ -74,7 +75,9 @@ def _sql_injection_success(resp: httpx.Response) -> bool:
     if resp.status_code != 200:
         return False
     try:
-        return resp.json().get("success") is True
+        data = resp.json()
+        # Endpoint returns {"message": "Login successful!", "user": "<username>"}
+        return "user" in data or "login successful" in str(data.get("message", "")).lower()
     except Exception:
         return False
 
@@ -92,34 +95,37 @@ CHALLENGE_ATTACK_VALIDATORS: dict[str, dict[str, Any]] = {
     "sql-injection": {
         "method": "POST",
         "url": "http://localhost:8000/api/challenges/vulnerable-login",
-        "build_body": lambda payload: {"username": payload, "password": "x"},
+        # password field is intentionally wrong — the injection must bypass it
+        "build_body": lambda payload: {"username": payload, "password": "wrongpassword"},
         "success_check": _sql_injection_success,
-        "hint": "Try SQL injection payloads like: ' OR 1=1 --",
+        # Use # (MySQL comment) — MySQL requires a space after -- which is stripped by UIs
+        "hint": "Try SQL injection payloads like: ' OR 1=1 #",
     },
     "command-injection": {
         "method": "POST",
-        "url": "http://localhost:8000/api/calc/interest",
+        "url": "http://localhost:8000/api/challenges/ping",
         "build_body": lambda payload: {"host": payload},
         "success_check": lambda resp: (
             resp.status_code == 200
-            and any(
-                indicator in resp.text
-                for indicator in ["root:", "passwd", "uid=", "/bin/bash"]
+            and (
+                resp.json().get("success") is True
+                or "COMMAND_INJECTION_SUCCESS" in resp.text
             )
         ),
-        "hint": "Try: 127.0.0.1; cat /etc/passwd",
+        "hint": "Try: 127.0.0.1; echo COMMAND_INJECTION_SUCCESS",
     },
     "xss": {
         "method": "POST",
         "url": "http://localhost:8000/api/challenges/xss/comments",
-        "build_body": lambda payload: {"content": payload},
+        # CommentCreate schema requires both 'author' and 'content'
+        "build_body": lambda payload: {"author": "attacker", "content": payload},
         "success_check": lambda resp: False,
         "hint": "Try: <script>alert(document.cookie)</script>",
     },
     "directory-traversal": {
         "method": "GET",
         "url": "http://localhost:8000/api/challenges/traversal/read",
-        "build_params": lambda payload: {"path": payload},
+        "build_params": lambda payload: {"file": payload},
         "success_check": lambda resp: (
             resp.status_code == 200
             and any(s in resp.text for s in ["root:", "passwd", "etc", "[files]"])
@@ -129,7 +135,7 @@ CHALLENGE_ATTACK_VALIDATORS: dict[str, dict[str, Any]] = {
     "xxe": {
         "method": "POST",
         "url": "http://localhost:8000/api/challenges/xxe/parse",
-        "build_body": lambda payload: {"xml_data": payload},
+        "build_body": lambda payload: {"xml": payload, "secure": False},
         "success_check": lambda resp: (
             resp.status_code == 200
             and any(
@@ -149,13 +155,16 @@ CHALLENGE_ATTACK_VALIDATORS: dict[str, dict[str, Any]] = {
     "csrf": {
         "method": "POST",
         "url": "http://localhost:8000/api/challenges/csrf/transfer",
+        # Endpoint expects application/x-www-form-urlencoded (Form fields), not JSON.
+        # Alice's initial balance is 1000 so amount must be ≤ 1000.
+        "use_form": True,
         "build_body": lambda payload: (
-            _json.loads(payload)
+            {k: str(v) for k, v in _json.loads(payload).items()}
             if payload.strip().startswith("{")
-            else {"amount": 9999, "to_user": "attacker"}
+            else {"amount": "100", "to_user": "Bob"}
         ),
         "success_check": lambda resp: resp.status_code == 200,
-        "hint": 'Submit JSON: {"amount": 9999, "to_user": "attacker"}',
+        "hint": 'Submit: {"amount": 100, "to_user": "Bob"}',
     },
     "broken-auth": {
         "method": "POST",
@@ -236,13 +245,23 @@ def _validate_red_team_payload(slug: str, payload: str, auth_token: str) -> dict
 
         if method == "POST":
             body = validator["build_body"](payload)
-            resp = httpx.post(
-                full_url,
-                json=body,
-                headers=headers,
-                timeout=timeout,
-                follow_redirects=False,
-            )
+            use_form = bool(validator.get("use_form", False))
+            if use_form:
+                resp = httpx.post(
+                    full_url,
+                    data=body,
+                    headers=headers,
+                    timeout=timeout,
+                    follow_redirects=False,
+                )
+            else:
+                resp = httpx.post(
+                    full_url,
+                    json=body,
+                    headers=headers,
+                    timeout=timeout,
+                    follow_redirects=False,
+                )
         elif method == "GET":
             build_params = validator.get("build_params", lambda p: {})
             params = build_params(payload)
@@ -315,7 +334,10 @@ def _total_red_attempts_query(db: Session, game_id: int) -> int:
     )
 
 
-def _blue_score_query(db: Session, game_id: int) -> int:
+DEFENSIVE_POINT_MARKER = "[DEFENSIVE POINT — Red team payload rejected]"
+
+
+def _blue_score_breakdown(db: Session, game_id: int) -> dict[str, int]:
     first_confirmed_at = (
         db.query(func.min(models.RedTeamAction.timestamp))
         .filter(
@@ -324,17 +346,33 @@ def _blue_score_query(db: Session, game_id: int) -> int:
         )
         .scalar()
     )
-    if first_confirmed_at is None:
-        return 0
-    return (
+    defensive_q = db.query(models.BlueTeamFix).filter(
+        models.BlueTeamFix.challenge_id == game_id,
+        models.BlueTeamFix.fixed == True,  # noqa: E712
+        models.BlueTeamFix.submitted_code.contains("DEFENSIVE POINT"),
+    )
+    defensive_points = defensive_q.count()
+
+    real_q = (
         db.query(models.BlueTeamFix)
         .filter(
             models.BlueTeamFix.challenge_id == game_id,
             models.BlueTeamFix.fixed == True,  # noqa: E712
-            models.BlueTeamFix.timestamp >= first_confirmed_at,
         )
-        .count()
+        .filter(
+            (models.BlueTeamFix.submitted_code.is_(None))
+            | (~models.BlueTeamFix.submitted_code.contains("DEFENSIVE POINT"))
+        )
     )
+    if first_confirmed_at is not None:
+        real_q = real_q.filter(models.BlueTeamFix.timestamp >= first_confirmed_at)
+    real_fixes = real_q.count()
+    total = real_fixes + defensive_points
+    return {"real_fixes": real_fixes, "defensive_blocks": defensive_points, "total": total}
+
+
+def _blue_score_query(db: Session, game_id: int) -> int:
+    return _blue_score_breakdown(db, game_id)["total"]
 
 
 @router.post("/game/create")
@@ -468,27 +506,44 @@ def get_redblue_game(
     )
 
     r_score = _red_score_query(db, game_id)
-    b_score = _blue_score_query(db, game_id)
+    breakdown = _blue_score_breakdown(db, game_id)
+    b_score = breakdown["total"]
     total_attempts = _total_red_attempts_query(db, game_id)
     challenge_slug = LAB_CHALLENGE_SLUGS.get(lab_id, "")
     cname = LAB_CHALLENGE_TITLES.get(lab_id, "challenge")
+
+    # Expose whether blue team has patched the vulnerability so the frontend
+    # can show a "Vulnerability Patched" banner and disable the red attack form.
+    blue_has_patched = (
+        db.query(models.BlueTeamFix)
+        .filter(
+            models.BlueTeamFix.challenge_id == game_id,
+            models.BlueTeamFix.fixed == True,  # noqa: E712
+            ~models.BlueTeamFix.submitted_code.contains("DEFENSIVE POINT"),
+        )
+        .first()
+    ) is not None
 
     return {
         "game_id": game.id,
         "challenge_id": lab_id,
         "challenge_slug": challenge_slug,
+        "vulnerability_patched": blue_has_patched,
         "challenge_instructions": {
             "red_team": (
                 f"Your goal: exploit the {cname} vulnerability in the target application. "
                 "Submit payloads that successfully trigger the exploit."
+                + (" [PATCHED — Blue team has fixed this vulnerability]" if blue_has_patched else "")
             ),
             "blue_team": (
                 "Your goal: review the vulnerable code, identify the vulnerability, and submit "
                 "a fixed version that passes all security tests."
+                + (" [PATCHED ✓ — Your fix is holding]" if blue_has_patched else "")
             ),
         },
         "total_red_attempts": total_attempts,
         "status": game.status,
+        "blue_score_breakdown": breakdown,
         "started_at": (game.started_at or game.created_at).isoformat() + "Z"
         if (game.started_at or game.created_at)
         else "",
@@ -638,8 +693,32 @@ def log_attack(
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.replace("Bearer ", "", 1) if auth_header.startswith("Bearer ") else ""
 
-    validation = _validate_red_team_payload(slug, payload_used, token)
-    attack_confirmed = bool(validation["success"])
+    # If the blue team already has a confirmed real fix, the vulnerability is patched.
+    # All subsequent red attacks must be blocked — the live endpoint is always the
+    # original vulnerable code; the fix lives in the sandbox. Without this guard,
+    # red could keep scoring indefinitely even after blue patches the challenge.
+    blue_real_fix = (
+        db.query(models.BlueTeamFix)
+        .filter(
+            models.BlueTeamFix.challenge_id == game_id,
+            models.BlueTeamFix.fixed == True,  # noqa: E712
+            ~models.BlueTeamFix.submitted_code.contains("DEFENSIVE POINT"),
+        )
+        .first()
+    )
+
+    if blue_real_fix:
+        validation = {
+            "success": False,
+            "status_code": 0,
+            "response_preview": "Attack blocked — the blue team has already patched this vulnerability.",
+            "hint": "The blue team submitted a working fix. This payload was rejected.",
+        }
+        attack_confirmed = False
+    else:
+        validation = _validate_red_team_payload(slug, payload_used, token)
+        attack_confirmed = bool(validation["success"])
+
     status = "confirmed" if attack_confirmed else "failed"
 
     action = models.RedTeamAction(
@@ -654,6 +733,19 @@ def log_attack(
         status=status,
     )
     db.add(action)
+    db.flush()
+
+    if not attack_confirmed:
+        defensive_fix = models.BlueTeamFix(
+            challenge_id=game_id,
+            vulnerability_id=None,
+            user_id=None,
+            fixed=True,
+            submitted_code=DEFENSIVE_POINT_MARKER,
+            timestamp=datetime.utcnow(),
+        )
+        db.add(defensive_fix)
+
     db.commit()
     db.refresh(action)
 
@@ -682,13 +774,25 @@ def log_attack(
             "response_preview": validation["response_preview"],
         }
 
+    patched_by_blue = blue_real_fix is not None
     return {
         "action_id": action.id,
         "confirmed": False,
         "status": "failed",
-        "message": "Attack failed. The payload did not exploit the vulnerability.",
-        "hint": validation["hint"],
-        "response_preview": validation["response_preview"],
+        "message": (
+            "Attack blocked — the blue team has already patched this vulnerability."
+            if patched_by_blue
+            else "Attack failed. The payload did not exploit the vulnerability."
+        ),
+        "patched_by_blue": patched_by_blue,
+        "blue_team_score_update": True,
+        "message_to_blue": (
+            "Patch is holding! Red team attack rejected."
+            if patched_by_blue
+            else "Your code blocked this attack! +1 defensive point."
+        ),
+        "hint": validation.get("hint", ""),
+        "response_preview": validation.get("response_preview", ""),
     }
 
 
@@ -912,3 +1016,86 @@ def end_game(
     )
 
     return {"message": "Game ended.", "final_red_score": fr, "final_blue_score": fb}
+
+
+def _delete_game_challenge_cascade(db: Session, game_id: int) -> None:
+    game = db.query(models.GameChallenge).filter(models.GameChallenge.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Not found")
+    red_tid = game.red_team_id
+    blue_tid = game.blue_team_id
+
+    try:
+        db.query(models.RedTeamAction).filter(models.RedTeamAction.challenge_id == game_id).delete(
+            synchronize_session=False
+        )
+        db.query(models.BlueTeamFix).filter(models.BlueTeamFix.challenge_id == game_id).delete(
+            synchronize_session=False
+        )
+        db.query(models.ChallengeVulnerability).filter(
+            models.ChallengeVulnerability.challenge_id == game_id
+        ).delete(synchronize_session=False)
+        db.delete(game)
+        db.flush()
+        if red_tid:
+            db.query(models.TeamMember).filter(models.TeamMember.team_id == red_tid).delete(
+                synchronize_session=False
+            )
+            db.query(models.Team).filter(models.Team.id == red_tid).delete(synchronize_session=False)
+        if blue_tid:
+            db.query(models.TeamMember).filter(models.TeamMember.team_id == blue_tid).delete(
+                synchronize_session=False
+            )
+            db.query(models.Team).filter(models.Team.id == blue_tid).delete(synchronize_session=False)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Could not delete game due to database constraints. Try again or contact support.",
+        ) from None
+
+
+def _delete_redblue_game_with_log(
+    request: Request,
+    game_id: int,
+    db: Session,
+    current_user: models.User,
+) -> dict:
+    _delete_game_challenge_cascade(db, game_id)
+    log_security_event(
+        db=db,
+        event_type="redblue_game_deleted",
+        severity=SecuritySeverity.MEDIUM,
+        user_id=current_user.id,
+        request=request,
+        metadata={"game_id": game_id},
+        context_type="challenge",
+    )
+    return {"message": "Game deleted."}
+
+
+@router.delete("/game/{game_id}")
+def delete_redblue_game(
+    request: Request,
+    game_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("instructor", "admin")),
+):
+    """
+    Permanently remove a Red vs Blue game, teams, and all related actions/fixes/vulnerabilities.
+    """
+    return _delete_redblue_game_with_log(request, game_id, db, current_user)
+
+
+@router.post("/game/{game_id}/delete")
+def delete_redblue_game_post(
+    request: Request,
+    game_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("instructor", "admin")),
+):
+    """
+    Same as DELETE /game/{game_id}. Provided as POST for clients or proxies that block DELETE.
+    """
+    return _delete_redblue_game_with_log(request, game_id, db, current_user)

@@ -42,6 +42,8 @@ import XxeChallengePage from './pages/XxeChallengePage';
 import RedBlueGamePage from './pages/RedBlueGamePage';
 import RedBlueCreatePage from './pages/RedBlueCreatePage';
 import RedBlueMyGamesPage from './pages/RedBlueMyGamesPage';
+import ChallengeAssignmentPage from './pages/ChallengeAssignmentPage';
+import InstructorAssignmentResultsPage from './pages/InstructorAssignmentResultsPage';
 
 // Components
 import MainLayout from './components/MainLayout';
@@ -101,6 +103,7 @@ const App: React.FC = () => {
             <Route element={<ProtectedRoute allowedRoles={['user']} />}>
               <Route path="/quiz" element={<StudentQuizPage />} />
               <Route path="/redblue/my-games" element={<RedBlueMyGamesPage />} />
+              <Route path="/assignment/:assignmentId" element={<ChallengeAssignmentPage />} />
             </Route>
             <Route path="/under-construction" element={<UnderConstructionPage />} />
           </Route>
@@ -111,6 +114,7 @@ const App: React.FC = () => {
           <Route element={<MainLayout />}>
             <Route path="/instructor/dashboard" element={<InstructorDashboardPage />} /> {/* NEW DASHBOARD */}
             <Route path="/instructor/quiz" element={<InstructorQuizPage />} />
+            <Route path="/instructor/assignment/:assignmentId/results" element={<InstructorAssignmentResultsPage />} />
             <Route path="/redblue/create" element={<RedBlueCreatePage />} />
           </Route>
         </Route>

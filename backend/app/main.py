@@ -12,7 +12,7 @@ import os
 
 # --- IMPORT ROUTERS ---
 # We added 'stats', 'projects', 'game_challenge', and 'misconfig' to this import list
-from .api import auth, quizzes, challenges, stats, messages, projects, game_challenge, misconfig, ai_mentor, attack_simulator, project_analyzer, security_logs, quiz_dynamic, instructor, report, red_blue
+from .api import auth, quizzes, challenges, stats, messages, projects, game_challenge, misconfig, ai_mentor, attack_simulator, project_analyzer, security_logs, quiz_dynamic, instructor, report, red_blue, challenge_assignments
 from .db import database
 from . import models 
 
@@ -63,6 +63,7 @@ app.include_router(quiz_dynamic.router, prefix="/api/quiz", tags=["quiz_dynamic"
 app.include_router(instructor.router, prefix="/api/instructor", tags=["instructor"])
 app.include_router(report.router)
 app.include_router(red_blue.router, prefix="/api/redblue", tags=["redblue"])
+app.include_router(challenge_assignments.router, prefix="/api/challenge-assignments", tags=["challenge_assignments"])
 
 
 def _ensure_runtime_schema():
@@ -129,6 +130,11 @@ def _ensure_runtime_schema():
                     conn.execute(text("ALTER TABLE red_team_actions MODIFY COLUMN vulnerability_id INT NULL"))
                 except Exception:
                     pass
+            if "questions" in inspector.get_table_names():
+                qcols = {c["name"] for c in inspector.get_columns("questions")}
+                if "targets_mistake" not in qcols:
+                    conn.execute(text("ALTER TABLE questions ADD COLUMN targets_mistake VARCHAR(500) NULL"))
+                    logger.warning("Applied runtime schema patch: questions.targets_mistake")
             if "blue_team_fixes" in tables:
                 bcols = {c["name"] for c in inspector.get_columns("blue_team_fixes")}
                 for col, ddl in (("user_id", "INT NULL"), ("submitted_code", "TEXT NULL")):

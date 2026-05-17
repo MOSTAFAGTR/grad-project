@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_, desc
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import date
@@ -9,6 +9,7 @@ import re
 import requests
 import random
 import os
+import httpx
 
 from ..db.database import get_db
 from ..models import (
@@ -35,6 +36,7 @@ from ..schemas import (
     QuizAttemptResponse,
     AIQuizAssignRequest,
     AIQuizAssignResponse,
+    MistakesQuizAssignRequest,
 )
 from .auth import get_current_user, require_role
 from ..ai.serper_helpers import build_quiz_questions_from_serper, serper_configured
@@ -674,3 +676,280 @@ def ai_generate_and_assign(
         ai_generated=ai_used,
         ai_questions_created=ai_questions_created if ai_used else 0,
     )
+
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
+
+def _format_bank_questions(questions: list[Question]) -> list[dict]:
+    out: list[dict] = []
+    for q in questions:
+        opts = list(q.options)
+        try:
+            opts.sort(key=lambda o: o.id)
+        except Exception:
+            pass
+        correct_index = next((i for i, o in enumerate(opts) if o.is_correct), 0)
+        out.append(
+            {
+                "id": q.id,
+                "text": q.text,
+                "type": q.type or "MCQ",
+                "topic": q.topic or "General",
+                "difficulty": q.difficulty or "Medium",
+                "explanation": q.explanation or "",
+                "options": [{"id": o.id, "text": o.text, "is_correct": o.is_correct} for o in opts],
+                "correct_index": correct_index,
+            }
+        )
+    return out
+
+
+def _collect_wrong_answers(db: Session, user_id: int, limit: int = 20) -> list[UserAnswer]:
+    return (
+        db.query(UserAnswer)
+        .options(joinedload(UserAnswer.question).joinedload(Question.options))
+        .filter(UserAnswer.user_id == user_id, UserAnswer.is_correct.is_(False))
+        .order_by(desc(UserAnswer.timestamp))
+        .limit(limit)
+        .all()
+    )
+
+
+def _wrong_answers_prompt_block(db: Session, wrong_rows: list[UserAnswer]) -> tuple[str, list[str]]:
+    wrong_answers_text = ""
+    mistake_topics: list[str] = []
+    for wa in wrong_rows:
+        q = wa.question
+        if not q:
+            continue
+        wrong_opt = (
+            db.query(QuestionOption).filter(QuestionOption.id == wa.selected_option_id).first()
+        )
+        correct_opt = db.query(QuestionOption).filter(
+            QuestionOption.question_id == q.id, QuestionOption.is_correct.is_(True)
+        ).first()
+        wrong_txt = (wrong_opt.text if wrong_opt else "?")[:500]
+        correct_txt = (correct_opt.text if correct_opt else "?")[:500]
+        topic = (q.topic or "General")[:80]
+        mistake_topics.append(topic)
+        wrong_answers_text += f"""
+      Question: {q.text}
+      Student answered: {wrong_txt}
+      Correct answer: {correct_txt}
+      Topic: {topic}
+      """
+    weak_topics = list({t for t in mistake_topics})
+    return wrong_answers_text, weak_topics
+
+
+def _common_mistakes_fallback(db: Session, wrong_rows: list[UserAnswer]) -> dict:
+    topic_counts: dict[str, int] = {}
+    for wa in wrong_rows:
+        topic = (wa.question.topic if wa.question else None) or "General"
+        topic_counts[topic] = topic_counts.get(topic, 0) + 1
+    weakest_topics = sorted(topic_counts.keys(), key=lambda t: topic_counts[t], reverse=True)[:3]
+    bank_questions: list[Question] = []
+    for topic in weakest_topics:
+        qs = db.query(Question).filter(Question.topic.ilike(f"%{topic}%")).limit(4).all()
+        bank_questions.extend(qs)
+    seen: set[int] = set()
+    unique: list[Question] = []
+    for q in bank_questions:
+        if q.id not in seen:
+            seen.add(q.id)
+            unique.append(q)
+    formatted = _format_bank_questions(unique[:10])
+    return {
+        "questions": formatted,
+        "total": len(formatted),
+        "ai_generated": False,
+        "weak_topics": weakest_topics,
+        "mistake_patterns": [],
+        "message": "Generated from question bank (AI not configured).",
+    }
+
+
+def _generate_common_mistakes_payload(db: Session, user_id: int, save_ai_to_bank: bool = True) -> dict:
+    wrong_rows = _collect_wrong_answers(db, user_id, 20)
+    if len(wrong_rows) < 3:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Not enough quiz history to generate a mistakes quiz. "
+                "Complete at least one quiz with some wrong answers first."
+            ),
+        )
+    wrong_answers_text, weak_topics = _wrong_answers_prompt_block(db, wrong_rows)
+
+    prompt = f"""
+    A cybersecurity student got these quiz questions wrong:
+
+    {wrong_answers_text}
+
+    Analyze the patterns in their mistakes. Then generate
+    10 multiple-choice quiz questions specifically targeting
+    the concepts they are struggling with. Focus on:
+    - The exact misconceptions shown in their wrong answers
+    - Similar but slightly different scenarios to test true understanding
+    - Common security mistakes related to their weak topics
+
+    Return ONLY a valid JSON array with this exact schema:
+    [{{
+      "question": "...",
+      "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
+      "correct_index": 0,
+      "explanation": "...",
+      "targets_mistake": "Brief description of which misconception this targets"
+    }}]
+    No markdown. No code blocks. Pure JSON array only.
+    """
+
+    if not (OPENAI_API_KEY or "").strip():
+        return _common_mistakes_fallback(db, wrong_rows)
+
+    ai_questions: list[dict] = []
+    try:
+        response = httpx.post(
+            f"{AI_SERVICE_URL.rstrip('/')}/generate",
+            json={"prompt": prompt, "api_key": OPENAI_API_KEY},
+            timeout=45.0,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"AI service error: {response.status_code}")
+        data = response.json()
+        raw = data.get("content") or data.get("text") or ""
+        raw = raw.strip()
+        if raw.startswith("```"):
+            parts = raw.split("```")
+            raw = parts[1] if len(parts) > 1 else raw
+            raw = raw.strip()
+            if raw.lower().startswith("json"):
+                raw = raw[4:].strip()
+        ai_questions = json.loads(raw.strip())
+        if not isinstance(ai_questions, list):
+            ai_questions = []
+    except Exception:
+        return _common_mistakes_fallback(db, wrong_rows)
+
+    if not ai_questions:
+        return _common_mistakes_fallback(db, wrong_rows)
+
+    mistake_patterns: list[str] = []
+    saved_ids: list[int] = []
+    if save_ai_to_bank and ai_questions:
+        for q in ai_questions[:10]:
+            if not isinstance(q, dict):
+                continue
+            opts = q.get("options") or []
+            ci = int(q.get("correct_index", 0))
+            if len(opts) != 4 or ci not in (0, 1, 2, 3):
+                continue
+            tm = (q.get("targets_mistake") or "")[:500]
+            if tm:
+                mistake_patterns.append(tm)
+            new_q = Question(
+                text=(q.get("question") or "")[:8000],
+                type="MCQ",
+                topic="Common Mistakes",
+                difficulty="Adaptive",
+                explanation=(q.get("explanation") or "")[:4000],
+                targets_mistake=tm or None,
+            )
+            db.add(new_q)
+            db.flush()
+            for i, opt_text in enumerate(opts):
+                db.add(
+                    QuestionOption(
+                        question_id=new_q.id,
+                        text=(str(opt_text) or "")[:255],
+                        is_correct=(i == ci),
+                    )
+                )
+            saved_ids.append(new_q.id)
+        db.commit()
+        if not saved_ids:
+            return _common_mistakes_fallback(db, wrong_rows)
+        saved_qs = db.query(Question).filter(Question.id.in_(saved_ids)).all()
+        # preserve order
+        id_order = {i: j for j, i in enumerate(saved_ids)}
+        saved_qs.sort(key=lambda x: id_order.get(x.id, 999))
+        formatted = _format_bank_questions(saved_qs)
+        return {
+            "questions": formatted,
+            "total": len(formatted),
+            "ai_generated": True,
+            "weak_topics": weak_topics,
+            "mistake_patterns": mistake_patterns[:10],
+            "message": "Quiz generated from your mistake history.",
+        }
+
+    return _common_mistakes_fallback(db, wrong_rows)
+
+
+@router.get("/wrong-answer-count")
+def wrong_answer_count(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("user")),
+):
+    count = (
+        db.query(UserAnswer)
+        .filter(UserAnswer.user_id == user.id, UserAnswer.is_correct.is_(False))
+        .count()
+    )
+    return {"count": count, "enough": count >= 3}
+
+
+@router.post("/common-mistakes-quiz")
+def common_mistakes_quiz(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("user")),
+):
+    return _generate_common_mistakes_payload(db, user.id, save_ai_to_bank=True)
+
+
+@router.post("/assign-mistakes-quiz")
+def assign_mistakes_quiz(
+    body: MistakesQuizAssignRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "instructor")),
+):
+    student = db.query(User).filter(User.id == body.student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    if student.role != "user":
+        raise HTTPException(status_code=400, detail="Target must be a student (role user)")
+
+    payload = _generate_common_mistakes_payload(db, body.student_id, save_ai_to_bank=True)
+    questions = payload.get("questions") or []
+    if not questions:
+        raise HTTPException(status_code=400, detail="Could not generate questions for this student")
+
+    n = max(1, min(int(body.num_questions or 10), len(questions)))
+    questions = questions[:n]
+    q_ids = [int(q["id"]) for q in questions if q.get("id") is not None]
+
+    today = date.today().isoformat()
+    title = f"Common Mistakes Quiz — {student.email} — {today}"
+    assign = QuizAssignment(
+        title=title,
+        instructor_id=user.id,
+        question_ids=",".join(map(str, q_ids)),
+        assigned_student_ids=str(body.student_id),
+    )
+    db.add(assign)
+    db.flush()
+    db.add(QuizAssignmentStudent(assignment_id=assign.id, student_id=body.student_id))
+    for qid in q_ids:
+        db.add(QuizAssignmentQuestion(assignment_id=assign.id, question_id=qid))
+    db.commit()
+    db.refresh(assign)
+
+    return {
+        "assignment_id": assign.id,
+        "title": title,
+        "student_id": body.student_id,
+        "question_count": len(q_ids),
+        "ai_generated": payload.get("ai_generated"),
+        "message": f"Mistakes quiz assigned to {student.email}.",
+    }

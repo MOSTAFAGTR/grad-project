@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
+import ChallengeTutorialVideo from '../components/ChallengeTutorialVideo';
 
 const BrokenAuthTutorialPage: React.FC = () => {
   const navigate = useNavigate();
@@ -92,9 +93,7 @@ def create_secure_session(username):
           plaintext value. In the fix phase, you will replace the plaintext comparison with proper bcrypt hashing using
           passlib.
         </p>
-        <div className="w-full max-w-4xl mx-auto rounded-lg overflow-hidden border-2 border-gray-700 border-dashed mb-6 min-h-[120px] flex items-center justify-center text-gray-500 text-sm">
-          Tutorial video placeholder — content planned for a future phase
-        </div>
+        <ChallengeTutorialVideo challengeId={5} className="mb-6" />
         <button
           type="button"
           onClick={() => navigate('/challenges/5/attack')}

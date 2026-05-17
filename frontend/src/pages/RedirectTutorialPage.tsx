@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import ChallengeTutorialVideo from '../components/ChallengeTutorialVideo';
 
 const RedirectTutorialPage: React.FC = () => {
   return (
@@ -9,6 +10,7 @@ const RedirectTutorialPage: React.FC = () => {
         When an app redirects the user to a URL taken from the request (e.g. <code>?next=</code> or <code>?url=</code>) without checking it,
         attackers can send a link that looks trusted but sends the victim to a malicious site (phishing, malware).
       </p>
+      <ChallengeTutorialVideo challengeId={10} className="mb-6" />
       <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 max-w-4xl mb-6">
         <h2 className="text-xl font-bold mb-2 text-teal-400">How to fix</h2>
         <ul className="list-disc list-inside text-gray-300 space-y-1">

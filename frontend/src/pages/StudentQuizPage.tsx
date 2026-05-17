@@ -54,6 +54,10 @@ const StudentQuizPage: React.FC = () => {
   const [lastResult, setLastResult] = useState<any>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [wrongAnswerInfo, setWrongAnswerInfo] = useState<{ count: number; enough: boolean } | null>(null);
+  const [generatingMistakes, setGeneratingMistakes] = useState(false);
+  const [mistakesError, setMistakesError] = useState<string | null>(null);
+  const [isMistakesQuiz, setIsMistakesQuiz] = useState(false);
 
   const difficultyLevel: 'Beginner' | 'Intermediate' | 'Advanced' = 'Intermediate';
 
@@ -66,6 +70,17 @@ const StudentQuizPage: React.FC = () => {
     (scanData as any)?.results?.project_name ||
     scanData?.projectId ||
     'Project';
+
+  useEffect(() => {
+    if (token) {
+      axios
+        .get(`${API_URL}/api/quizzes/wrong-answer-count`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        .then((res) => setWrongAnswerInfo({ count: res.data.count, enough: res.data.enough }))
+        .catch(() => setWrongAnswerInfo(null));
+    }
+  }, [token]);
 
   useEffect(() => {
     if (token) {
@@ -117,6 +132,7 @@ const StudentQuizPage: React.FC = () => {
         setQuizTitle(topicFilter === 'All topics' ? 'Standard Quiz (all topics)' : `Standard Quiz: ${topicFilter}`);
         setAssignmentId(null);
         setGeneratedFromScan(false);
+        setIsMistakesQuiz(false);
         setStep('quiz');
         setCurrentIndex(0);
         setScore(0);
@@ -165,6 +181,7 @@ const StudentQuizPage: React.FC = () => {
         setQuizTitle(`Quiz from scan (${scanFocus === 'highest' ? 'highest severity' : 'all findings'})`);
         setAssignmentId(null);
         setGeneratedFromScan(true);
+        setIsMistakesQuiz(false);
         setStep('quiz');
         setCurrentIndex(0);
         setScore(0);
@@ -178,6 +195,40 @@ const StudentQuizPage: React.FC = () => {
     }
   };
 
+  const handleMistakesQuiz = async () => {
+    if (!token) return;
+    setGeneratingMistakes(true);
+    setMistakesError(null);
+    try {
+      const res = await axios.post(
+        `${API_URL}/api/quizzes/common-mistakes-quiz`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const raw = res.data?.questions || [];
+      if (raw.length === 0) {
+        setMistakesError('No questions returned. Try again later.');
+        return;
+      }
+      setQuestions(raw);
+      setQuizTitle('Common Mistakes Quiz');
+      setAssignmentId(null);
+      setGeneratedFromScan(false);
+      setIsMistakesQuiz(true);
+      setStep('quiz');
+      setCurrentIndex(0);
+      setScore(0);
+      scoreRef.current = 0;
+      setWrongCategories([]);
+    } catch (e: unknown) {
+      const ax = e as { response?: { data?: { detail?: string } } };
+      const d = ax.response?.data?.detail;
+      setMistakesError(typeof d === 'string' ? d : 'Failed to generate quiz');
+    } finally {
+      setGeneratingMistakes(false);
+    }
+  };
+
   const handleStartAssignment = async (id: number, title: string) => {
     try {
       const res = await axios.get(`${API_URL}/api/quizzes/assignments/${id}/take`, {
@@ -187,6 +238,7 @@ const StudentQuizPage: React.FC = () => {
       setQuizTitle(title);
       setAssignmentId(id);
       setGeneratedFromScan(false);
+      setIsMistakesQuiz(false);
       setStep('quiz');
       setCurrentIndex(0);
       setScore(0);
@@ -365,6 +417,34 @@ const StudentQuizPage: React.FC = () => {
                 {loading ? 'Loading...' : 'Generate Scan Quiz'}
               </button>
             </div>
+
+            <div style={cardStyle}>
+              <h2 style={{ fontWeight: 700, fontSize: 18, marginBottom: 12 }}>Common Mistakes Quiz</h2>
+              <p className="text-gray-400 text-sm mb-4">
+                Personalized to YOUR wrong answers. Our AI analyzes your quiz history to find patterns in your
+                mistakes, then generates targeted questions to fix your specific knowledge gaps.
+              </p>
+              {wrongAnswerInfo && wrongAnswerInfo.count >= 3 && (
+                <div className="mb-4 px-3 py-2 rounded-lg bg-cyan-900/40 border border-cyan-700 text-cyan-200 text-sm">
+                  {wrongAnswerInfo.count} wrong answers analyzed
+                </div>
+              )}
+              {wrongAnswerInfo && wrongAnswerInfo.count < 3 && (
+                <div className="mb-4 px-3 py-2 rounded-lg bg-amber-900/40 border border-amber-600 text-amber-200 text-sm">
+                  Complete more quizzes first
+                </div>
+              )}
+              {mistakesError && (
+                <div className="mb-3 text-sm text-red-400 border border-red-800 rounded p-2">{mistakesError}</div>
+              )}
+              <button
+                onClick={handleMistakesQuiz}
+                disabled={generatingMistakes || !wrongAnswerInfo?.enough}
+                className="w-full bg-teal-600 py-3 rounded font-bold hover:bg-teal-500 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {generatingMistakes ? 'Analyzing your mistakes...' : 'Generate My Mistakes Quiz'}
+              </button>
+            </div>
           </div>
 
           <div className="bg-gray-800 p-8 rounded-lg border border-purple-900">
@@ -401,6 +481,11 @@ const StudentQuizPage: React.FC = () => {
           {generatedFromScan && (
             <div className="mb-4 text-xs bg-purple-900/40 border border-purple-700 text-purple-200 rounded px-3 py-2">
               Based on your uploaded project vulnerabilities
+            </div>
+          )}
+          {isMistakesQuiz && (
+            <div className="mb-4 text-xs bg-teal-900/40 border border-teal-700 text-teal-200 rounded px-3 py-2">
+              Common mistakes — targeted to your recent wrong answers
             </div>
           )}
           <div className="flex justify-between items-center mb-6 text-gray-400">
