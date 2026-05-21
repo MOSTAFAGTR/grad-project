@@ -315,7 +315,14 @@ def _challenge_dir_for_lab(lab_id: int) -> Optional[str]:
     return f"/app/challenges/challenge-{slug}"
 
 
+def _game_phase(game: models.GameChallenge) -> str:
+    return (getattr(game, "current_phase", None) or "awaiting_red").strip().lower()
+
+
 def _red_score_query(db: Session, game_id: int) -> int:
+    game = db.query(models.GameChallenge).filter(models.GameChallenge.id == game_id).first()
+    if game and getattr(game, "current_phase", None):
+        return int(game.red_score or 0)
     return (
         db.query(models.RedTeamAction)
         .filter(
@@ -338,6 +345,13 @@ DEFENSIVE_POINT_MARKER = "[DEFENSIVE POINT — Red team payload rejected]"
 
 
 def _blue_score_breakdown(db: Session, game_id: int) -> dict[str, int]:
+    game = db.query(models.GameChallenge).filter(models.GameChallenge.id == game_id).first()
+    if game and getattr(game, "current_phase", None):
+        return {
+            "real_fixes": int(game.blue_score or 0),
+            "defensive_blocks": 0,
+            "total": int(game.blue_score or 0),
+        }
     first_confirmed_at = (
         db.query(func.min(models.RedTeamAction.timestamp))
         .filter(
@@ -441,6 +455,9 @@ def create_redblue_game(
         blue_team_id=blue_team.id,
         red_score=0,
         blue_score=0,
+        current_phase="awaiting_red",
+        current_round=1,
+        pending_red_action_id=None,
     )
     db.add(game)
     db.commit()
@@ -512,33 +529,47 @@ def get_redblue_game(
     challenge_slug = LAB_CHALLENGE_SLUGS.get(lab_id, "")
     cname = LAB_CHALLENGE_TITLES.get(lab_id, "challenge")
 
-    # Expose whether blue team has patched the vulnerability so the frontend
-    # can show a "Vulnerability Patched" banner and disable the red attack form.
-    blue_has_patched = (
-        db.query(models.BlueTeamFix)
-        .filter(
-            models.BlueTeamFix.challenge_id == game_id,
-            models.BlueTeamFix.fixed == True,  # noqa: E712
-            ~models.BlueTeamFix.submitted_code.contains("DEFENSIVE POINT"),
+    phase = _game_phase(game)
+    awaiting_blue = phase == "awaiting_blue"
+    pending_action = None
+    if game.pending_red_action_id:
+        pending_action = (
+            db.query(models.RedTeamAction)
+            .filter(models.RedTeamAction.id == game.pending_red_action_id)
+            .first()
         )
-        .first()
-    ) is not None
 
     return {
         "game_id": game.id,
         "challenge_id": lab_id,
         "challenge_slug": challenge_slug,
-        "vulnerability_patched": blue_has_patched,
+        "current_phase": phase,
+        "current_round": int(game.current_round or 1),
+        "vulnerability_patched": awaiting_blue,
+        "awaiting_blue_defense": awaiting_blue,
+        "pending_attack": (
+            {
+                "id": pending_action.id,
+                "payload_used": pending_action.payload_used or "",
+                "impact_description": pending_action.impact_description or "",
+            }
+            if pending_action
+            else None
+        ),
         "challenge_instructions": {
             "red_team": (
-                f"Your goal: exploit the {cname} vulnerability in the target application. "
-                "Submit payloads that successfully trigger the exploit."
-                + (" [PATCHED — Blue team has fixed this vulnerability]" if blue_has_patched else "")
+                f"Round {game.current_round or 1}: Submit a payload that exploits the {cname} vulnerability. "
+                "After a successful hit, the blue team must defend."
+                + (" [WAIT — Blue team is defending your last successful payload]" if awaiting_blue else "")
             ),
             "blue_team": (
-                "Your goal: review the vulnerable code, identify the vulnerability, and submit "
-                "a fixed version that passes all security tests."
-                + (" [PATCHED ✓ — Your fix is holding]" if blue_has_patched else "")
+                "Review the vulnerable code and submit a secure fix when red lands a successful payload. "
+                "A passing fix awards Blue +1; a failing fix awards Red +1."
+                + (
+                    " [YOUR TURN — Defend against the last confirmed red payload]"
+                    if awaiting_blue
+                    else " [WAIT — Red team must land a successful exploit first]"
+                )
             ),
         },
         "total_red_attempts": total_attempts,
@@ -689,36 +720,21 @@ def log_attack(
     lab_id = game.lab_challenge_id or 0
     slug = LAB_CHALLENGE_SLUGS.get(lab_id, "")
     payload_used = body.payload_used or ""
+    phase = _game_phase(game)
+
+    if phase == "awaiting_blue":
+        raise HTTPException(
+            status_code=400,
+            detail="Blue team must defend against the last successful payload before red attacks again.",
+        )
+    if phase != "awaiting_red":
+        raise HTTPException(status_code=400, detail="Red team cannot attack in the current game phase.")
 
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.replace("Bearer ", "", 1) if auth_header.startswith("Bearer ") else ""
 
-    # If the blue team already has a confirmed real fix, the vulnerability is patched.
-    # All subsequent red attacks must be blocked — the live endpoint is always the
-    # original vulnerable code; the fix lives in the sandbox. Without this guard,
-    # red could keep scoring indefinitely even after blue patches the challenge.
-    blue_real_fix = (
-        db.query(models.BlueTeamFix)
-        .filter(
-            models.BlueTeamFix.challenge_id == game_id,
-            models.BlueTeamFix.fixed == True,  # noqa: E712
-            ~models.BlueTeamFix.submitted_code.contains("DEFENSIVE POINT"),
-        )
-        .first()
-    )
-
-    if blue_real_fix:
-        validation = {
-            "success": False,
-            "status_code": 0,
-            "response_preview": "Attack blocked — the blue team has already patched this vulnerability.",
-            "hint": "The blue team submitted a working fix. This payload was rejected.",
-        }
-        attack_confirmed = False
-    else:
-        validation = _validate_red_team_payload(slug, payload_used, token)
-        attack_confirmed = bool(validation["success"])
-
+    validation = _validate_red_team_payload(slug, payload_used, token)
+    attack_confirmed = bool(validation["success"])
     status = "confirmed" if attack_confirmed else "failed"
 
     action = models.RedTeamAction(
@@ -735,17 +751,9 @@ def log_attack(
     db.add(action)
     db.flush()
 
-    if not attack_confirmed:
-        defensive_fix = models.BlueTeamFix(
-            challenge_id=game_id,
-            vulnerability_id=None,
-            user_id=None,
-            fixed=True,
-            submitted_code=DEFENSIVE_POINT_MARKER,
-            timestamp=datetime.utcnow(),
-        )
-        db.add(defensive_fix)
-
+    if attack_confirmed:
+        game.current_phase = "awaiting_blue"
+        game.pending_red_action_id = action.id
     db.commit()
     db.refresh(action)
 
@@ -759,6 +767,7 @@ def log_attack(
             "game_id": game_id,
             "payload": payload_used[:200],
             "confirmed": attack_confirmed,
+            "round": game.current_round,
         },
         context_type="challenge",
     )
@@ -768,29 +777,20 @@ def log_attack(
             "action_id": action.id,
             "confirmed": True,
             "status": "confirmed",
+            "current_phase": "awaiting_blue",
+            "current_round": int(game.current_round or 1),
             "message": (
-                "Attack confirmed! Payload successfully exploited the vulnerability."
+                "Attack confirmed! Blue team's turn — submit a fix that blocks this payload."
             ),
             "response_preview": validation["response_preview"],
         }
 
-    patched_by_blue = blue_real_fix is not None
     return {
         "action_id": action.id,
         "confirmed": False,
         "status": "failed",
-        "message": (
-            "Attack blocked — the blue team has already patched this vulnerability."
-            if patched_by_blue
-            else "Attack failed. The payload did not exploit the vulnerability."
-        ),
-        "patched_by_blue": patched_by_blue,
-        "blue_team_score_update": True,
-        "message_to_blue": (
-            "Patch is holding! Red team attack rejected."
-            if patched_by_blue
-            else "Your code blocked this attack! +1 defensive point."
-        ),
+        "current_phase": "awaiting_red",
+        "message": "Attack failed. The payload did not exploit the vulnerability. Try again.",
         "hint": validation.get("hint", ""),
         "response_preview": validation.get("response_preview", ""),
     }
@@ -819,20 +819,13 @@ def submit_fix(
     if not on_blue:
         raise HTTPException(status_code=403, detail="You are not on the blue team for this game.")
 
-    has_confirmed = (
-        db.query(models.RedTeamAction)
-        .filter(
-            models.RedTeamAction.challenge_id == game_id,
-            models.RedTeamAction.status == "confirmed",
-        )
-        .first()
-    )
-    if not has_confirmed:
+    phase = _game_phase(game)
+    if phase != "awaiting_blue":
         raise HTTPException(
             status_code=400,
             detail=(
-                "No confirmed attacks yet. The blue team can only submit fixes after the red "
-                "team has successfully exploited the vulnerability."
+                "Blue team can only submit a fix after red lands a successful payload "
+                "in the current round."
             ),
         )
 
@@ -859,6 +852,20 @@ def submit_fix(
         submitted_code=code_trim,
     )
     db.add(fix)
+
+    round_num = int(game.current_round or 1)
+    if fixed:
+        game.blue_score = int(game.blue_score or 0) + 1
+        round_winner = "blue"
+        points_message = "Secure fix! Blue team +1 point."
+    else:
+        game.red_score = int(game.red_score or 0) + 1
+        round_winner = "red"
+        points_message = "Fix still vulnerable! Red team +1 point."
+
+    game.current_phase = "awaiting_red"
+    game.pending_red_action_id = None
+    game.current_round = round_num + 1
     db.commit()
 
     log_security_event(
@@ -867,14 +874,25 @@ def submit_fix(
         severity=SecuritySeverity.LOW,
         user_id=current_user.id,
         request=request,
-        metadata={"game_id": game_id, "fixed": fixed},
+        metadata={
+            "game_id": game_id,
+            "fixed": fixed,
+            "round": round_num,
+            "round_winner": round_winner,
+        },
         context_type="challenge",
     )
 
     return {
         "fixed": fixed,
         "improvement_score": improvement_score,
-        "message": "Fix accepted." if fixed else "Fix did not pass tests.",
+        "round": round_num,
+        "round_winner": round_winner,
+        "red_score": int(game.red_score or 0),
+        "blue_score": int(game.blue_score or 0),
+        "current_phase": "awaiting_red",
+        "current_round": int(game.current_round or 1),
+        "message": points_message,
     }
 
 

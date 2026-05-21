@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, desc
 from typing import List, Optional
 from pydantic import BaseModel
-from datetime import date
+from datetime import date, datetime
 import json
 import re
 import requests
@@ -37,11 +37,90 @@ from ..schemas import (
     AIQuizAssignRequest,
     AIQuizAssignResponse,
     MistakesQuizAssignRequest,
+    QuizAssignmentStartResponse,
 )
 from .auth import get_current_user, require_role
 from ..ai.serper_helpers import build_quiz_questions_from_serper, serper_configured
 
 router = APIRouter()
+
+
+def _parse_due_date(raw: Optional[str]) -> Optional[datetime]:
+    if not raw or not str(raw).strip():
+        return None
+    s = str(raw).strip().replace("Z", "")
+    try:
+        if "T" not in s and len(s) <= 10:
+            return datetime.fromisoformat(s + "T23:59:59")
+        return datetime.fromisoformat(s)
+    except Exception:
+        return None
+
+
+def _validate_time_limit(minutes: Optional[int]) -> Optional[int]:
+    if minutes is None:
+        return None
+    m = int(minutes)
+    if m < 5 or m > 240:
+        raise HTTPException(status_code=400, detail="time_limit_minutes must be between 5 and 240.")
+    return m
+
+
+def _get_student_assignment_row(
+    db: Session, assignment_id: int, user_id: int
+) -> Optional[QuizAssignmentStudent]:
+    return (
+        db.query(QuizAssignmentStudent)
+        .filter(
+            QuizAssignmentStudent.assignment_id == assignment_id,
+            QuizAssignmentStudent.student_id == user_id,
+        )
+        .first()
+    )
+
+
+def _ensure_student_assigned(db: Session, assign: QuizAssignment, user: User) -> QuizAssignmentStudent:
+    mapped = _get_student_assignment_row(db, assign.id, user.id)
+    if mapped:
+        return mapped
+    if user.role != "user":
+        raise HTTPException(status_code=403, detail="Assignment is not assigned to this user")
+    assigned = {int(i) for i in (assign.assigned_student_ids or "").split(",") if i}
+    if user.id not in assigned:
+        raise HTTPException(status_code=403, detail="Assignment is not assigned to this user")
+    mapped = QuizAssignmentStudent(assignment_id=assign.id, student_id=user.id, status="assigned")
+    db.add(mapped)
+    db.flush()
+    return mapped
+
+
+def _student_assignment_payload(
+    db: Session, assign: QuizAssignment, cas: Optional[QuizAssignmentStudent], user_id: int
+) -> dict:
+    now = datetime.utcnow()
+    if not cas:
+        cas = _get_student_assignment_row(db, assign.id, user_id)
+    status = (cas.status if cas else None) or "assigned"
+    due = assign.due_date
+    is_past_due = bool(due and now > due)
+    time_remaining: Optional[int] = None
+    if cas and status == "in_progress" and cas.started_at and assign.time_limit_minutes:
+        limit_sec = int(assign.time_limit_minutes) * 60
+        used = int((now - cas.started_at).total_seconds())
+        time_remaining = max(0, limit_sec - used)
+    return {
+        "id": assign.id,
+        "title": assign.title,
+        "instructor_id": assign.instructor_id,
+        "created_at": assign.created_at,
+        "time_limit_minutes": assign.time_limit_minutes,
+        "due_date": assign.due_date,
+        "status": status,
+        "is_past_due": is_past_due,
+        "time_remaining_seconds": time_remaining,
+    }
+
+
 def _openai_key() -> str:
     return (os.getenv("OPENAI_API_KEY", "") or "").strip()
 AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://ai_service:8001")
@@ -201,12 +280,16 @@ def create_assign(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin", "instructor")),
 ):
+    time_limit = _validate_time_limit(d.time_limit_minutes)
+    due = _parse_due_date(d.due_date)
     assign = QuizAssignment(
         title=d.title,
         instructor_id=user.id,
         # Keep legacy denormalized columns for backward compatibility.
         question_ids=",".join(map(str, d.question_ids)),
         assigned_student_ids=",".join(map(str, d.student_ids)),
+        time_limit_minutes=time_limit,
+        due_date=due,
     )
     db.add(assign)
     db.flush()
@@ -245,18 +328,103 @@ def delete_assign(
 
 @router.get("/assignments/student", response_model=List[AssignmentResponse])
 def get_student_assigns(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    mapped_assignment_ids = [
-        row.assignment_id
-        for row in db.query(QuizAssignmentStudent)
+    mapped_rows = (
+        db.query(QuizAssignmentStudent)
         .filter(QuizAssignmentStudent.student_id == user.id)
         .all()
-    ]
-    if mapped_assignment_ids:
-        return db.query(QuizAssignment).filter(QuizAssignment.id.in_(mapped_assignment_ids)).all()
+    )
+    mapped_assignment_ids = [row.assignment_id for row in mapped_rows]
+    cas_by_aid = {row.assignment_id: row for row in mapped_rows}
 
-    # Backward-compatible fallback for legacy comma-separated assignments.
-    all_assignments = db.query(QuizAssignment).all()
-    return [a for a in all_assignments if str(user.id) in (a.assigned_student_ids or "").split(',')]
+    if mapped_assignment_ids:
+        assigns = db.query(QuizAssignment).filter(QuizAssignment.id.in_(mapped_assignment_ids)).all()
+    else:
+        # Backward-compatible fallback for legacy comma-separated assignments.
+        all_assignments = db.query(QuizAssignment).all()
+        assigns = [a for a in all_assignments if str(user.id) in (a.assigned_student_ids or "").split(",")]
+
+    return [_student_assignment_payload(db, a, cas_by_aid.get(a.id), user.id) for a in assigns]
+
+
+@router.post("/assignments/{assignment_id}/start", response_model=QuizAssignmentStartResponse)
+def start_quiz_assignment(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    now = datetime.utcnow()
+    assign = db.query(QuizAssignment).filter(QuizAssignment.id == assignment_id).first()
+    if not assign:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    cas = _ensure_student_assigned(db, assign, user)
+
+    if assign.due_date and now > assign.due_date:
+        raise HTTPException(status_code=403, detail="Assignment has expired.")
+
+    if cas.status == "completed":
+        raise HTTPException(status_code=400, detail="Assignment already submitted.")
+
+    if cas.status == "in_progress":
+        limit_sec = (int(assign.time_limit_minutes) * 60) if assign.time_limit_minutes else None
+        if limit_sec and cas.started_at:
+            used = int((now - cas.started_at).total_seconds())
+            if used >= limit_sec:
+                cas.status = "expired"
+                db.commit()
+                raise HTTPException(status_code=403, detail="Time limit exceeded.")
+        return QuizAssignmentStartResponse(
+            assignment_id=assign.id,
+            title=assign.title,
+            time_limit_minutes=assign.time_limit_minutes,
+            time_limit_seconds=limit_sec,
+            due_date=assign.due_date.isoformat() if assign.due_date else None,
+            started_at=cas.started_at.isoformat() if cas.started_at else now.isoformat(),
+            status=cas.status,
+        )
+
+    cas.started_at = now
+    cas.status = "in_progress"
+    db.commit()
+    db.refresh(cas)
+
+    limit_sec = (int(assign.time_limit_minutes) * 60) if assign.time_limit_minutes else None
+    return QuizAssignmentStartResponse(
+        assignment_id=assign.id,
+        title=assign.title,
+        time_limit_minutes=assign.time_limit_minutes,
+        time_limit_seconds=limit_sec,
+        due_date=assign.due_date.isoformat() if assign.due_date else None,
+        started_at=cas.started_at.isoformat(),
+        status=cas.status,
+    )
+
+
+@router.get("/assignments/{assignment_id}/status")
+def quiz_assignment_status(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    assign = db.query(QuizAssignment).filter(QuizAssignment.id == assignment_id).first()
+    if not assign:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    cas = _ensure_student_assigned(db, assign, user)
+    now = datetime.utcnow()
+    payload = _student_assignment_payload(db, assign, cas, user.id)
+    limit_sec = (int(assign.time_limit_minutes) * 60) if assign.time_limit_minutes else None
+    is_expired = False
+    if cas.status == "in_progress" and limit_sec and cas.started_at:
+        used = int((now - cas.started_at).total_seconds())
+        if used >= limit_sec:
+            is_expired = True
+            payload["time_remaining_seconds"] = 0
+    payload["is_expired"] = is_expired
+    payload["time_limit_seconds"] = limit_sec
+    if assign.due_date:
+        payload["due_date"] = assign.due_date.isoformat()
+    return payload
+
 
 @router.get("/assignments/{id}/take", response_model=List[QuestionResponse])
 def take_assign_quiz(
@@ -265,20 +433,25 @@ def take_assign_quiz(
     user: User = Depends(get_current_user),
 ):
     a = db.query(QuizAssignment).filter(QuizAssignment.id == id).first()
-    if not a: raise HTTPException(404, "Not found")
+    if not a:
+        raise HTTPException(404, "Not found")
+    now = datetime.utcnow()
     if user.role == "user":
-        mapped = (
-            db.query(QuizAssignmentStudent)
-            .filter(
-                QuizAssignmentStudent.assignment_id == a.id,
-                QuizAssignmentStudent.student_id == user.id,
+        cas = _ensure_student_assigned(db, a, user)
+        if a.due_date and now > a.due_date:
+            raise HTTPException(status_code=403, detail="Assignment has expired.")
+        if cas.status not in ("in_progress",):
+            raise HTTPException(
+                status_code=400,
+                detail="Start the assignment first via POST /api/quizzes/assignments/{id}/start",
             )
-            .first()
-        )
-        if not mapped:
-            assigned = {int(i) for i in (a.assigned_student_ids or "").split(',') if i}
-            if user.id not in assigned:
-                raise HTTPException(403, "Assignment is not assigned to this user")
+        if a.time_limit_minutes and cas.started_at:
+            limit_sec = int(a.time_limit_minutes) * 60
+            used = int((now - cas.started_at).total_seconds())
+            if used >= limit_sec:
+                cas.status = "expired"
+                db.commit()
+                raise HTTPException(status_code=403, detail="Time limit exceeded.")
 
     mapped_questions = (
         db.query(QuizAssignmentQuestion.question_id)
@@ -313,6 +486,24 @@ def submit_answer(sub: AnswerSubmit, db: Session = Depends(get_db), user: User =
 @router.post("/submit-attempt", response_model=QuizAttemptResponse)
 def submit_quiz_attempt(d: QuizAttemptSubmit, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Record a completed quiz attempt with score and time."""
+    now = datetime.utcnow()
+    if d.assignment_id:
+        assign = db.query(QuizAssignment).filter(QuizAssignment.id == d.assignment_id).first()
+        if not assign:
+            raise HTTPException(status_code=404, detail="Assignment not found")
+        cas = _ensure_student_assigned(db, assign, user)
+        if assign.due_date and now > assign.due_date:
+            raise HTTPException(status_code=403, detail="Assignment has expired.")
+        if cas.status == "completed":
+            raise HTTPException(status_code=400, detail="Assignment already submitted.")
+        if assign.time_limit_minutes and cas.started_at:
+            limit_sec = int(assign.time_limit_minutes) * 60
+            if int((now - cas.started_at).total_seconds()) > limit_sec + 30:
+                raise HTTPException(status_code=403, detail="Time limit exceeded.")
+        cas.status = "completed"
+        cas.submitted_at = now
+        db.flush()
+
     att = QuizAttempt(
         user_id=user.id,
         assignment_id=d.assignment_id,
@@ -646,14 +837,16 @@ def ai_generate_and_assign(
 
     today = date.today().isoformat()
     title = f"AI Generated: {topic_raw or 'Mixed topics'} ({body.difficulty}) — {today}"
-    if body.due_date:
-        title = f"{title} (due {body.due_date})"
+    time_limit = _validate_time_limit(body.time_limit_minutes)
+    due = _parse_due_date(body.due_date)
 
     assign = QuizAssignment(
         title=title,
         instructor_id=user.id,
         question_ids=",".join(map(str, selected_ids)),
         assigned_student_ids=",".join(map(str, body.student_ids)),
+        time_limit_minutes=time_limit,
+        due_date=due,
     )
     db.add(assign)
     db.flush()
@@ -931,11 +1124,15 @@ def assign_mistakes_quiz(
 
     today = date.today().isoformat()
     title = f"Common Mistakes Quiz — {student.email} — {today}"
+    time_limit = _validate_time_limit(body.time_limit_minutes)
+    due = _parse_due_date(body.due_date)
     assign = QuizAssignment(
         title=title,
         instructor_id=user.id,
         question_ids=",".join(map(str, q_ids)),
         assigned_student_ids=str(body.student_id),
+        time_limit_minutes=time_limit,
+        due_date=due,
     )
     db.add(assign)
     db.flush()

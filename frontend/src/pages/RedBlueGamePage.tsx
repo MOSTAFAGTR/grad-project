@@ -62,7 +62,7 @@ const RedBlueGamePage: React.FC = () => {
     hint?: string;
     preview?: string;
   } | null>(null);
-  const [bluePanelToast, setBluePanelToast] = useState<string | null>(null);
+  const [bluePanelToast] = useState<string | null>(null);
   const [redPulse, setRedPulse] = useState(false);
   const [bluePulse, setBluePulse] = useState(false);
 
@@ -149,12 +149,6 @@ const RedBlueGamePage: React.FC = () => {
           status: a.status || 'confirmed',
         }));
         if (newOnes.length) {
-          for (const a of newOnes) {
-            if (isBlueTeamRef.current && a.status === 'failed') {
-              setBluePanelToast('🛡 Attack blocked! +1 defensive point');
-              window.setTimeout(() => setBluePanelToast(null), 2000);
-            }
-          }
           const ordered = [...newOnes].reverse();
           setAttacks((prev) => {
             const seen = new Set(prev.map((p) => p.id));
@@ -223,7 +217,15 @@ const RedBlueGamePage: React.FC = () => {
         challenge_id: gameData.challenge_id,
         submitted_code: fixCode,
       });
-      setFixResult({ fixed: !!res.data.fixed, message: res.data.message || '' });
+      const msg = res.data.message || '';
+      const winner = res.data.round_winner;
+      const extra =
+        winner === 'blue'
+          ? ' Blue team +1 this round.'
+          : winner === 'red'
+            ? ' Red team +1 this round.'
+            : '';
+      setFixResult({ fixed: !!res.data.fixed, message: msg + extra });
       await loadGame();
     } catch (e: any) {
       const d = e?.response?.data?.detail;
@@ -248,7 +250,8 @@ const RedBlueGamePage: React.FC = () => {
         setAttackFeedback({
           kind: 'success',
           message:
-            '✓ Attack confirmed! Your payload exploited the vulnerability. +1 point for Red Team.',
+            data.message ||
+            '✓ Attack confirmed! Blue team must now defend against your payload.',
           preview: data.response_preview,
         });
         setAttackPayload('');
@@ -319,7 +322,13 @@ const RedBlueGamePage: React.FC = () => {
   const blueScore = gameData.blue_team?.score ?? 0;
   const lineCount = fixCode.split('\n').length;
   const showAttackPanel = isRedTeam || isInstructor;
-  const vulnerabilityPatched: boolean = gameData?.vulnerability_patched === true;
+  const currentPhase: string = gameData?.current_phase || 'awaiting_red';
+  const currentRound: number = gameData?.current_round ?? 1;
+  const awaitingBlue: boolean =
+    currentPhase === 'awaiting_blue' || gameData?.awaiting_blue_defense === true;
+  const redCanAttack = status === 'active' && currentPhase === 'awaiting_red';
+  const blueCanDefend = status === 'active' && awaitingBlue && isBlueTeam;
+  const pendingAttack = gameData?.pending_attack;
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4">
@@ -344,9 +353,13 @@ const RedBlueGamePage: React.FC = () => {
               {status === 'active' ? 'ACTIVE' : status === 'completed' ? 'COMPLETED' : status.toUpperCase()}
             </span>
             <span className="text-gray-300">{challengeName}</span>
+            <span className="block text-xs text-amber-200 mt-1">
+              Round {currentRound} ·{' '}
+              {awaitingBlue ? "Blue team's turn to defend" : "Red team's turn to attack"}
+            </span>
             {totalAttempts != null && (
               <span className="block text-xs text-gray-500 mt-1">
-                Red attempts: {totalAttempts} · Hits: {redScore}
+                Red attempts: {totalAttempts} · Score R {redScore} / B {blueScore}
               </span>
             )}
           </div>
@@ -406,25 +419,24 @@ const RedBlueGamePage: React.FC = () => {
               </div>
             )}
             {/* Patched banner — shown to red team and instructors */}
-            {vulnerabilityPatched && showAttackPanel && (
+            {awaitingBlue && showAttackPanel && (
               <div className="mb-4 p-3 rounded-lg border border-green-500 bg-green-950/60 flex items-start gap-2">
                 <span className="text-green-400 text-lg mt-0.5">🛡</span>
                 <div>
-                  <p className="text-green-300 font-semibold text-sm">Vulnerability Patched</p>
-                  <p className="text-green-200/80 text-xs mt-0.5">
-                    The blue team has submitted a working fix. All further attack payloads will be
-                    automatically rejected.
+                  <p className="text-amber-300 font-semibold text-sm">Blue team defending</p>
+                  <p className="text-amber-200/80 text-xs mt-0.5">
+                    Red landed a successful payload. Attacks resume after blue submits a fix.
                   </p>
                 </div>
               </div>
             )}
 
             {showAttackPanel && status === 'active' && (
-              <div className={`mb-4 p-3 bg-gray-900/80 border rounded-lg space-y-2 ${vulnerabilityPatched ? 'border-gray-600 opacity-50 pointer-events-none select-none' : 'border-red-800'}`}>
+              <div className={`mb-4 p-3 bg-gray-900/80 border rounded-lg space-y-2 ${!redCanAttack ? 'border-gray-600 opacity-50 pointer-events-none select-none' : 'border-red-800'}`}>
                 <p className="text-sm font-semibold text-red-300">
                   Submit Attack Payload
-                  {vulnerabilityPatched && (
-                    <span className="ml-2 text-xs text-gray-400 font-normal">(disabled — vulnerability patched)</span>
+                  {!redCanAttack && (
+                    <span className="ml-2 text-xs text-gray-400 font-normal">(wait for blue defense)</span>
                   )}
                 </p>
                 <textarea
@@ -433,7 +445,7 @@ const RedBlueGamePage: React.FC = () => {
                   placeholder="Enter your attack payload here…"
                   value={attackPayload}
                   onChange={(e) => setAttackPayload(e.target.value)}
-                  disabled={vulnerabilityPatched}
+                  disabled={!redCanAttack}
                 />
                 <textarea
                   className="w-full text-xs bg-black/50 border border-gray-600 rounded p-2 text-gray-200"
@@ -441,14 +453,14 @@ const RedBlueGamePage: React.FC = () => {
                   placeholder="Impact description (optional)"
                   value={attackImpact}
                   onChange={(e) => setAttackImpact(e.target.value)}
-                  disabled={vulnerabilityPatched}
+                  disabled={!redCanAttack}
                 />
                 {attackHint && (
                   <p className="text-xs text-amber-200/90">Hint: {attackHint}</p>
                 )}
                 <button
                   type="button"
-                  disabled={attackSubmitting || vulnerabilityPatched}
+                  disabled={attackSubmitting || !redCanAttack}
                   onClick={submitAttack}
                   className="w-full py-2 rounded bg-red-700 hover:bg-red-600 text-sm font-semibold disabled:opacity-50"
                 >
@@ -484,10 +496,10 @@ const RedBlueGamePage: React.FC = () => {
                   >
                     {truncatePayload(a.payload_used)}
                   </pre>
-                  <p className={a.status === 'failed' ? 'text-blue-200 text-sm' : 'text-red-200/90 text-sm'}>
+                  <p className={a.status === 'failed' ? 'text-gray-400 text-sm' : 'text-red-200/90 text-sm'}>
                     {a.status === 'failed'
-                      ? 'Payload rejected — Blue team +1'
-                      : 'Exploit confirmed — Red team +1'}
+                      ? 'Payload did not exploit — try again'
+                      : 'Exploit confirmed — blue team must defend'}
                   </p>
                   {a.impact_description ? (
                     <p className="text-gray-400 text-xs mt-1">{a.impact_description}</p>
@@ -523,22 +535,28 @@ const RedBlueGamePage: React.FC = () => {
               </div>
             )}
             {/* Patch-is-holding banner — shown to blue team after a successful fix */}
-            {vulnerabilityPatched && (
+            {awaitingBlue && pendingAttack && (
               <div className="mb-3 p-3 rounded-lg border border-green-500 bg-green-950/60 flex items-start gap-2">
                 <span className="text-green-400 text-lg mt-0.5">✅</span>
                 <div>
-                  <p className="text-green-300 font-semibold text-sm">Patch Is Holding!</p>
-                  <p className="text-green-200/80 text-xs mt-0.5">
-                    Your fix passed all sandbox tests. Red team attacks are now blocked. You can still
-                    improve your solution.
+                  <p className="text-amber-300 font-semibold text-sm">Defend this round</p>
+                  <pre className="mt-2 text-xs font-mono bg-black/40 p-2 rounded overflow-x-auto">
+                    {truncatePayload(pendingAttack.payload_used)}
+                  </pre>
+                  <p className="text-amber-200/80 text-xs mt-1">
+                    Secure fix → Blue +1 · Still vulnerable → Red +1
                   </p>
                 </div>
               </div>
             )}
-            {!vulnerabilityPatched && !codeLoading && originalVulnerableCode !== '' && fixCode !== '# Could not load challenge source.\n# Please ask your instructor.' && (
+            {!awaitingBlue && isBlueTeam && status === 'active' && (
+              <div className="mb-3 p-3 rounded border border-gray-600 bg-gray-900/60 text-gray-300 text-sm">
+                Wait for red team to land a successful exploit before you can submit a fix.
+              </div>
+            )}
+            {!codeLoading && originalVulnerableCode !== '' && fixCode !== '# Could not load challenge source.\n# Please ask your instructor.' && (
               <div className="mb-3 p-3 rounded border border-red-800 bg-red-950/40 text-red-100 text-sm">
-                ⚠ This is the vulnerable version of app.py for {challengeName}. The red team is exploiting it.
-                Fix the vulnerability and submit to score a defensive point.
+                ⚠ Edit app.py to block the current red payload. Passing sandbox tests awards Blue +1.
               </div>
             )}
             {codeLoading ? (
@@ -561,14 +579,14 @@ const RedBlueGamePage: React.FC = () => {
                   value={fixCode}
                   onChange={(e) => setFixCode(e.target.value)}
                   placeholder="Paste fixed code here…"
-                  disabled={!isBlueTeam || status !== 'active'}
+                  disabled={!blueCanDefend}
                 />
                 <p className="text-xs text-gray-500 mt-1">{lineCount} lines</p>
               </>
             )}
             <button
               type="button"
-              disabled={fixSubmitting || !isBlueTeam || status !== 'active'}
+              disabled={fixSubmitting || !blueCanDefend}
               onClick={submitFix}
               className="mt-3 py-2 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50 font-semibold"
             >

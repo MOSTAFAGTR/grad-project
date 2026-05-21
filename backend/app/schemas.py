@@ -164,14 +164,33 @@ class AssignmentCreate(BaseModel):
     title: str
     student_ids: List[int]
     question_ids: List[int]
+    time_limit_minutes: Optional[int] = None
+    due_date: Optional[str] = None
+
 
 class AssignmentResponse(BaseModel):
     id: int
     title: str
     instructor_id: int
     created_at: datetime
+    time_limit_minutes: Optional[int] = None
+    due_date: Optional[datetime] = None
+    status: Optional[str] = None
+    is_past_due: Optional[bool] = None
+    time_remaining_seconds: Optional[int] = None
+
     class Config:
         from_attributes = True
+
+
+class QuizAssignmentStartResponse(BaseModel):
+    assignment_id: int
+    title: str
+    time_limit_minutes: Optional[int] = None
+    time_limit_seconds: Optional[int] = None
+    due_date: Optional[str] = None
+    started_at: str
+    status: str
 
 
 class AIQuizAssignRequest(BaseModel):
@@ -180,6 +199,7 @@ class AIQuizAssignRequest(BaseModel):
     num_questions: int
     student_ids: list[int]
     due_date: Optional[str] = None
+    time_limit_minutes: Optional[int] = None
 
 
 class AIQuizAssignResponse(BaseModel):
@@ -333,3 +353,5 @@ class AssignmentFixSubmit(BaseModel):
 class MistakesQuizAssignRequest(BaseModel):
     student_id: int
     num_questions: int = 10
+    time_limit_minutes: Optional[int] = None
+    due_date: Optional[str] = None

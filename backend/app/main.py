@@ -115,6 +115,33 @@ def _ensure_runtime_schema():
                 if "started_at" not in gc_cols:
                     conn.execute(text("ALTER TABLE game_challenges ADD COLUMN started_at DATETIME NULL"))
                     logger.warning("Applied runtime schema patch: game_challenges.started_at")
+                for col, ddl in (
+                    ("current_phase", "VARCHAR(20) NULL DEFAULT 'awaiting_red'"),
+                    ("current_round", "INT NULL DEFAULT 1"),
+                    ("pending_red_action_id", "INT NULL"),
+                ):
+                    if col not in gc_cols:
+                        conn.execute(text(f"ALTER TABLE game_challenges ADD COLUMN {col} {ddl}"))
+                        logger.warning("Applied runtime schema patch: game_challenges.%s", col)
+            if "quiz_assignments" in tables:
+                qa_cols = {c["name"] for c in inspector.get_columns("quiz_assignments")}
+                for col, ddl in (
+                    ("time_limit_minutes", "INT NULL"),
+                    ("due_date", "DATETIME NULL"),
+                ):
+                    if col not in qa_cols:
+                        conn.execute(text(f"ALTER TABLE quiz_assignments ADD COLUMN {col} {ddl}"))
+                        logger.warning("Applied runtime schema patch: quiz_assignments.%s", col)
+            if "quiz_assignment_students" in tables:
+                qas_cols = {c["name"] for c in inspector.get_columns("quiz_assignment_students")}
+                for col, ddl in (
+                    ("started_at", "DATETIME NULL"),
+                    ("submitted_at", "DATETIME NULL"),
+                    ("status", "VARCHAR(50) NULL DEFAULT 'assigned'"),
+                ):
+                    if col not in qas_cols:
+                        conn.execute(text(f"ALTER TABLE quiz_assignment_students ADD COLUMN {col} {ddl}"))
+                        logger.warning("Applied runtime schema patch: quiz_assignment_students.%s", col)
             if "red_team_actions" in tables:
                 rcols = {c["name"] for c in inspector.get_columns("red_team_actions")}
                 for col, ddl in (

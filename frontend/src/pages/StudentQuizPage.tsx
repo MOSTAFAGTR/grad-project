@@ -53,7 +53,12 @@ const StudentQuizPage: React.FC = () => {
   const [wrongCategories, setWrongCategories] = useState<string[]>([]);
   const [lastResult, setLastResult] = useState<any>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+  const [assignmentDueDate, setAssignmentDueDate] = useState<string | null>(null);
+  const [timesUp, setTimesUp] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const endTimeRef = useRef<number | null>(null);
+  const autoSubmittedRef = useRef(false);
   const [wrongAnswerInfo, setWrongAnswerInfo] = useState<{ count: number; enough: boolean } | null>(null);
   const [generatingMistakes, setGeneratingMistakes] = useState(false);
   const [mistakesError, setMistakesError] = useState<string | null>(null);
@@ -96,13 +101,50 @@ const StudentQuizPage: React.FC = () => {
   useEffect(() => {
     if (step === 'quiz' && questions.length > 0) {
       setElapsedSeconds(0);
-      timerRef.current = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
+      timerRef.current = setInterval(() => {
+        setElapsedSeconds((s) => s + 1);
+        if (endTimeRef.current != null) {
+          const left = Math.max(0, Math.floor((endTimeRef.current - Date.now()) / 1000));
+          setRemainingSeconds(left);
+          if (left <= 0) setTimesUp(true);
+        }
+      }, 1000);
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = null;
     };
   }, [step, questions.length]);
+
+  const finishQuiz = React.useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+    setStep('result');
+    if (!token || questions.length === 0) return;
+    if (assignmentId) {
+      if (autoSubmittedRef.current) return;
+      autoSubmittedRef.current = true;
+    }
+    axios
+      .post(
+        `${API_URL}/api/quizzes/submit-attempt`,
+        {
+          assignment_id: assignmentId,
+          title: quizTitle || 'Quiz',
+          score: scoreRef.current,
+          total: questions.length,
+          time_seconds: elapsedSeconds + 1,
+        },
+        { headers: { Authorization: `Bearer ${token}` } },
+      )
+      .catch(() => {});
+  }, [assignmentId, elapsedSeconds, questions.length, quizTitle, token]);
+
+  useEffect(() => {
+    if (timesUp && step === 'quiz' && assignmentId) {
+      finishQuiz();
+    }
+  }, [timesUp, step, assignmentId, finishQuiz]);
 
   const handleStartStandardQuiz = async () => {
     setLoading(true);
@@ -231,6 +273,24 @@ const StudentQuizPage: React.FC = () => {
 
   const handleStartAssignment = async (id: number, title: string) => {
     try {
+      autoSubmittedRef.current = false;
+      setTimesUp(false);
+      endTimeRef.current = null;
+      setRemainingSeconds(null);
+      setAssignmentDueDate(null);
+
+      const startRes = await axios.post(
+        `${API_URL}/api/quizzes/assignments/${id}/start`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const startData = startRes.data;
+      if (startData.due_date) setAssignmentDueDate(startData.due_date);
+      if (startData.time_limit_seconds) {
+        endTimeRef.current = Date.now() + startData.time_limit_seconds * 1000;
+        setRemainingSeconds(startData.time_limit_seconds);
+      }
+
       const res = await axios.get(`${API_URL}/api/quizzes/assignments/${id}/take`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -244,8 +304,9 @@ const StudentQuizPage: React.FC = () => {
       setScore(0);
       scoreRef.current = 0;
       setWrongCategories([]);
-    } catch (err) {
-      alert('Failed to start assignment');
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { detail?: string } } };
+      alert(ax.response?.data?.detail || 'Failed to start assignment');
     }
   };
 
@@ -287,26 +348,7 @@ const StudentQuizPage: React.FC = () => {
   const handleNext = () => {
     setLastResult(null);
     if (currentIndex + 1 < questions.length) setCurrentIndex(currentIndex + 1);
-    else {
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = null;
-      setStep('result');
-      if (token && questions.length > 0) {
-        axios
-          .post(
-            `${API_URL}/api/quizzes/submit-attempt`,
-            {
-              assignment_id: assignmentId,
-              title: quizTitle || 'Quiz',
-              score: scoreRef.current,
-              total: questions.length,
-              time_seconds: elapsedSeconds + 1,
-            },
-            { headers: { Authorization: `Bearer ${token}` } },
-          )
-          .catch(() => {});
-      }
-    }
+    else finishQuiz();
   };
 
   const formatTime = (s: number) => {
@@ -453,17 +495,29 @@ const StudentQuizPage: React.FC = () => {
               <p className="text-gray-500">No assignments pending.</p>
             ) : (
               <div className="space-y-3">
-                {assignments.map((a) => (
-                  <div key={a.id} className="bg-gray-700 p-4 rounded flex justify-between items-center">
-                    <span className="font-bold">{a.title}</span>
-                    <button
-                      onClick={() => handleStartAssignment(a.id, a.title)}
-                      className="bg-purple-600 px-3 py-1 rounded text-sm hover:bg-purple-700 font-bold"
-                    >
-                      Start
-                    </button>
-                  </div>
-                ))}
+                {assignments.map((a) => {
+                  const pastDue = a.is_past_due === true;
+                  const done = a.status === 'completed' || a.status === 'expired';
+                  return (
+                    <div key={a.id} className="bg-gray-700 p-4 rounded flex justify-between items-center gap-3">
+                      <div>
+                        <span className="font-bold block">{a.title}</span>
+                        <span className="text-xs text-gray-400">
+                          {a.time_limit_minutes ? `${a.time_limit_minutes} min timer` : 'No timer'}
+                          {a.due_date ? ` · Due ${new Date(a.due_date).toLocaleDateString()}` : ''}
+                          {a.status && a.status !== 'assigned' ? ` · ${a.status}` : ''}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleStartAssignment(a.id, a.title)}
+                        disabled={pastDue || done}
+                        className="bg-purple-600 px-3 py-1 rounded text-sm hover:bg-purple-700 font-bold disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                      >
+                        {done ? 'Done' : pastDue ? 'Expired' : 'Start'}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -492,8 +546,29 @@ const StudentQuizPage: React.FC = () => {
             <span>
               Question {currentIndex + 1} / {questions.length}
             </span>
-            <div className="flex gap-3 items-center">
-              <span className="bg-amber-900/50 text-amber-300 px-3 py-1 rounded text-sm font-mono">{formatTime(elapsedSeconds)}</span>
+            <div className="flex gap-3 items-center flex-wrap justify-end">
+              {assignmentId && remainingSeconds != null && (
+                <span
+                  className={`px-3 py-1 rounded text-sm font-mono ${
+                    remainingSeconds <= 60 ? 'bg-red-900/60 text-red-200' : 'bg-amber-900/50 text-amber-300'
+                  }`}
+                >
+                  {formatTime(remainingSeconds)} left
+                </span>
+              )}
+              {assignmentId && remainingSeconds == null && (
+                <span className="bg-gray-700 text-gray-300 px-3 py-1 rounded text-sm font-mono">
+                  {formatTime(elapsedSeconds)} elapsed
+                </span>
+              )}
+              {!assignmentId && (
+                <span className="bg-amber-900/50 text-amber-300 px-3 py-1 rounded text-sm font-mono">
+                  {formatTime(elapsedSeconds)}
+                </span>
+              )}
+              {assignmentDueDate && (
+                <span className="text-xs text-gray-400">Due {new Date(assignmentDueDate).toLocaleString()}</span>
+              )}
               <span className="bg-gray-700 px-2 rounded text-xs py-1">{questions[currentIndex].difficulty}</span>
               <span className="bg-purple-900/40 text-purple-200 px-2 rounded text-xs py-1">
                 {questions[currentIndex].question_type || 'MCQ'}

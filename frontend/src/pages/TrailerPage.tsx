@@ -1,8 +1,84 @@
-import { useEffect, useRef, useId } from 'react';
+import { useEffect, useRef, useId, type CSSProperties } from 'react';
 
-const TOTAL_SEC = 120;
+const MIU_LOGO_SRC = '/trailer-logos/miu-logo.png';
+const FACULTY_LOGO_SRC = '/trailer-logos/faculty-logo.png';
+
+function PartnerLogoStrip({
+  miuHeight,
+  facultyHeight,
+  style,
+  miuStyle,
+  facultyStyle,
+  dividerHeight,
+}: {
+  miuHeight: number;
+  facultyHeight: number;
+  style?: CSSProperties;
+  miuStyle?: CSSProperties;
+  facultyStyle?: CSSProperties;
+  dividerHeight?: number | string;
+}) {
+  const dividerSize =
+    dividerHeight ?? (miuHeight > 0 ? Math.round(miuHeight * 0.72) : 'clamp(64px, 12vh, 120px)');
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 18,
+        ...style,
+      }}
+    >
+      <img
+        src={MIU_LOGO_SRC}
+        alt="Misr International University"
+        style={{
+          height: miuHeight > 0 ? miuHeight : undefined,
+          width: 'auto',
+          maxWidth: miuHeight > 0 ? miuHeight * 2.8 : undefined,
+          objectFit: 'contain',
+          filter: 'drop-shadow(0 2px 14px rgba(0,0,0,0.5))',
+          ...miuStyle,
+        }}
+      />
+      <div
+        style={{
+          width: 1,
+          height: dividerSize,
+          background: 'linear-gradient(180deg, transparent, rgba(148,163,184,0.45), transparent)',
+          flexShrink: 0,
+        }}
+      />
+      <img
+        src={FACULTY_LOGO_SRC}
+        alt="Faculty logo"
+        style={{
+          height: facultyHeight > 0 ? facultyHeight : undefined,
+          width: 'auto',
+          maxWidth: facultyHeight > 0 ? facultyHeight * 2.6 : undefined,
+          objectFit: 'contain',
+          filter: 'drop-shadow(0 2px 14px rgba(0,0,0,0.5))',
+          ...facultyStyle,
+        }}
+      />
+    </div>
+  );
+}
+
 const PLAYBACK_RATE = 1.82;
-const LOOP_PAUSE_MS = 900;
+const LOOP_PAUSE_MS = 0;
+/** Wall-clock seconds → GSAP timeline seconds (timeline runs at PLAYBACK_RATE). */
+const tlSec = (seconds: number) => seconds * PLAYBACK_RATE;
+const END_LOGO_IN_SEC = tlSec(1.15);
+const END_LOGO_HOLD_SEC = tlSec(2.4);
+const END_LOGO_FADE_SEC = tlSec(1.35);
+const END_BG_PAUSE_SEC = tlSec(0.85);
+const END_LOGO_SCALE_IN = 1.14;
+const END_LOGO_SCALE_START = 0.78;
+const END_LOGO_START_SEC = 118.2;
+const TOTAL_SEC = END_LOGO_START_SEC + END_LOGO_IN_SEC + END_LOGO_HOLD_SEC + END_LOGO_FADE_SEC + END_BG_PAUSE_SEC;
 
 declare global {
   interface Window {
@@ -120,6 +196,12 @@ const SCENES = [
   'TRAILER | AI + INSTRUCTOR TOOLS',
   'TRAILER | READY TO LAUNCH',
 ];
+
+function sceneNameFromIndex(idx: number) {
+  const raw = SCENES[idx] ?? '';
+  const parts = raw.split('|').map((s) => s.trim());
+  return parts[parts.length - 1] ?? raw;
+}
 
 type LabKind = 'inject' | 'xss' | 'csrf' | 'cmd' | 'auth' | 'misc' | 'storage' | 'dir' | 'xxe' | 'redirect';
 
@@ -270,8 +352,11 @@ export default function TrailerPage() {
   const rootRef = useRef<HTMLDivElement>(null);
   const threeMountRef = useRef<HTMLDivElement>(null);
   const sceneLabelRef = useRef<HTMLDivElement>(null);
+  const sceneNameRef = useRef<HTMLSpanElement>(null);
   const progressFillRef = useRef<HTMLDivElement>(null);
   const progressRailRef = useRef<HTMLDivElement>(null);
+  const partnerLogosRef = useRef<HTMLDivElement>(null);
+  const endPartnerLogosRef = useRef<HTMLDivElement>(null);
 
   const s1Ref = useRef<HTMLDivElement>(null);
   const cursorRef = useRef<HTMLSpanElement>(null);
@@ -308,7 +393,6 @@ export default function TrailerPage() {
 
   const s5Ref = useRef<HTMLDivElement>(null);
   const s5GridRef = useRef<HTMLDivElement>(null);
-  const s5SpotRef = useRef<HTMLDivElement>(null);
   const s5OverlayRef = useRef<HTMLDivElement>(null);
   const labCardRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -605,13 +689,13 @@ export default function TrailerPage() {
         };
 
         const setSceneLabel = (idx: number) => {
-          const el = sceneLabelRef.current;
+          const el = sceneNameRef.current;
           if (!el) return;
           gsap.to(el, {
             opacity: 0,
             duration: 0.15,
             onComplete: () => {
-              el.textContent = SCENES[idx] ?? '';
+              el.textContent = sceneNameFromIndex(idx);
               gsap.to(el, { opacity: 1, duration: 0.3 });
             },
           });
@@ -668,6 +752,8 @@ export default function TrailerPage() {
         masterTL.fromTo(s2Ref.current, { opacity: 0 }, { opacity: 1, duration: 0.8, ease: 'power3.out' }, 7.2);
 
         masterTL.add(() => setSceneLabel(1), 8);
+        gsap.set(partnerLogosRef.current, { opacity: 0, y: -10 });
+        masterTL.to(partnerLogosRef.current, { opacity: 1, y: 0, duration: 0.75, ease: 'power3.out' }, 7.6);
         const shieldEls = s2ShieldRef.current ? Array.from(shieldPaths(s2ShieldRef.current)) : [];
         shieldEls.forEach((el, idx) => {
           const node = el as SVGGeometryElement;
@@ -849,10 +935,6 @@ export default function TrailerPage() {
           masterTL.to(card, { scale: 1, opacity: 1, duration: 0.8, ease: 'power4.out', willChange: 'transform' }, 58 + i * 0.06);
         });
 
-        gsap.set(s5SpotRef.current, { opacity: 0 });
-        masterTL.to(s5SpotRef.current, { opacity: 1, duration: 0.4 }, 64);
-        masterTL.to(s5SpotRef.current, { x: '70%', y: '70%', duration: 3, ease: 'power1.inOut' }, 64);
-
         const olines = s5OverlayRef.current?.querySelectorAll('.s5-line') ?? [];
         gsap.set(olines, { opacity: 0, scale: 0.82, y: 16, skewX: -4 });
 
@@ -1021,25 +1103,48 @@ export default function TrailerPage() {
         }, [], 110);
 
         const pills = s8PillsRef.current?.querySelectorAll('.pill') ?? [];
-        gsap.set(pills, { scale: 0 });
-        masterTL.to(pills, { scale: 1, duration: 0.9, stagger: 0.15, ease: 'elastic.out(1, 0.55)' }, 112);
+        gsap.set(pills, { opacity: 0, y: 18, scale: 0.92, transformOrigin: 'center center' });
+        masterTL.to(pills, { opacity: 1, y: 0, scale: 1, duration: 0.75, stagger: 0.1, ease: 'power3.out' }, 112);
 
         gsap.set(s8VignetteRef.current, { opacity: 0 });
         masterTL.to(s8VignetteRef.current, { opacity: 1, duration: 2, ease: 'none' }, 115);
 
-        masterTL.to(s8Ref.current, { opacity: 0, duration: 3, ease: 'power2.inOut' }, 117);
-        gsap.set(endCursorRef.current, { opacity: 0 });
-        masterTL.to(endCursorRef.current, { opacity: 1, duration: 0.4 }, 118);
-        masterTL.to(endCursorRef.current, { opacity: 0, duration: 0.4 }, 118.6);
+        masterTL.to(s8Ref.current, { opacity: 0, duration: 2.2, ease: 'power2.inOut' }, 117);
 
+        const endLogoStart = END_LOGO_START_SEC;
+        const endLogoHoldEnd = endLogoStart + END_LOGO_IN_SEC + END_LOGO_HOLD_SEC;
+        const endLogoFadeEnd = endLogoHoldEnd + END_LOGO_FADE_SEC;
+
+        gsap.set(endPartnerLogosRef.current, {
+          opacity: 0,
+          scale: END_LOGO_SCALE_START,
+          transformOrigin: 'center center',
+        });
+        gsap.set(blackFinalRef.current, { opacity: 0 });
         gsap.set(endTitleRef.current, { opacity: 0 });
-        masterTL.to(endTitleRef.current, { opacity: 1, duration: 0.5, ease: 'power2.out' }, 119);
-        masterTL.to(blackFinalRef.current, { opacity: 1, duration: 0.8 }, 119.5);
+        gsap.set(endCursorRef.current, { opacity: 0 });
 
-        masterTL.to(featureMarqueeRef.current, { opacity: 1, duration: 0.45 }, 119.55);
-        masterTL.to(cinemaBottomRef.current, { opacity: 1, duration: 0.45 }, 119.55);
-        if (progressRailRef.current) masterTL.to(progressRailRef.current, { opacity: 1, duration: 0.45, ease: 'power2.out' }, 119.55);
-        masterTL.to(phaseRef.current, { networkRailOpacity: 1, duration: 0.35, ease: 'none' }, 119.55);
+        masterTL.to(partnerLogosRef.current, { opacity: 0, y: -8, duration: 0.35, ease: 'power2.in' }, endLogoStart - 0.15);
+        masterTL.to(sceneLabelRef.current, { opacity: 0, duration: 0.35, ease: 'power2.in' }, endLogoStart - 0.15);
+        masterTL.to(featureMarqueeRef.current, { opacity: 0, duration: 0.35, ease: 'power2.in' }, endLogoStart - 0.15);
+        masterTL.to(cinemaBottomRef.current, { opacity: 0.06, duration: 0.35 }, endLogoStart - 0.15);
+        if (progressRailRef.current) {
+          masterTL.to(progressRailRef.current, { opacity: 0, duration: 0.35, ease: 'power2.in' }, endLogoStart - 0.15);
+        }
+        masterTL.to(phaseRef.current, { networkRailOpacity: 1, duration: 0.4, ease: 'power2.out' }, endLogoStart - 0.1);
+
+        masterTL.to(
+          endPartnerLogosRef.current,
+          { opacity: 1, scale: END_LOGO_SCALE_IN, duration: END_LOGO_IN_SEC, ease: 'power2.inOut' },
+          endLogoStart
+        );
+        masterTL.to({}, { duration: END_LOGO_HOLD_SEC }, endLogoStart + END_LOGO_IN_SEC);
+        masterTL.to(
+          endPartnerLogosRef.current,
+          { opacity: 0, scale: END_LOGO_SCALE_IN * 1.02, duration: END_LOGO_FADE_SEC, ease: 'power2.inOut' },
+          endLogoHoldEnd
+        );
+        masterTL.to({}, { duration: END_BG_PAUSE_SEC }, endLogoFadeEnd);
 
         masterTL.eventCallback('onRestart', () => {
           startMsRef.current = performance.now();
@@ -1057,6 +1162,16 @@ export default function TrailerPage() {
           if (s1Line3Ref.current) s1Line3Ref.current.textContent = '';
           if (cursorRef.current) gsap.set(cursorRef.current, { opacity: 0 });
           if (whiteFlashRef.current) gsap.set(whiteFlashRef.current, { opacity: 0 });
+          if (partnerLogosRef.current) gsap.set(partnerLogosRef.current, { opacity: 0, y: -10 });
+          if (endPartnerLogosRef.current) {
+            gsap.set(endPartnerLogosRef.current, {
+              opacity: 0,
+              scale: END_LOGO_SCALE_START,
+              transformOrigin: 'center center',
+            });
+          }
+          if (sceneLabelRef.current) gsap.set(sceneLabelRef.current, { opacity: 0.6 });
+          if (blackFinalRef.current) gsap.set(blackFinalRef.current, { opacity: 0 });
           s1GlitchRef.current?.classList.remove('glitch-active');
           gsap.set(s1Ref.current, { opacity: 1 });
         });
@@ -1219,10 +1334,11 @@ export default function TrailerPage() {
       </div>
 
       <div
+        ref={sceneLabelRef}
         style={{
           position: 'fixed',
-          top: 8,
-          left: 16,
+          top: 12,
+          left: 18,
           zIndex: 100,
           display: 'flex',
           alignItems: 'center',
@@ -1230,30 +1346,71 @@ export default function TrailerPage() {
           opacity: 0.6,
           fontFamily: 'Inter, sans-serif',
           fontWeight: 300,
-          fontSize: 10,
-          color: '#3b82f6',
+          fontSize: 11,
+          maxWidth: 'min(62vw, 720px)',
+          lineHeight: 1.35,
         }}
       >
-        <svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
           <path d="M12 3 L20 7 V13 Q20 18 12 21 Q4 18 4 13 V7 Z" stroke="#3b82f6" strokeWidth={1.2} />
         </svg>
-        SCALE · OFFICIAL TRAILER
+        <span style={{ color: '#3b82f6', letterSpacing: '0.04em' }}>SCALE | OFFICIAL TRAILER |</span>
+        <span
+          ref={sceneNameRef}
+          style={{
+            fontFamily: 'Inter, sans-serif',
+            fontSize: 11,
+            fontWeight: 300,
+            letterSpacing: '0.04em',
+            color: '#3b82f6',
+            textTransform: 'uppercase',
+          }}
+        >
+          BREACH SIGNAL
+        </span>
       </div>
 
       <div
-        ref={sceneLabelRef}
+        ref={partnerLogosRef}
         style={{
           position: 'fixed',
-          top: 9,
-          right: 16,
-          zIndex: 100,
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: 9,
-          color: '#475569',
-          opacity: 1,
+          top: 10,
+          right: 18,
+          zIndex: 102,
+          opacity: 0,
+          pointerEvents: 'none',
+          padding: '4px 8px',
+          borderRadius: 10,
+          background: 'rgba(2,6,23,0.55)',
+          border: '1px solid rgba(148,163,184,0.18)',
+          backdropFilter: 'blur(10px)',
+          boxShadow: '0 4px 18px rgba(0,0,0,0.28)',
         }}
       >
-        TRAILER | BREACH SIGNAL
+        <PartnerLogoStrip miuHeight={52} facultyHeight={58} style={{ gap: 10 }} dividerHeight={38} />
+      </div>
+
+      <div
+        ref={endPartnerLogosRef}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 125,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: 0,
+          pointerEvents: 'none',
+        }}
+      >
+        <PartnerLogoStrip
+          miuHeight={0}
+          facultyHeight={0}
+          style={{ gap: 'clamp(32px, 6vw, 64px)' }}
+          dividerHeight="clamp(80px, 14vh, 150px)"
+          miuStyle={{ height: 'clamp(120px, 24vh, 260px)', maxWidth: 'min(48vw, 520px)' }}
+          facultyStyle={{ height: 'clamp(132px, 26vh, 280px)', maxWidth: 'min(44vw, 480px)' }}
+        />
       </div>
 
       <div
@@ -1874,19 +2031,6 @@ export default function TrailerPage() {
         >
           <div style={{ position: 'relative', width: '100%', maxWidth: 1120, minHeight: 460 }}>
             <div
-              ref={s5SpotRef}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                zIndex: 1,
-                pointerEvents: 'none',
-                opacity: 0,
-                background: 'radial-gradient(circle at 20% 20%, rgba(255,255,255,0.14), transparent 48%)',
-                mixBlendMode: 'screen',
-                willChange: 'transform, opacity',
-              }}
-            />
-            <div
               ref={s5GridRef}
               style={{
                 position: 'relative',
@@ -2289,8 +2433,8 @@ export default function TrailerPage() {
           </div>
         </div>
 
-        <div ref={s8Ref} style={{ position: 'absolute', inset: 0, opacity: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '6vh 4vw', willChange: 'transform, opacity' }}>
-          <div style={{ position: 'relative', width: 400, height: 400 }}>
+        <div ref={s8Ref} style={{ position: 'absolute', inset: 0, opacity: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: '7vh 4vw 15vh', overflow: 'visible', willChange: 'transform, opacity' }}>
+          <div style={{ position: 'relative', width: 300, height: 300, flexShrink: 0 }}>
             <div
               style={{
                 position: 'absolute',
@@ -2302,7 +2446,7 @@ export default function TrailerPage() {
                 filter: 'blur(24px)',
               }}
             />
-            <svg ref={s8ShieldRef} viewBox="0 0 100 120" fill="none" style={{ width: 400, height: 400, position: 'relative', filter: 'drop-shadow(0 0 40px rgba(59,130,246,0.45))' }}>
+            <svg ref={s8ShieldRef} viewBox="0 0 100 120" fill="none" style={{ width: 300, height: 300, position: 'relative', filter: 'drop-shadow(0 0 40px rgba(59,130,246,0.45))' }}>
               <path
                 d="M50 5 L90 20 L90 55 Q90 95 50 115 Q10 95 10 55 L10 20 Z"
                 stroke={`url(#${shieldGrad8})`}
@@ -2352,14 +2496,14 @@ export default function TrailerPage() {
 
           <div ref={s8L1Ref} style={{ marginTop: 28, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '0.06em' }}>
             {'ENTER THE LAB.'.split('').map((ch, i) => (
-              <span key={`${ch}-${i}`} className="stamp-ch" style={{ display: 'inline-block', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 900, fontSize: 72, color: '#f8fafc', willChange: 'transform, opacity, filter' }}>
+              <span key={`${ch}-${i}`} className="stamp-ch" style={{ display: 'inline-block', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 900, fontSize: 56, color: '#f8fafc', willChange: 'transform, opacity, filter' }}>
                 {ch === ' ' ? '\u00a0' : ch}
               </span>
             ))}
           </div>
           <div ref={s8L2Ref} style={{ marginTop: 16, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '0.06em' }}>
             {'ATTACK. DEFEND. PROVE MASTERY.'.split('').map((ch, i) => (
-              <span key={`${ch}-l2-${i}`} className="stamp-ch" style={{ display: 'inline-block', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 300, fontSize: 48, color: '#94a3b8', willChange: 'transform, opacity, filter' }}>
+              <span key={`${ch}-l2-${i}`} className="stamp-ch" style={{ display: 'inline-block', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 300, fontSize: 38, color: '#94a3b8', willChange: 'transform, opacity, filter' }}>
                 {ch === ' ' ? '\u00a0' : ch}
               </span>
             ))}
@@ -2367,10 +2511,10 @@ export default function TrailerPage() {
           <div
             ref={s8L3Ref}
             style={{
-              marginTop: 24,
+              marginTop: 18,
               fontFamily: "'Space Grotesk', sans-serif",
               fontWeight: 900,
-              fontSize: 96,
+              fontSize: 72,
               background: 'linear-gradient(135deg, #3b82f6, #8b5cf6, #06b6d4)',
               WebkitBackgroundClip: 'text',
               backgroundClip: 'text',
@@ -2382,7 +2526,7 @@ export default function TrailerPage() {
             SCALE
           </div>
 
-          <div ref={s8PillsRef} style={{ marginTop: 28, display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center', maxWidth: 940, position: 'relative', zIndex: 30 }}>
+          <div ref={s8PillsRef} style={{ marginTop: 20, marginBottom: 8, display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', maxWidth: 'min(960px, 92vw)', position: 'relative', zIndex: 40, flexShrink: 0 }}>
             {['Project Scanner', 'Attack Simulation', 'AI Explanation', 'Common Mistakes Exam', 'Leaderboard', 'Red vs Blue Arena'].map((t) => (
               <div
                 key={t}

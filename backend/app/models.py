@@ -84,10 +84,12 @@ class QuizAssignment(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255))
     instructor_id = Column(Integer, ForeignKey("users.id"))
-    
-    assigned_student_ids = Column(Text) 
+
+    assigned_student_ids = Column(Text)
     question_ids = Column(Text)
-    
+
+    time_limit_minutes = Column(Integer, nullable=True)
+    due_date = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -96,6 +98,9 @@ class QuizAssignmentStudent(Base):
     id = Column(Integer, primary_key=True, index=True)
     assignment_id = Column(Integer, ForeignKey("quiz_assignments.id"), nullable=False, index=True)
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    started_at = Column(DateTime, nullable=True)
+    submitted_at = Column(DateTime, nullable=True)
+    status = Column(String(50), default="assigned")
 
 
 class QuizAssignmentQuestion(Base):
@@ -241,6 +246,11 @@ class GameChallenge(Base):
 
     red_score = Column(Integer, default=0)
     blue_score = Column(Integer, default=0)
+
+    # Turn-based flow: awaiting_red -> (confirmed attack) -> awaiting_blue -> (fix) -> awaiting_red
+    current_phase = Column(String(20), default="awaiting_red")
+    current_round = Column(Integer, default=1)
+    pending_red_action_id = Column(Integer, nullable=True)
 
 
 class ChallengeVulnerability(Base):

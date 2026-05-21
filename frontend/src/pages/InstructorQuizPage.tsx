@@ -48,6 +48,9 @@ const InstructorQuizPage: React.FC = () => {
   const [numQuestions, setNumQuestions] = useState(10);
   const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([]);
   const [dueDate, setDueDate] = useState('');
+  const [aiTimeLimit, setAiTimeLimit] = useState(30);
+  const [assignDueDate, setAssignDueDate] = useState('');
+  const [assignTimeLimit, setAssignTimeLimit] = useState(30);
   const [studentsLoading, setStudentsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateSuccess, setGenerateSuccess] = useState<string | null>(null);
@@ -88,6 +91,7 @@ const InstructorQuizPage: React.FC = () => {
           num_questions: numQuestions,
           student_ids: selectedStudentIds,
           due_date: dueDate || null,
+          time_limit_minutes: aiTimeLimit || null,
         },
         headers,
       );
@@ -172,7 +176,9 @@ const InstructorQuizPage: React.FC = () => {
     await axios.post(`${API_URL}/quizzes/assignments`, {
       title: assignTitle,
       student_ids: selectedUsers,
-      question_ids: selectedQ
+      question_ids: selectedQ,
+      due_date: assignDueDate || null,
+      time_limit_minutes: assignTimeLimit || null,
     }, headers);
     alert("Assignment Sent!");
     fetchData();
@@ -489,6 +495,19 @@ const InstructorQuizPage: React.FC = () => {
                 <p className="text-xs text-gray-500 mt-1">Leave blank for no deadline</p>
               </div>
 
+              <div>
+                <label className="block text-gray-300 text-sm mb-1">Countdown timer (minutes)</label>
+                <input
+                  type="number"
+                  min={5}
+                  max={240}
+                  value={aiTimeLimit}
+                  onChange={(e) => setAiTimeLimit(Number(e.target.value))}
+                  className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white"
+                />
+                <p className="text-xs text-gray-500 mt-1">5–240 minutes once the student starts the quiz</p>
+              </div>
+
               <button
                 type="button"
                 disabled={!selectedTopic || selectedStudentIds.length === 0 || isGenerating}
@@ -571,6 +590,28 @@ const InstructorQuizPage: React.FC = () => {
               placeholder="Assignment Title (e.g. Midterm SQLi Exam)"
               value={assignTitle} onChange={e => setAssignTitle(e.target.value)}
             />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-gray-300 text-sm mb-1">Due date (optional)</label>
+                <input
+                  type="date"
+                  value={assignDueDate}
+                  onChange={(e) => setAssignDueDate(e.target.value)}
+                  className="w-full bg-gray-700 p-2 rounded text-white border border-gray-600"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-300 text-sm mb-1">Countdown timer (minutes)</label>
+                <input
+                  type="number"
+                  min={5}
+                  max={240}
+                  value={assignTimeLimit}
+                  onChange={(e) => setAssignTimeLimit(Number(e.target.value))}
+                  className="w-full bg-gray-700 p-2 rounded text-white border border-gray-600"
+                />
+              </div>
+            </div>
             <button onClick={handleCreateAssignment} className="w-full bg-green-600 py-3 rounded font-bold hover:bg-green-700">
               Send Assignment ({selectedQ.length} Qs to {selectedUsers.length} Students)
             </button>
@@ -586,6 +627,13 @@ const InstructorQuizPage: React.FC = () => {
               <div>
                 <h3 className="font-bold text-lg">{a.title}</h3>
                 <p className="text-sm text-gray-400">Created: {new Date(a.created_at).toLocaleDateString()}</p>
+                {(a.time_limit_minutes || a.due_date) && (
+                  <p className="text-xs text-cyan-300 mt-1">
+                    {a.time_limit_minutes ? `${a.time_limit_minutes} min timer` : ''}
+                    {a.time_limit_minutes && a.due_date ? ' · ' : ''}
+                    {a.due_date ? `Due ${new Date(a.due_date).toLocaleDateString()}` : ''}
+                  </p>
+                )}
               </div>
               <button onClick={() => handleDeleteAssignment(a.id)} className="bg-red-600 px-3 py-1 rounded text-sm hover:bg-red-700">Delete</button>
             </div>

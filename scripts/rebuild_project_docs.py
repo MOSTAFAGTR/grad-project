@@ -11,8 +11,9 @@ DOC = ROOT / "PROJECT_DOCUMENTATION.md"
 PAGES = ROOT / "frontend" / "src" / "pages"
 
 # Routes from App.tsx (manual authoritative map: component -> routes)
-APP_ROUTES: list[tuple[str, str, str]] = [
+APP_ROUTES: list[tuple[str, str, str, str]] = [
     ("LandingPage", "LandingPage.tsx", "/", "Public"),
+    ("TrailerPage", "TrailerPage.tsx", "/trailer", "Public"),
     ("LoginPage", "LoginPage.tsx", "/login", "Public"),
     ("RegisterPage", "RegisterPage.tsx", "/register", "Public"),
     ("DashboardHomePage", "DashboardHomePage.tsx", "/home", "user, instructor, admin"),
@@ -44,9 +45,11 @@ APP_ROUTES: list[tuple[str, str, str]] = [
     ("RedBlueGamePage", "RedBlueGamePage.tsx", "/redblue/game/:gameId", "user, instructor, admin"),
     ("StudentQuizPage", "StudentQuizPage.tsx", "/quiz", "user only"),
     ("RedBlueMyGamesPage", "RedBlueMyGamesPage.tsx", "/redblue/my-games", "user only"),
+    ("ChallengeAssignmentPage", "ChallengeAssignmentPage.tsx", "/assignment/:assignmentId", "user only"),
     ("UnderConstructionPage", "UnderConstructionPage.tsx", "/under-construction", "user, instructor, admin"),
     ("InstructorDashboardPage", "InstructorDashboardPage.tsx", "/instructor/dashboard", "instructor, admin"),
     ("InstructorQuizPage", "InstructorQuizPage.tsx", "/instructor/quiz", "instructor, admin"),
+    ("InstructorAssignmentResultsPage", "InstructorAssignmentResultsPage.tsx", "/instructor/assignment/:assignmentId/results", "instructor, admin"),
     ("RedBlueCreatePage", "RedBlueCreatePage.tsx", "/redblue/create", "instructor, admin"),
     ("AdminStatsPage", "AdminStatsPage.tsx", "/admin/stats", "admin"),
     ("AdminDashboardPage", "AdminDashboardPage.tsx", "/admin/dashboard", "admin"),
@@ -228,6 +231,7 @@ def build_appendix_b() -> str:
         "instructor": "/api/instructor",
         "report": "/api/report",
         "red_blue": "/api/redblue",
+        "challenge_assignments": "/api/challenge-assignments",
     }
     pat = re.compile(r'@router\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']')
     api_root = ROOT / "backend" / "app" / "api"
@@ -266,7 +270,9 @@ def build_appendix_b() -> str:
             auth = "No"
         elif path == "/":
             auth = "No"
-        if "/admin/" in path or path.endswith("/admin/overview"):
+        elif path == "/api/admin/config":
+            auth = "Yes (any user — missing authz; lab 6)"
+        elif "/admin/" in path or path.endswith("/admin/overview"):
             auth = "Yes (admin)"
         out.append(f"| {method} | `{path}` | `{mod}.py` | {auth} | See Section 14 |")
     out.append("")
